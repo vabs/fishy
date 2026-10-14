@@ -56,6 +56,24 @@ nearly every fish anyway.
 - There is no limit on fish in the water: fish keep arriving whether or not the player catches any.
   The only per-type limit is the Monster, at most one at a time.
 
+## Feeding Frenzy
+
+Every fifth round (5, 10, 15, …) and the Final Round have a Feeding Frenzy wave.
+
+- It starts 35% of the way through the round's base length and lasts 6 s. Time bonuses don't move
+  it.
+- A front sweeps once across the sea, from a random side to the other, over the length of the wave.
+  While it runs every unlocked type spawns 4× as fast, and every new fish pours in just behind the
+  front, swimming the way the wave goes.
+- Fish caught during the wave are worth 1.5×, on top of every other multiplier.
+- Upgrades: Rising Tide (Time) makes the wave longer; Frenzy Feast (Economy) raises the bonus.
+
+The signals never rely on colour alone. Before a frenzy round the hub's hint says so and Start Round
+wears a Frenzy badge (compact screens hide the hint). In the round a "Feeding Frenzy!" banner hangs
+under the HUD with the value bonus, the seconds left and a bar that empties; the sea takes a light
+tint and a line of foam marks the front; a sting plays and the music lifts. The round summary adds
+a line with the money and fish the wave brought in, which the per-type rows already include.
+
 ## Movement
 
 - Fish orbit the boat. The orbit is an ellipse fitted to the screen, so wide screens are used fully.
@@ -195,11 +213,13 @@ so drawing thousands of fish stays cheap.
 - Chance to add time when a fish is captured
 - Amount of time added (bonus time is capped at one extra round length per round, so chains
   can't stretch a round forever)
+- Feeding Frenzy wave length
 
 **Economy**
 - Fish value (all fish)
 - Combo: captures in quick succession stack a value multiplier
 - Combo window and combo cap
+- Value of fish caught in a Feeding Frenzy
 
 **Spawning**
 - Spawn speed of every fish type
@@ -277,12 +297,13 @@ Cozy ocean lo-fi that sits behind the game. Everything is in D major pentatonic 
 every note fits.
 
 - **Music** is one continuous bed. The hub hears it under water (low-passed, quieter); a round
-  opens it up on the next downbeat and adds a groove; a combo layer follows the combo multiplier;
-  a short stinger ends each round. Three chapters (start, Electric fish, the Monster) change the
+  opens it up on the next downbeat and adds a groove; a combo layer follows the combo multiplier
+  and lifts the music through a Feeding Frenzy wave; a short stinger ends each round. Three chapters (start, Electric fish, the Monster) change the
   bed in the hub so it doesn't wear thin over a whole game. The beds are CC0 loop files once
   chosen, and generated in code until then.
 - **Sound effects** are generated in code and in key: catches climb the scale with the combo, and
-  each ability (current, star, whirlpool, goober), time bonus and purchase has its own sound.
+  each ability (current, star, whirlpool, goober), time bonus, Feeding Frenzy wave and purchase
+  has its own sound.
   Late rounds capture hundreds of fish a second, so effects are rate-limited and batched.
 - **Controls**: M or a speaker button mutes; music and effects volumes are set in the hub. Sound
   settings are stored apart from the save.

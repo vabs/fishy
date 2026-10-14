@@ -8,7 +8,7 @@ import { buildSprites } from "./game/shapes";
 import { createRng } from "./game/rng";
 import { BASE_STATS, type Stats } from "./game/stats";
 import { TECH_NODES, applyUpgrades, buy, canBuy, isTreeComplete, refundRemovedLevels } from "./game/tech";
-import { STEP, World, type Point } from "./game/world";
+import { STEP, World, isFrenzyRound, type Point } from "./game/world";
 import { createViewport } from "./game/viewport";
 import { createSave, loadSave, recordRound, resetProgress, sanitizeUpgrades, writeSave, type SaveData } from "./save";
 import { mountAudioControls } from "./ui/audio-controls";
@@ -54,6 +54,7 @@ const summary = {
   root: element("#summary-panel"),
   title: element("#summary-title"),
   earned: element("#summary-earned"),
+  frenzy: element("#summary-frenzy"),
   table: element("#summary-table"),
   rows: element("#summary-rows"),
   fish: element("#summary-fish"),
@@ -70,6 +71,12 @@ const end = {
 };
 const toast = element("#toast");
 const roundHint = element("#round-hint");
+const frenzyBanner = {
+  root: element("#frenzy-banner"),
+  value: element("#frenzy-value"),
+  time: element("#frenzy-time"),
+  fill: element("#frenzy-bar-fill"),
+};
 const pausePanel = element("#pause-panel");
 const pauseMessage = element("#pause-message");
 const resumeButton = element<HTMLButtonElement>("#resume-button");
@@ -166,7 +173,10 @@ function showOnly(screen: "hub" | "round" | "summary" | "end"): void {
   tree.dismiss();
   paused = false;
   pausePanel.hidden = true;
-  if (screen !== "round") roundHint.hidden = true;
+  if (screen !== "round") {
+    roundHint.hidden = true;
+    frenzyBanner.root.hidden = true;
+  }
   hub.root.hidden = screen !== "hub";
   hud.root.hidden = screen !== "round";
   summary.root.hidden = screen !== "summary";
@@ -187,14 +197,19 @@ function renderHub(): void {
   hub.name.textContent = save.playerName;
   hub.round.textContent = complete ? "Final Round next" : `Round ${save.round} next`;
   setMoney(hub.money, save.money);
-  hub.hint.textContent = hint(complete);
+  const frenzy = isFrenzyRound({ round: save.round, final: complete });
+  hub.hint.textContent = hint(complete, frenzy);
   hub.start.textContent = complete ? "Final Round" : "Start Round";
   hub.start.classList.toggle("is-final", complete);
+  // A badge as well as the hint, which compact screens hide.
+  hub.start.classList.toggle("has-frenzy", frenzy);
   tree.update({ money: save.money, upgrades: save.upgrades });
 }
 
-function hint(complete: boolean): string {
+function hint(complete: boolean, frenzy: boolean): string {
   if (complete) return "Every upgrade is yours. One last round to go.";
+  // Short, so it fits beside Start Round on a phone.
+  if (frenzy) return "Feeding Frenzy this round!";
   if (TECH_NODES.some((node) => canBuy(node, save.upgrades, save.money))) {
     return touchLayout.matches ? "Tap a glowing upgrade, then Buy." : "Click a glowing upgrade to buy it.";
   }
@@ -229,6 +244,11 @@ function endRound(finished: World): void {
 
   summary.title.textContent = finalRound ? "Final Round complete" : `Round ${playingRound} complete`;
   summary.earned.textContent = formatMoney(finished.earned);
+  // Already counted in the rows below; this says how much of it the wave brought in.
+  summary.frenzy.hidden = !finished.frenzy;
+  summary.frenzy.textContent = finished.frenzy
+    ? `Feeding Frenzy: +${formatMoney(finished.frenzyEarned)} from ${finished.frenzyCaught.toLocaleString("en-US")} fish`
+    : "";
   summary.fish.textContent = finished.totalCaught.toLocaleString("en-US");
   summary.total.textContent = formatMoney(finished.earned);
   const kinds = FISH_KINDS.filter((kind) => finished.caughtBy[kind]).sort(
@@ -319,6 +339,7 @@ function resize(): void {
   document.documentElement.style.setProperty("--app-height", `${height}px`);
   document.documentElement.style.setProperty("--viewport-top", `${window.visualViewport?.offsetTop ?? 0}px`);
   const top = document.body.classList.contains("playing") ? hud.root.getBoundingClientRect().height : 0;
+  if (!frenzyBanner.root.hidden) placeFrenzyBanner();
   const safeBottom = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--safe-bottom")) || 0;
   // The contact strip lets a finger reach below the sea while the net stays above it.
   const bottom = safeBottom + (touchLayout.matches && document.body.classList.contains("playing") ? 56 : 0);
@@ -376,6 +397,27 @@ function updateHud(): void {
   setText(hud.earned, playing ? `+${earnings} this round${combo}` : "");
   const showHint = playing && playingRound === 1 && world.totalCaught === 0 && world.elapsed < HINT_SECONDS;
   if (roundHint.hidden === showHint) roundHint.hidden = !showHint;
+  updateFrenzyBanner(world, playing);
+}
+
+/** Shows the Feeding Frenzy banner while the wave runs, with a bar that empties as it does. */
+function updateFrenzyBanner(world: World, playing: boolean): void {
+  const wave = world.frenzy;
+  const show = playing && wave !== null && world.frenzyActive;
+  if (frenzyBanner.root.hidden === show) {
+    frenzyBanner.root.hidden = !show;
+    if (show) placeFrenzyBanner();
+  }
+  if (!show) return;
+  const left = world.frenzyLeft;
+  setText(frenzyBanner.value, `Every catch ×${Number(world.stats.frenzyValueMult.toFixed(2))}`);
+  setText(frenzyBanner.time, `· ${Math.ceil(left)}s`);
+  frenzyBanner.fill.style.transform = `scaleX(${(left / (wave.end - wave.start)).toFixed(3)})`;
+}
+
+/** Hangs the frenzy banner just below the HUD, measured now that the HUD shows this round's numbers. */
+function placeFrenzyBanner(): void {
+  frenzyBanner.root.style.top = `${hud.root.getBoundingClientRect().bottom + 6}px`;
 }
 
 function frame(now: number): void {

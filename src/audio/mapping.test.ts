@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { TECH_NODES } from "../game/tech";
-import { CHAPTERS, batchLevel, catchDegree, catchStreamLevel, chapterFor, comboLevel } from "./mapping";
+import { CHAPTERS, FRENZY_COMBO_FLOOR, batchLevel, catchDegree, catchStreamLevel, chapterFor, comboLevel } from "./mapping";
 
 describe("chapterFor", () => {
   it("starts in the first chapter", () => {
@@ -77,5 +77,13 @@ describe("comboLevel", () => {
   it("is 0 while combos are locked", () => {
     expect(comboLevel({ ...live, window: 0 })).toBe(0);
     expect(comboLevel({ ...live, max: 1 })).toBe(0);
+  });
+
+  it("lifts the music during a Feeding Frenzy, with or without a combo", () => {
+    expect(comboLevel({ ...live, frenzy: true })).toBe(FRENZY_COMBO_FLOOR);
+    expect(comboLevel({ ...live, window: 0, frenzy: true })).toBe(FRENZY_COMBO_FLOOR);
+    expect(comboLevel({ ...live, sinceCapture: 0.6, frenzy: true })).toBe(FRENZY_COMBO_FLOOR);
+    expect(comboLevel({ ...live, mult: 2, frenzy: true })).toBe(1);
+    expect(comboLevel({ ...live, frenzy: false })).toBeCloseTo(0.5);
   });
 });

@@ -93,6 +93,13 @@ export interface Stats {
   /** Highest combo multiplier. */
   comboMax: number;
 
+  /** Length of the Feeding Frenzy wave, s. It comes in every fifth round and in the Final Round. */
+  frenzySeconds: number;
+  /** Multiplier on every type's spawn rate while the Feeding Frenzy wave runs. */
+  frenzySpawnMult: number;
+  /** Value multiplier for fish caught while the Feeding Frenzy wave runs. */
+  frenzyValueMult: number;
+
   fish: Record<FishKind, FishStats>;
   ability: Abilities;
 }
@@ -119,6 +126,10 @@ export const BASE_STATS: Stats = {
   comboWindow: 0,
   comboStep: 0.1,
   comboMax: 2,
+
+  frenzySeconds: 6,
+  frenzySpawnMult: 4,
+  frenzyValueMult: 1.5,
 
   fish: {
     normal: { rate: 1.25, rateMult: 1, valueMult: 1 },

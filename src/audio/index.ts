@@ -115,6 +115,7 @@ export function createGameAudio(): GameAudio {
           catches++;
           combo = Math.max(combo, event.combo);
         } else if (event.type === "time-bonus") sfx.timeBonus();
+        else if (event.type === "frenzy" && event.phase === "start") sfx.frenzy();
         else if (event.type === "fx") fx(event);
       }
       sfx.catches(catches, combo);
@@ -123,7 +124,9 @@ export function createGameAudio(): GameAudio {
         if (catches > 0) lastCaptureAt = world.elapsed;
         const { comboMax, comboWindow } = world.stats;
         const sinceCapture = world.elapsed - lastCaptureAt;
-        music.setCombo(world.over ? 0 : comboLevel({ mult: world.comboMult, max: comboMax, sinceCapture, window: comboWindow }));
+        // The combo layer also lifts the music for a Feeding Frenzy wave.
+        const frenzy = world.frenzyActive;
+        music.setCombo(world.over ? 0 : comboLevel({ mult: world.comboMult, max: comboMax, sinceCapture, window: comboWindow, frenzy }));
       }
       music.pump();
     },

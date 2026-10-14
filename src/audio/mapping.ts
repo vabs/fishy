@@ -68,14 +68,23 @@ export interface ComboState {
   sinceCapture: number;
   /** Captures within this many seconds chain; 0 when combos aren't unlocked. */
   window: number;
+  /** True while a Feeding Frenzy wave runs. */
+  frenzy?: boolean;
 }
 
 /**
- * How much of the combo layer to play, 0 to 1: the share of the way to the highest multiplier, while
- * the combo is still alive. The game keeps the last multiplier until the next capture, so a combo
- * counts as over once its window has passed.
+ * The combo layer plays at least this much during a Feeding Frenzy wave, so the music lifts with it
+ * even before combos are unlocked: from 0.5 the arpeggio runs in sixteenths.
  */
-export function comboLevel({ mult, max, sinceCapture, window }: ComboState): number {
-  if (window <= 0 || max <= 1 || sinceCapture > window) return 0;
-  return Math.min(1, Math.max(0, (mult - 1) / (max - 1)));
+export const FRENZY_COMBO_FLOOR = 0.75;
+
+/**
+ * How much of the combo layer to play, 0 to 1: the share of the way to the highest multiplier, while
+ * the combo is still alive, and never below FRENZY_COMBO_FLOOR during a frenzy. The game keeps the
+ * last multiplier until the next capture, so a combo counts as over once its window has passed.
+ */
+export function comboLevel({ mult, max, sinceCapture, window, frenzy = false }: ComboState): number {
+  const floor = frenzy ? FRENZY_COMBO_FLOOR : 0;
+  if (window <= 0 || max <= 1 || sinceCapture > window) return floor;
+  return Math.max(floor, Math.min(1, Math.max(0, (mult - 1) / (max - 1))));
 }
