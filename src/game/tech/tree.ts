@@ -14,7 +14,7 @@ export interface TechNode {
   /** What one level does. */
   description: string;
   maxLevel: number;
-  /** Cost of the next level is round(base * growth^currentLevel). */
+  /** Round base * growth^currentLevel to dollars, then up to the next multiple of 10. */
   cost: { base: number; growth: number };
   /** Node ids that must be at level 1 or more before this node is visible or buyable. */
   requires: string[];
@@ -50,7 +50,8 @@ export function applyUpgrades(base: Stats, upgrades: Upgrades): Stats {
 }
 
 export function nextCost(node: TechNode, level: number): number {
-  return Math.round(node.cost.base * node.cost.growth ** level);
+  const dollars = Math.round(node.cost.base * node.cost.growth ** level);
+  return Math.ceil(dollars / 10) * 10;
 }
 
 export function isVisible(node: TechNode, upgrades: Upgrades): boolean {

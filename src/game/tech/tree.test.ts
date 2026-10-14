@@ -183,16 +183,35 @@ describe("node definitions", () => {
 });
 
 describe("nextCost", () => {
-  it("is round(base * growth^level)", () => {
+  it("rounds each level's calculated dollar price up to a multiple of ten", () => {
     const n: TechNode = { ...node("net.radius"), cost: { base: 10, growth: 1.5 } };
     expect(nextCost(n, 0)).toBe(10);
-    expect(nextCost(n, 1)).toBe(15);
-    expect(nextCost(n, 2)).toBe(23);
-    expect(nextCost(n, 3)).toBe(34);
+    expect(nextCost(n, 1)).toBe(20);
+    expect(nextCost(n, 2)).toBe(30);
+    expect(nextCost(n, 3)).toBe(40);
   });
 
-  it("makes the first purchase affordable after a weak first round", () => {
-    expect(nextCost(node("net.radius"), 0)).toBeLessThanOrEqual(3);
+  it.each([[2, 10], [34, 40], [590, 590], [591, 600], [999, 1000], [1000, 1000]])(
+    "raises $%i to $%i without raising an already rounded price",
+    (base, expected) => {
+      const n: TechNode = { ...node("net.radius"), cost: { base, growth: 1 } };
+      expect(nextCost(n, 0)).toBe(expected);
+    },
+  );
+
+  it("charges ten dollars for the first purchase", () => {
+    expect(canBuy(node("net.radius"), {}, 9)).toBe(false);
+    expect(buy({}, 10, "net.radius")).toEqual({ upgrades: { "net.radius": 1 }, money: 0 });
+  });
+
+  it("makes every actual upgrade price a multiple of ten without lowering it", () => {
+    for (const n of TECH_NODES) {
+      for (let level = 0; level < n.maxLevel; level++) {
+        const price = nextCost(n, level);
+        expect(price % 10, `${n.id} level ${level + 1}`).toBe(0);
+        expect(price).toBeGreaterThanOrEqual(Math.round(n.cost.base * n.cost.growth ** level));
+      }
+    }
   });
 });
 

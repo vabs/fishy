@@ -1,4 +1,4 @@
-import { TECH_NODES, type TechNode, type Upgrades } from "./tree";
+import { TECH_NODES, nextCost, type TechNode, type Upgrades } from "./tree";
 
 /** Nodes that have been taken out of the game, with what they cost, so owners can be refunded. */
 const RETIRED: Record<string, TechNode["cost"]> = {
@@ -21,7 +21,11 @@ export function refundRemovedLevels(upgrades: Readonly<Upgrades>): { upgrades: U
     const retired = RETIRED[id];
     const keep = node ? Math.min(level, node.maxLevel) : 0;
     const cost = node?.cost ?? retired;
-    if (cost) for (let l = keep; l < level; l++) refund += Math.round(cost.base * cost.growth ** l);
+    if (cost) {
+      for (let l = keep; l < level; l++) {
+        refund += node ? nextCost(node, l) : Math.round(cost.base * cost.growth ** l);
+      }
+    }
     if (node || !retired) kept[id] = node ? keep : owned;
   }
   return { upgrades: kept, refund };

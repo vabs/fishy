@@ -3,6 +3,13 @@ import { refundRemovedLevels } from "./refund";
 import { getNode, nextCost } from "./tree";
 
 describe("refundRemovedLevels", () => {
+  it("uses rounded current prices when refunding excess levels of an active node", () => {
+    const { upgrades, refund } = refundRemovedLevels({ "net.radius": 12 });
+    expect(upgrades).toEqual({ "net.radius": 10 });
+    // Excess levels originally round to $220 and $352; current prices are $220 and $360.
+    expect(refund).toBe(580);
+  });
+
   it("refunds levels above a node's max at today's prices and keeps the rest", () => {
     const school = getNode("uncommon.school")!;
     const owned = school.maxLevel + 2;

@@ -148,6 +148,8 @@ so drawing thousands of fish stays cheap.
 
 - All nodes are defined in one TypeScript config file. Each node has an id, branch, prerequisites,
   max level, a cost curve (`base * growth^level`) and an effect on the game's stats.
+- Each level's dollar price is rounded up to a multiple of 10. A $2 price becomes $10; a $34
+  price becomes $40; prices already divisible by 10 stay unchanged.
 - At the start of each round the game computes `stats = applyUpgrades(baseStats, ownedLevels)`.
   The simulation only reads `stats`, so adding an upgrade means adding a config entry.
 - Shown as a radial graph centred on the boat. A node's neighbours appear once it is bought.
