@@ -108,6 +108,9 @@ const ICONS: Record<string, string> = {
   "econ.combo": '<path d="M-1.5 -4.5 l2.6 -2.6 a4.2 4.2 0 0 1 6 6 l-2.6 2.6 M1.5 4.5 l-2.6 2.6 a4.2 4.2 0 0 1 -6 -6 l2.6 -2.6 M-3.2 3.2 L3.2 -3.2"/>',
   "econ.comboWindow": '<circle cy="2" r="8.5"/><path d="M0 2 L3.5 -1.5 M-3.5 -10 H3.5 M0 -10 V-6.5"/>',
   "econ.comboCap": '<path d="M-9.5 7 V-5.5 L-4.8 -0.5 L0 -8 L4.8 -0.5 L9.5 -5.5 V7 Z"/>',
+  "frenzy.length":
+    '<path d="M-11 9 q2.75 -3.5 5.5 0 t5.5 0 t5.5 0 t5.5 0 M-11 3 q2.75 -3.5 5.5 0 t5.5 0 t5.5 0 t5.5 0"/><path d="M0 -2.5 V-11 M-3.5 -7.5 L0 -11 L3.5 -7.5"/>',
+  "frenzy.value": `<path d="M-11 8.5 q2.75 -3.5 5.5 0 t5.5 0 t5.5 0 t5.5 0"/><circle cy="-3.5" r="6.5"/><text ${FILLED} y="0" text-anchor="middle" font-size="9.5" font-weight="800">$</text>`,
   "normal.weight": '<path stroke-width="3.2" d="M-7 9 V-8 M0 9 V-2 M7 9 V3"/>',
   weight: '<path stroke-width="3.2" d="M-7 9 V3 M0 9 V-2 M7 9 V-8"/>',
   value: COIN,
