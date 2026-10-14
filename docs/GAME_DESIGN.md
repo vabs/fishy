@@ -28,8 +28,10 @@ Every capture goes through one function, `capture(fish, source)`, whatever cause
 Electric current, an Epic fish, a Star fish or a Whirlpool. Captures are queued and processed once
 per frame, so chain reactions never recurse and the number of effects per frame can be capped.
 
-A fish captured by any source behaves exactly like a fish captured by the net: it pays its value and
-its on-capture effect fires.
+A fish captured by any source behaves like a fish captured by the net: it pays its value and its
+on-capture effect fires. Fish caught by an ability (Electric current, Epic net, Star shot, Whirlpool)
+pay 1.5× their value, so chain reactions earn money even late in the game, when the net would catch
+nearly every fish anyway.
 
 ## Spawning
 
