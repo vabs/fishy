@@ -58,7 +58,8 @@ export function goldenSwim(world: World, fish: Fish, golden: GoldenState, dt: nu
 
   if (pointer && threatened) {
     const { cx, cy, rx, ry, minOrbit } = world.swimArea();
-    // Which way it's swimming along the path, against which way is away from the net.
+    // Its direction along the path, dotted with the way away from the net: negative means the net
+    // is ahead, so it turns round.
     const ahead =
       -Math.sin(fish.angle) * rx * fish.dir * (fish.x - pointer.x) + Math.cos(fish.angle) * ry * fish.dir * (fish.y - pointer.y);
     if (ahead < 0 && golden.turnIn === 0) {

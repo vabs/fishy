@@ -192,7 +192,7 @@ export function drawChestShape(ctx: CanvasRenderingContext2D): void {
   ctx.stroke();
   ctx.fillStyle = OUTLINE;
   ctx.beginPath();
-  ctx.arc(0, seam + 0.0 * w, 0.03 * w, 0, TAU);
+  ctx.arc(0, seam, 0.03 * w, 0, TAU);
   ctx.moveTo(-0.02 * w, seam + 0.01 * w);
   ctx.lineTo(0.02 * w, seam + 0.01 * w);
   ctx.lineTo(0.012 * w, seam + 0.08 * w);
