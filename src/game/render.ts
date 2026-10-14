@@ -22,6 +22,9 @@ const COLORS = {
   hullEdge: "#5b3a1f",
   deck: "#b07a48",
   bench: "#6e4526",
+  frenzyTint: "rgba(200, 255, 240, 0.11)",
+  frenzyWake: "rgba(255, 255, 255, 0.16)",
+  foam: "rgba(255, 255, 255, 0.8)",
 };
 
 const FADE_IN_SECONDS = 0.4;
@@ -37,6 +40,11 @@ const MAX_HEAVY_EFFECTS = 12;
 const MAX_NET_TARGETS = 24;
 const MAX_WHIRLPOOL_TARGETS = 96;
 const MERGE_SECONDS = 0.1;
+/** The Feeding Frenzy tint and foam fade in and out over this long at the ends of the wave. */
+const FRENZY_FADE_SECONDS = 0.6;
+/** Width of the bright wake behind the frenzy wave's front, px. */
+const FRENZY_WAKE = 140;
+const FOAM_BUBBLES = 64;
 
 interface Floater {
   x: number;
@@ -197,8 +205,16 @@ export class Renderer {
     const ctx = this.ctx;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     if (this.background) ctx.drawImage(this.background, 0, 0);
+    const frenzy = world ? this.frenzyFade(world) : 0;
+    if (frenzy > 0) {
+      ctx.globalAlpha = frenzy;
+      ctx.fillStyle = COLORS.frenzyTint;
+      ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+      ctx.globalAlpha = 1;
+    }
     this.resetTransform();
 
+    if (world && frenzy > 0) this.drawFrenzyFront(world, frenzy);
     this.drawBoat();
     if (world) {
       for (const fish of world.fish) this.drawFish(fish, "silhouette");
@@ -309,6 +325,68 @@ export class Renderer {
     ctx.beginPath();
     ctx.arc(finger.x, finger.y, 10 / this.viewScale, 0, TAU);
     ctx.stroke();
+    ctx.restore();
+  }
+
+  /** How strongly to show the Feeding Frenzy, 0 to 1: full while the wave runs, fading at its ends. */
+  private frenzyFade(world: World): number {
+    const wave = world.frenzy;
+    if (!wave || !world.frenzyActive) return 0;
+    const t = world.elapsed;
+    return Math.min(1, (t - wave.start) / FRENZY_FADE_SECONDS, (wave.end - t) / FRENZY_FADE_SECONDS);
+  }
+
+  /**
+   * The Feeding Frenzy wave's front: a wavy line of foam across the whole screen with a bright wake
+   * and bubbles behind it, where the new fish pour in.
+   */
+  private drawFrenzyFront(world: World, alpha: number): void {
+    const wave = world.frenzy;
+    const front = world.frenzyFront;
+    if (!wave || front === null) return;
+    const ctx = this.ctx;
+    const top = -this.offsetY / this.viewScale;
+    const bottom = (this.canvas.height / this.dpr - this.offsetY) / this.viewScale;
+    const crest = (y: number): number =>
+      front + Math.sin(y * 0.045 + this.time * 4) * 5 + Math.sin(y * 0.012 - this.time * 1.7) * 9;
+    const crestLine = (): void => {
+      ctx.beginPath();
+      for (let y = top; y <= bottom + 10; y += 10) {
+        if (y === top) ctx.moveTo(crest(y), y);
+        else ctx.lineTo(crest(y), y);
+      }
+    };
+    ctx.save();
+    ctx.globalAlpha = alpha;
+
+    // The wake: bright at the crest, fading out behind it.
+    const wakeEnd = front - wave.sweep * FRENZY_WAKE;
+    const wake = ctx.createLinearGradient(front, 0, wakeEnd, 0);
+    wake.addColorStop(0, COLORS.frenzyWake);
+    wake.addColorStop(1, "rgba(255, 255, 255, 0)");
+    ctx.fillStyle = wake;
+    crestLine();
+    ctx.lineTo(wakeEnd, bottom + 10);
+    ctx.lineTo(wakeEnd, top);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.strokeStyle = COLORS.foam;
+    ctx.lineWidth = 3;
+    ctx.lineJoin = "round";
+    crestLine();
+    ctx.stroke();
+
+    // Bubbles drift back from the crest and fade, each on its own phase so the foam never pulses.
+    ctx.fillStyle = COLORS.foam;
+    for (let i = 0; i < FOAM_BUBBLES; i++) {
+      const y = top + ((i + 0.5) / FOAM_BUBBLES) * (bottom - top) + Math.sin(i * 12.9898) * 6;
+      const drift = (i * 0.618034 + this.time * 0.9) % 1;
+      ctx.globalAlpha = alpha * (1 - drift) * 0.8;
+      ctx.beginPath();
+      ctx.arc(crest(y) - wave.sweep * (4 + drift * 46), y, 1.5 + (i % 3), 0, TAU);
+      ctx.fill();
+    }
     ctx.restore();
   }
 
