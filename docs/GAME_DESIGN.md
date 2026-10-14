@@ -285,12 +285,29 @@ every note fits.
 
 How it is built and how to add the loop files: README, "Music and sound".
 
+## Accessibility
+
+- **Colour-blind palette.** A switch in the hub tools (under ⋯ on compact screens) redraws the
+  fish, their effects, the round summary icons, the tech tree's fish lanes and the how-to-play
+  slides in colours that stay apart under protanopia, deuteranopia and tritanopia. Every type keeps
+  its outline, so colour becomes a reliable second cue rather than the only one. With the switch
+  off the game looks exactly as before. Like the sound settings, the choice is stored apart from
+  the save (`fishy.display`), so Play Again and import leave it alone.
+- `src/game/palette.test.ts` simulates the three kinds of colour blindness and checks every pair of
+  fish colours stays clearly apart (CIEDE2000 of at least 15), and clear of the water.
+- Other colour cues never rely on hue alone: an affordable upgrade has a filled price tag and a
+  glowing ring, money pop-ups read "+$12" where bonus time reads "+3s", and health bars are read by
+  length.
+- A new fish type needs a colour-blind entry beside its standard colours (`src/game/palette.ts`).
+
 ## Architecture
 
 - Static site: Vite + TypeScript, Canvas 2D, no framework or game engine. No server.
 - The simulation (`src/game/world.ts`) has no DOM access. It uses a seeded random number generator
   and a fixed 60 Hz step, so rounds can be replayed exactly in tests.
 - Rendering (`src/game/render.ts`) reads the world and draws it; it never changes game state.
+  Fish art and effects draw with the colours the renderer hands them from the active palette
+  (`src/game/palette.ts`), so the simulation never depends on the player's palette.
 - Audio (`src/audio/`) works like rendering: it hears the world's events and the screen changes,
   and never changes game state. The simulation knows nothing about sound.
 - Tests use vitest.
