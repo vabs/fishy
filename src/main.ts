@@ -1,11 +1,12 @@
 import "./style.css";
 import { createGameAudio } from "./audio";
-import { formatCompactMoney, formatDuration, formatMoney, wholeShares } from "./format";
+import { formatCompactMoney, formatDuration, formatMoney } from "./format";
 import { FISH, FISH_KINDS, type FishKind } from "./game/fish";
 import { Renderer } from "./game/render";
 import { buildSprites } from "./game/shapes";
 import { createRng } from "./game/rng";
 import { BASE_STATS, type Stats } from "./game/stats";
+import { summaryRows, type SummaryRow } from "./game/summary";
 import { TECH_NODES, applyUpgrades, buy, canBuy, isTreeComplete, refundRemovedLevels } from "./game/tech";
 import { STEP, World, type Point } from "./game/world";
 import { createViewport } from "./game/viewport";
@@ -217,22 +218,21 @@ function endRound(finished: World): void {
   summary.earned.textContent = formatMoney(finished.earned);
   summary.fish.textContent = finished.totalCaught.toLocaleString("en-US");
   summary.total.textContent = formatMoney(finished.earned);
-  const kinds = FISH_KINDS.filter((kind) => finished.caughtBy[kind]).sort(
-    (a, b) => (finished.earnedBy[b] ?? 0) - (finished.earnedBy[a] ?? 0),
-  );
-  const shares = wholeShares(kinds.map((kind) => finished.earnedBy[kind] ?? 0), finished.earned);
-  summary.rows.replaceChildren(...kinds.map((kind, i) => summaryRow(kind, finished.caughtBy[kind] ?? 0, shares[i] ?? 0)));
-  summary.table.hidden = kinds.length === 0;
-  summary.empty.hidden = kinds.length > 0;
+  const rows = summaryRows(finished);
+  summary.rows.replaceChildren(...rows.map(summaryRow));
+  summary.table.hidden = rows.length === 0;
+  summary.empty.hidden = rows.length > 0;
   showOnly("summary");
 }
 
-function summaryRow(kind: FishKind, caught: number, earned: number): HTMLTableRowElement {
+function summaryRow({ key, count: caught, earned }: SummaryRow): HTMLTableRowElement {
+  const dpr = window.devicePixelRatio || 1;
   const row = document.createElement("tr");
   const name = document.createElement("td");
   const label = document.createElement("span");
   label.className = "summary-fish";
-  label.append(fishIcon(kind), FISH[kind].name);
+  if (key === "golden") label.append(icon(buildSprites("normal", dpr).full), "Golden fish");
+  else label.append(icon(buildSprites(key, dpr).full), FISH[key].name);
   name.append(label);
   const count = document.createElement("td");
   count.textContent = caught.toLocaleString("en-US");
@@ -242,20 +242,19 @@ function summaryRow(kind: FishKind, caught: number, earned: number): HTMLTableRo
   return row;
 }
 
-/** A small full-colour picture of a fish type, fitted into 40 × 26 px. */
-function fishIcon(kind: FishKind): HTMLCanvasElement {
+/** A small full-colour picture (a fish sprite), fitted into 40 × 26 px. */
+function icon(picture: HTMLCanvasElement): HTMLCanvasElement {
   const dpr = window.devicePixelRatio || 1;
-  const sprite = buildSprites(kind, dpr);
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(40 * dpr);
   canvas.height = Math.round(26 * dpr);
   canvas.setAttribute("aria-hidden", "true");
   const ctx = canvas.getContext("2d");
   if (ctx) {
-    const scale = Math.min(canvas.width / sprite.full.width, canvas.height / sprite.full.height);
-    const w = sprite.full.width * scale;
-    const h = sprite.full.height * scale;
-    ctx.drawImage(sprite.full, (canvas.width - w) / 2, (canvas.height - h) / 2, w, h);
+    const scale = Math.min(canvas.width / picture.width, canvas.height / picture.height);
+    const w = picture.width * scale;
+    const h = picture.height * scale;
+    ctx.drawImage(picture, (canvas.width - w) / 2, (canvas.height - h) / 2, w, h);
   }
   return canvas;
 }

@@ -1,5 +1,6 @@
 import { FISH, FISH_KINDS, FISH_SPECS, type FishDef, type FishKind } from "./fish";
-import { pickWeighted, range, type Rng } from "./rng";
+import { GOLDEN, goldenSwim, newGoldenState, type GoldenState } from "./golden";
+import { createRng, pickWeighted, range, type Rng } from "./rng";
 import { spawnRate, type Stats } from "./stats";
 
 const TAU = Math.PI * 2;
@@ -49,6 +50,8 @@ export interface Fish {
   captured: boolean;
   /** The type this fish's catch is credited to in the round summary, when not its own (a Goober's burst fish). */
   credit?: FishKind;
+  /** Set on a golden fish: worth far more, flees the net and dives away if not caught in time. */
+  golden?: GoldenState;
   /** Free per-fish state for the type's hooks (timers, flags). */
   state: Record<string, number>;
 }
@@ -84,8 +87,12 @@ export interface FxEvent {
 
 export type WorldEvent =
   | { type: "tick"; x: number; y: number; radius: number; hits: number; crits: number }
-  | { type: "capture"; kind: FishKind; source: CaptureSource; x: number; y: number; value: number; combo: number }
+  | { type: "capture"; kind: FishKind; source: CaptureSource; x: number; y: number; value: number; combo: number; golden?: boolean }
   | { type: "time-bonus"; x: number; y: number; seconds: number }
+  /** A golden fish appeared. */
+  | { type: "golden"; kind: FishKind; x: number; y: number }
+  /** A golden fish wasn't caught in time and dived away. It's already gone from `fish`. */
+  | { type: "golden-escape"; kind: FishKind; x: number; y: number; heading: number }
   | FxEvent;
 
 export interface SpawnOptions {
@@ -93,7 +100,12 @@ export interface SpawnOptions {
   at?: Point;
   /** Credit this fish's catch to another type in the round summary. */
   credit?: FishKind;
+  /** Make it a golden fish. */
+  golden?: boolean;
 }
+
+/** Round summary rows that aren't a fish type. */
+export type BonusKind = "golden";
 
 /** Facts about the round being played that aren't upgrades. */
 export interface RoundOptions {
@@ -118,6 +130,10 @@ export class World {
   caughtBy: Partial<Record<FishKind, number>> = {};
   /** Money earned this round per summary row, credited like `caughtBy`. */
   earnedBy: Partial<Record<FishKind, number>> = {};
+  /** Golden fish caught this round. They get their own summary row, so they're not in `caughtBy`. */
+  bonusCount: Record<BonusKind, number> = { golden: 0 };
+  /** Money earned this round per bonus row. */
+  bonusEarned: Record<BonusKind, number> = { golden: 0 };
   /** Captures in the current combo after the first. */
   combo = 0;
   pointer: Point | null = null;
@@ -131,6 +147,10 @@ export class World {
   /** Seconds time bonuses have added this round. Capped at roundSeconds so chains can't stretch a round forever. */
   private bonusTime = 0;
   private nextId = 1;
+  /** Random numbers for round events (golden fish), kept apart from `rng`. See `eventRng`. */
+  private eventStream: Rng | null = null;
+  /** Progress towards the next golden fish, in fish. */
+  private goldenProgress = 0;
 
   constructor(
     readonly stats: Stats,
@@ -141,6 +161,8 @@ export class World {
   ) {
     this.timeLeft = stats.roundSeconds;
     for (let i = 0; i < stats.startFish; i++) this.spawn();
+    // Round 1 has no events and draws nothing for them, so its rounds replay as they always have.
+    if (this.hasGolden) this.goldenProgress = this.eventRng();
   }
 
   get width(): number {
@@ -201,7 +223,9 @@ export class World {
     this.elapsed += dt;
     for (const kind of FISH_KINDS) FISH_SPECS[kind].update?.(this, dt);
     this.moveFish(dt);
+    this.escapeGolden();
     this.spawnFish(dt);
+    this.spawnGoldenFish(dt);
     this.tickNet(dt);
     this.processCaptures();
     this.timeLeft = Math.max(0, this.timeLeft - dt);
@@ -263,12 +287,23 @@ export class World {
       hitFlash: 0,
       captured: false,
       ...(options.credit ? { credit: options.credit } : {}),
+      ...(options.golden ? { golden: newGoldenState(this.stats) } : {}),
       state: {},
     };
     this.place(fish);
     this.fish.push(fish);
     FISH_SPECS[k].onSpawn?.(this, fish);
+    if (fish.golden) this.emit({ type: "golden", kind: k, x: fish.x, y: fish.y });
     return fish;
+  }
+
+  /**
+   * Adds a golden fish of a type picked in proportion to spawn rates, as a fresh spawn of its own.
+   * Undefined if nothing could spawn.
+   */
+  spawnGolden(at?: Point): Fish | undefined {
+    const kind = this.pickKind(this.eventRng);
+    return kind ? this.spawn(kind, at ? { golden: true, at } : { golden: true }) : undefined;
   }
 
   damage(fish: Fish, amount: number, source: CaptureSource): void {
@@ -297,7 +332,21 @@ export class World {
     return Math.max(this.stats.tickSeconds, STEP);
   }
 
-  private pickKind(): FishKind | undefined {
+  /** Golden fish swim in every round from GOLDEN.fromRound on. */
+  private get hasGolden(): boolean {
+    return this.round.final || this.round.round >= GOLDEN.fromRound;
+  }
+
+  /**
+   * The random stream for round events, seeded from `rng` the first time it's needed. Events draw
+   * from it, not from `rng`, so they don't shift every fish's random numbers when they happen.
+   */
+  private get eventRng(): Rng {
+    this.eventStream ??= createRng(Math.floor(this.rng() * 0x1_0000_0000));
+    return this.eventStream;
+  }
+
+  private pickKind(rng: Rng = this.rng): FishKind | undefined {
     const weights: Partial<Record<FishKind, number>> = {};
     for (const kind of FISH_KINDS) {
       const max = FISH[kind].maxOnScreen;
@@ -305,7 +354,7 @@ export class World {
       // Proportions only: the global spawn multiplier is the same for every type.
       weights[kind] = this.stats.fish[kind].rate * this.stats.fish[kind].rateMult;
     }
-    return pickWeighted(this.rng, weights);
+    return pickWeighted(rng, weights);
   }
 
   /**
@@ -338,7 +387,9 @@ export class World {
       const spec = FISH_SPECS[fish.kind];
       // Path length per radian at this point on the ellipse, so speed is px/s everywhere.
       const arc = fish.orbit * Math.hypot(rx * Math.sin(fish.angle), ry * Math.cos(fish.angle));
-      fish.angle += (fish.dir * spec.def.speed * fish.speedMult * dt) / Math.max(arc, 1);
+      // A golden fish's extra speed applies to this step only; speedMult belongs to the type.
+      const boost = fish.golden ? goldenSwim(this, fish, fish.golden, dt) : 1;
+      fish.angle += (fish.dir * spec.def.speed * fish.speedMult * boost * dt) / Math.max(arc, 1);
       fish.wobblePhase += spec.def.wobbleSpeed * dt;
       spec.move?.(this, fish, dt);
       const prevX = fish.x;
@@ -347,6 +398,27 @@ export class World {
       if (fish.x !== prevX || fish.y !== prevY) fish.heading = Math.atan2(fish.y - prevY, fish.x - prevX);
       fish.age += dt;
       fish.hitFlash = Math.max(0, fish.hitFlash - dt);
+    }
+  }
+
+  /** Golden fish whose time is up dive away, paying nothing. */
+  private escapeGolden(): void {
+    const escaping = (fish: Fish) => fish.golden !== undefined && !fish.captured && fish.golden.timeLeft <= 0;
+    if (!this.fish.some(escaping)) return;
+    for (const fish of this.fish) {
+      if (escaping(fish)) this.emit({ type: "golden-escape", kind: fish.kind, x: fish.x, y: fish.y, heading: fish.heading });
+    }
+    this.fish = this.fish.filter((fish) => !escaping(fish));
+  }
+
+  /** Golden fish arrive on their own clock, not as a share of spawns. */
+  private spawnGoldenFish(dt: number): void {
+    const rate = this.stats.goldenRate;
+    if (!this.hasGolden || rate <= 0) return;
+    this.goldenProgress += rate * dt;
+    while (this.goldenProgress >= 1) {
+      this.goldenProgress -= 1;
+      this.spawnGolden();
     }
   }
 
@@ -396,14 +468,23 @@ export class World {
     for (const { fish, source } of this.captureQueue.splice(0, MAX_CAPTURES_PER_STEP)) {
       this.updateCombo();
       const sourceMult = source === "net" ? 1 : this.stats.abilityValueMult;
+      const goldenMult = fish.golden ? this.stats.goldenValueMult : 1;
       const value =
-        FISH[fish.kind].value * this.stats.fish[fish.kind].valueMult * this.stats.valueMult * sourceMult * this.comboMult;
+        FISH[fish.kind].value * this.stats.fish[fish.kind].valueMult * this.stats.valueMult * sourceMult * this.comboMult * goldenMult;
       this.earned += value;
       this.caught[fish.kind] = (this.caught[fish.kind] ?? 0) + 1;
-      const credit = fish.credit ?? fish.kind;
-      this.caughtBy[credit] = (this.caughtBy[credit] ?? 0) + 1;
-      this.earnedBy[credit] = (this.earnedBy[credit] ?? 0) + value;
-      this.emit({ type: "capture", kind: fish.kind, source, x: fish.x, y: fish.y, value, combo: this.combo });
+      if (fish.golden) {
+        this.bonusCount.golden++;
+        this.bonusEarned.golden += value;
+      } else {
+        const credit = fish.credit ?? fish.kind;
+        this.caughtBy[credit] = (this.caughtBy[credit] ?? 0) + 1;
+        this.earnedBy[credit] = (this.earnedBy[credit] ?? 0) + value;
+      }
+      this.emit({
+        type: "capture", kind: fish.kind, source, x: fish.x, y: fish.y, value, combo: this.combo,
+        ...(fish.golden ? { golden: true } : {}),
+      });
 
       FISH_SPECS[fish.kind].onCapture?.(this, fish, source);
       if (this.rng() < this.stats.twinChance) this.spawn(fish.kind);
