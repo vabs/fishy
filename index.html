@@ -29,6 +29,12 @@
 
     <p id="round-hint" class="round-hint" hidden>Move your net over the fish. It catches them on its own.</p>
 
+    <div id="frenzy-banner" class="frenzy-banner" role="status" hidden>
+      <span class="frenzy-title">Feeding Frenzy!</span>
+      <span class="frenzy-detail"><span id="frenzy-value"></span> <span id="frenzy-time" aria-hidden="true"></span></span>
+      <span class="frenzy-bar" aria-hidden="true"><span id="frenzy-bar-fill" class="frenzy-bar-fill"></span></span>
+    </div>
+
     <section id="hub" hidden>
       <header class="hub-bar">
         <div class="hub-player">
@@ -60,6 +66,7 @@
         <span id="summary-earned" class="summary-earned-amount"></span>
         <span class="summary-earned-label">earned this round</span>
       </p>
+      <p id="summary-frenzy" class="summary-frenzy" hidden></p>
       <table id="summary-table" class="summary-table">
         <thead>
           <tr>
