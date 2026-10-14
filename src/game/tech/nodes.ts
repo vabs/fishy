@@ -215,6 +215,18 @@ export const TECH_NODES: readonly TechNode[] = [
       stats.roundSeconds += 1.5 * level;
     },
   },
+  {
+    id: "frenzy.length",
+    branch: "time",
+    name: "Rising Tide",
+    description: "Feeding Frenzy waves last 1.5 s longer per level",
+    maxLevel: 3,
+    cost: { base: 1500, growth: 2 },
+    requires: ["time.round"],
+    apply(stats, level) {
+      stats.frenzySeconds += 1.5 * level;
+    },
+  },
 
   // Spawning
   {
@@ -316,6 +328,18 @@ export const TECH_NODES: readonly TechNode[] = [
     requires: ["econ.combo"],
     apply(stats, level) {
       stats.comboMax += 0.25 * level;
+    },
+  },
+  {
+    id: "frenzy.value",
+    branch: "economy",
+    name: "Frenzy Feast",
+    description: "+0.1× value of fish caught in a Feeding Frenzy, per level",
+    maxLevel: 5,
+    cost: { base: 20000, growth: 2 },
+    requires: ["econ.combo"],
+    apply(stats, level) {
+      stats.frenzyValueMult += 0.1 * level;
     },
   },
   {
