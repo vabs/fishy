@@ -241,7 +241,9 @@ so drawing thousands of fish stays cheap.
 - Each fish's unlock gates the rest of its nodes. Fish unlock in order: Uncommon → Rare →
   Electric → Epic → Goober → Monster → Star.
 - Pacing target: finishing the tree takes roughly 1–1.5 hours. `src/game/tech/pacing.test.ts`
-  checks it by playing a whole game with a bot.
+  checks it by playing a whole game with a bot, which finishes in about 70 minutes. Golden fish,
+  chests and Feeding Frenzy waves are part of that; to make room for them, upgrades over $2,000
+  cost more the pricier they are (×1.2 at $10k, ×1.6 at $100k, ×1.9 at $500k).
 
 ### Branches
 
