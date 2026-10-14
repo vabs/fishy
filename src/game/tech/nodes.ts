@@ -330,6 +330,43 @@ export const TECH_NODES: readonly TechNode[] = [
       stats.valueMult += 0.1 * level;
     },
   },
+  {
+    id: "econ.goldRush",
+    branch: "economy",
+    name: "Gold Rush",
+    description: "Golden fish appear 25% more often per level",
+    maxLevel: 5,
+    cost: { base: 300, growth: 1.8 },
+    requires: ["econ.value"],
+    apply(stats, level) {
+      stats.goldenRate *= 1 + 0.25 * level;
+    },
+  },
+  {
+    id: "econ.goldLinger",
+    branch: "economy",
+    name: "Lingering Gold",
+    description: "Golden fish stay 2 s longer before they dive away, per level",
+    maxLevel: 3,
+    cost: { base: 1500, growth: 2 },
+    requires: ["econ.goldRush"],
+    apply(stats, level) {
+      stats.goldenSeconds += 2 * level;
+    },
+  },
+  {
+    id: "econ.treasureMap",
+    branch: "economy",
+    name: "Treasure Map",
+    description: "+15% chance per level that a round from round 3 on has a treasure chest",
+    maxLevel: 5,
+    cost: { base: 1000, growth: 2 },
+    requires: ["econ.goldRush"],
+    apply(stats, level) {
+      // The only node that touches the chance, so capping it here keeps the order irrelevant.
+      stats.chestChance = Math.min(1, stats.chestChance + 0.15 * level);
+    },
+  },
 
   // Normal fish
   fishValue("normal", {

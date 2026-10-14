@@ -108,6 +108,10 @@ const ICONS: Record<string, string> = {
   "econ.combo": '<path d="M-1.5 -4.5 l2.6 -2.6 a4.2 4.2 0 0 1 6 6 l-2.6 2.6 M1.5 4.5 l-2.6 2.6 a4.2 4.2 0 0 1 -6 -6 l2.6 -2.6 M-3.2 3.2 L3.2 -3.2"/>',
   "econ.comboWindow": '<circle cy="2" r="8.5"/><path d="M0 2 L3.5 -1.5 M-3.5 -10 H3.5 M0 -10 V-6.5"/>',
   "econ.comboCap": '<path d="M-9.5 7 V-5.5 L-4.8 -0.5 L0 -8 L4.8 -0.5 L9.5 -5.5 V7 Z"/>',
+  "econ.goldRush": `<path d="${fishPath(-1.5, 4, 1.05)}"/><path ${FILLED} d="${starPoints(4, 6, 1.6, 6, -6.5)}"/>`,
+  "econ.goldLinger": `<circle cx="-2" cy="2.5" r="8.5"/><path d="M-2 -2.5 V2.5 L1.5 5"/><path ${FILLED} d="${starPoints(4, 5, 1.4, 7.5, -7.5)}"/>`,
+  "econ.treasureMap":
+    '<path d="M-10 -1.5 V9 H10 V-1.5 Z M-10 -1.5 V-4 Q-10 -9.5 0 -9.5 Q10 -9.5 10 -4 V-1.5 M-5 -9 V9 M5 -9 V9"/><rect x="-2" y="-3.5" width="4" height="5" rx="1" fill="currentColor" stroke="none"/>',
   "normal.weight": '<path stroke-width="3.2" d="M-7 9 V-8 M0 9 V-2 M7 9 V3"/>',
   weight: '<path stroke-width="3.2" d="M-7 9 V3 M0 9 V-2 M7 9 V-8"/>',
   value: COIN,
