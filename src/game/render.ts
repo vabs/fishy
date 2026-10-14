@@ -1,8 +1,9 @@
 import { formatMoney } from "../format";
+import { CHEST, chestInNet, coinBurst, type Chest } from "./chest";
 import { FISH, FISH_KINDS, FISH_SPECS, MAX_FISH_SIZE, type FishKind } from "./fish";
 import type { Effect } from "./fx";
 import { diveEffect, drawGlints, glintBurst } from "./golden";
-import { buildSprites, type FishSprites } from "./shapes";
+import { buildChestSprites, buildSprites, type ChestSprites, type FishSprites } from "./shapes";
 import type { Stats } from "./stats";
 import type { Fish, FxEvent, Point, World, WorldEvent } from "./world";
 import type { GameViewport } from "./viewport";
@@ -29,6 +30,8 @@ const COLORS = {
 
 const FADE_IN_SECONDS = 0.4;
 const FLOATER_SECONDS = 0.9;
+/** A treasure payout's floater is bigger and stays up longer. */
+const BIG_FLOATER_SECONDS = 1.6;
 const PULSE_SECONDS = 0.25;
 const PARTICLES_PER_CAPTURE = 8;
 const PARTICLES_PER_GOLDEN = 16;
@@ -52,6 +55,7 @@ interface Floater {
   value?: number;
   color: string;
   age: number;
+  big?: boolean;
 }
 
 interface Pulse {
@@ -91,6 +95,7 @@ export class Renderer {
   private offsetY = 0;
   private background: HTMLCanvasElement | null = null;
   private readonly sprites = new Map<FishKind, FishSprites>();
+  private chestSprites: ChestSprites | null = null;
   private floaters: Floater[] = [];
   private pulses: Pulse[] = [];
   private particles: Particle[] = [];
@@ -118,6 +123,7 @@ export class Renderer {
     this.background = this.paintBackground();
     // Sprites are rendered at device resolution, which may have changed.
     this.sprites.clear();
+    this.chestSprites = null;
     this.floaters = [];
     this.particles = [];
     this.pulses = [];
@@ -174,6 +180,11 @@ export class Renderer {
         break;
       case "golden":
         this.addBonusEffect(glintBurst(event.x, event.y, false));
+        break;
+      case "chest-open":
+        this.addBonusEffect(coinBurst(event.x, event.y));
+        this.addBonusEffect(glintBurst(event.x, event.y, true));
+        this.floaters.push({ x: event.x, y: event.y - 10, text: `+${formatMoney(event.value)}`, color: COLORS.goldFloater, age: 0, big: true });
         break;
       case "golden-escape": {
         const sprites = this.sprite(event.kind);
@@ -233,6 +244,7 @@ export class Renderer {
     const netActive = world && !world.over && pointer;
     if (netActive) this.drawLens(world, pointer, stats.netRadius);
     if (world) for (const kind of FISH_KINDS) FISH_SPECS[kind].drawWorld?.(ctx, world, this.time);
+    if (world?.chest) this.drawChest(world.chest, netActive ? pointer : null, stats.netRadius);
     if (world) this.drawGoldenGlints(world);
     this.drawEffects();
     if (netActive) this.drawNet(pointer, stats.netRadius, world.tickProgress);
@@ -288,6 +300,40 @@ export class Renderer {
     for (const fish of world.fish) {
       if (Math.hypot(fish.x - pointer.x, fish.y - pointer.y) <= radius) this.drawHpBar(fish);
     }
+  }
+
+  /**
+   * The treasure chest floats at the surface, so it's drawn in full colour over the fish, bobbing
+   * in a ring of ripples. Its HP bar shows while the net reaches it.
+   */
+  private drawChest(chest: Chest, pointer: Point | null, netRadius: number): void {
+    const ctx = this.ctx;
+    this.chestSprites ??= buildChestSprites(this.dpr * this.viewScale);
+    const sprites = this.chestSprites;
+    const size = CHEST.size;
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, chest.age / FADE_IN_SECONDS);
+    for (const offset of [0, 0.5]) {
+      const ripple = (chest.age * 0.6 + offset) % 1;
+      ctx.strokeStyle = `rgba(255, 255, 255, ${0.4 * (1 - ripple)})`;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.ellipse(chest.x, chest.y + size * 0.3, size * (0.55 + 0.4 * ripple), size * (0.14 + 0.1 * ripple), 0, 0, TAU);
+      ctx.stroke();
+    }
+    ctx.translate(chest.x, chest.y + Math.sin(chest.age * 1.8) * 2.5);
+    ctx.rotate(Math.sin(chest.age * 1.3 + 0.6) * 0.06);
+    ctx.drawImage(chest.hitFlash > 0 ? sprites.flash : sprites.full, -sprites.width / 2, -sprites.height / 2, sprites.width, sprites.height);
+    ctx.restore();
+
+    if (!pointer || !chestInNet(chest, pointer, netRadius)) return;
+    const width = size * 0.9;
+    const x = chest.x - width / 2;
+    const y = chest.y - sprites.height / 2 - 8;
+    ctx.fillStyle = COLORS.hpBack;
+    ctx.fillRect(x, y, width, 4);
+    ctx.fillStyle = COLORS.hpFill;
+    ctx.fillRect(x, y, width * Math.max(0, chest.hp / chest.maxHp), 4);
   }
 
   /** Golden fish twinkle wherever they are, so they can be spotted outside the net as well as in it. */
@@ -386,7 +432,7 @@ export class Renderer {
       p.x += p.vx * dt;
       p.y += p.vy * dt;
     }
-    this.floaters = this.floaters.filter((f) => f.age < FLOATER_SECONDS);
+    this.floaters = this.floaters.filter((f) => f.age < (f.big ? BIG_FLOATER_SECONDS : FLOATER_SECONDS));
     this.pulses = this.pulses.filter((p) => p.age < PULSE_SECONDS);
     this.particles = this.particles.filter((p) => p.age < p.life);
     for (const e of this.effects) e.age += dt;
@@ -421,14 +467,16 @@ export class Renderer {
       ctx.restore();
     }
 
-    ctx.font = `bold ${15 / this.viewScale}px system-ui, sans-serif`;
+    const font = `bold ${15 / this.viewScale}px system-ui, sans-serif`;
+    const bigFont = `bold ${26 / this.viewScale}px system-ui, sans-serif`;
     ctx.textAlign = "center";
     for (const f of this.floaters) {
-      const t = f.age / FLOATER_SECONDS;
+      const t = f.age / (f.big ? BIG_FLOATER_SECONDS : FLOATER_SECONDS);
+      ctx.font = f.big ? bigFont : font;
       ctx.fillStyle = f.color;
       ctx.globalAlpha = 1 - t * t;
       if (!f.text && f.value !== undefined) f.text = `+${formatMoney(f.value)}`;
-      ctx.fillText(f.text, f.x, f.y - 12 - t * 30);
+      ctx.fillText(f.text, f.x, f.y - 12 - t * (f.big ? 40 : 30));
     }
     ctx.globalAlpha = 1;
   }

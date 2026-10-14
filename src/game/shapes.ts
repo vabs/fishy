@@ -1,3 +1,4 @@
+import { CHEST, CHEST_BOX, drawChestShape } from "./chest";
 import { FISH_SPECS, type FishKind } from "./fish";
 
 /** Colour of every fish outside the net. Types are told apart by outline alone. */
@@ -37,6 +38,28 @@ export function buildSprites(kind: FishKind, dpr: number): FishSprites {
   ctx.translate(width / 2, height / 2);
   spec.shape(ctx, spec.def);
   return { full, silhouette: tint(full, SILHOUETTE), flash: tint(full, FLASH), golden: gild(full), width, height };
+}
+
+export interface ChestSprites {
+  full: HTMLCanvasElement;
+  flash: HTMLCanvasElement;
+  /** Size to draw at, CSS px. */
+  width: number;
+  height: number;
+}
+
+/** The treasure chest, rendered once at device resolution, with its hit-flash version. */
+export function buildChestSprites(dpr: number): ChestSprites {
+  const width = CHEST.size * CHEST_BOX.width;
+  const height = CHEST.size * CHEST_BOX.height;
+  const full = document.createElement("canvas");
+  full.width = Math.ceil(width * dpr);
+  full.height = Math.ceil(height * dpr);
+  const ctx = context(full);
+  ctx.scale(dpr, dpr);
+  ctx.translate(width / 2, height / 2);
+  drawChestShape(ctx);
+  return { full, flash: tint(full, FLASH), width, height };
 }
 
 /** A gold copy of a sprite: its own shading in gold, lifted a little, with a diagonal sheen. */

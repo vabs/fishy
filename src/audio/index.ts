@@ -119,6 +119,7 @@ export function createGameAudio(): GameAudio {
         else if (event.type === "fx") fx(event);
         else if (event.type === "golden") sfx.shimmer();
         else if (event.type === "golden-escape") sfx.plop();
+        else if (event.type === "chest-open") sfx.treasure();
       }
       sfx.catches(catches, combo);
       sfx.flush();

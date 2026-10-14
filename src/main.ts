@@ -3,7 +3,7 @@ import { createGameAudio } from "./audio";
 import { formatCompactMoney, formatDuration, formatMoney } from "./format";
 import { FISH, FISH_KINDS, type FishKind } from "./game/fish";
 import { Renderer } from "./game/render";
-import { buildSprites } from "./game/shapes";
+import { buildChestSprites, buildSprites } from "./game/shapes";
 import { createRng } from "./game/rng";
 import { BASE_STATS, type Stats } from "./game/stats";
 import { summaryRows, type SummaryRow } from "./game/summary";
@@ -232,6 +232,7 @@ function summaryRow({ key, count: caught, earned }: SummaryRow): HTMLTableRowEle
   const label = document.createElement("span");
   label.className = "summary-fish";
   if (key === "golden") label.append(icon(buildSprites("normal", dpr).golden), "Golden fish");
+  else if (key === "treasure") label.append(icon(buildChestSprites(dpr).full), "Treasure");
   else label.append(icon(buildSprites(key, dpr).full), FISH[key].name);
   name.append(label);
   const count = document.createElement("td");

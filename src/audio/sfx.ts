@@ -11,7 +11,8 @@ import { degreeToHz, type Key } from "./theory";
  */
 
 type SfxKind =
-  | "catch" | "current" | "bounce" | "launch" | "implode" | "burst" | "bonus" | "chime" | "shimmer" | "golden" | "plop";
+  | "catch" | "current" | "bounce" | "launch" | "implode" | "burst" | "bonus" | "chime" | "shimmer" | "golden" | "plop"
+  | "treasure";
 
 const LIMITS: Record<SfxKind, VoiceLimit> = {
   catch: { gap: 0.04, voices: 4 },
@@ -25,6 +26,7 @@ const LIMITS: Record<SfxKind, VoiceLimit> = {
   shimmer: { gap: 0.3, voices: 1 },
   golden: { gap: 0.12, voices: 2 },
   plop: { gap: 0.2, voices: 1 },
+  treasure: { gap: 0.5, voices: 1 },
 };
 const MAX_VOICES = 8;
 /** Catches still waiting for a voice after this long are dropped: they'd sound late. */
@@ -38,7 +40,7 @@ const MAX_CURRENT_NOTES = 9;
 /** Peak levels, before the effects volume. */
 const LEVEL = {
   catch: 0.24, current: 0.07, bounce: 0.06, launch: 0.09, implode: 0.13, burst: 0.12, bonus: 0.07, chime: 0.11,
-  shimmer: 0.045, golden: 0.1, plop: 0.13,
+  shimmer: 0.045, golden: 0.1, plop: 0.13, treasure: 0.1,
 };
 /** Gap between the notes of a golden shimmer, s. */
 const SHIMMER_STEP = 0.045;
@@ -201,6 +203,22 @@ export class Sfx {
     const { ctx, time, out } = voice;
     pop(ctx, out, time, this.hz(pickOne([0, 2]), 3), LEVEL.plop);
     noise(ctx, out, { time: time + 0.02, gain: LEVEL.plop * 0.25, attack: 0.005, decay: 0.12, filter: "highpass", from: 2500 });
+  }
+
+  /** A treasure chest opening: a creaking hinge, a soft thud as the lid falls back, then coins. */
+  treasure(): void {
+    const voice = this.start("treasure", 1.4);
+    if (!voice) return;
+    const { ctx, time, out } = voice;
+    // The creak: a narrow band of noise squeezed upwards, then a lower one as the lid settles.
+    noise(ctx, out, { time, gain: LEVEL.treasure * 0.9, attack: 0.06, decay: 0.3, filter: "bandpass", from: 320, to: 950, q: 18 });
+    noise(ctx, out, { time: time + 0.2, gain: LEVEL.treasure * 0.6, attack: 0.04, decay: 0.2, filter: "bandpass", from: 700, to: 420, q: 16 });
+    pop(ctx, out, time + 0.32, this.hz(0, 2), LEVEL.treasure * 1.2);
+    // Coins: quick clinks high in the scale, tumbling out.
+    for (let i = 0; i < 9; i++) {
+      const at = time + 0.38 + i * 0.055 + Math.random() * 0.025;
+      bell(ctx, out, at, this.hz(pickOne([10, 11, 12, 13, 14, 15])), LEVEL.treasure * (0.9 - i * 0.07), 0.22);
+    }
   }
 
   /** A purchase in the tech tree: a two-note chime, or a little arpeggio for unlocking a fish. */

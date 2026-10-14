@@ -25,6 +25,21 @@ describe("summaryRows", () => {
     for (const row of rows) expect(Number.isInteger(row.earned)).toBe(true);
   });
 
+  it("gives opened chests a Treasure row, still adding up to the total", () => {
+    const stats = cloneStats(BASE_STATS);
+    Object.assign(stats, { spawnRateMult: 0, startFish: 0, goldenRate: 0, valueMult: 1.13, netRadius: 200 });
+    const world = new World(stats, createRng(8), 800, 600, { round: 6, final: false });
+    world.chest = { x: 600, y: 100, vx: 0, vy: 0, hp: 0.5, maxHp: 10, hitFlash: 0, age: 1 };
+    world.spawn("normal", { at: { x: 600, y: 120 } });
+    world.pointer = { x: 600, y: 105 };
+    for (let i = 0; i < 70; i++) world.update(STEP);
+
+    const rows = summaryRows(world);
+    expect(rows[0]).toMatchObject({ key: "treasure", count: 1 });
+    expect(rows.map((r) => r.key)).toContain("normal");
+    expect(rows.reduce((sum, r) => sum + r.earned, 0)).toBe(Math.floor(world.earned));
+  });
+
   it("leaves out bonus rows with nothing in them", () => {
     const world = new World(cloneStats(BASE_STATS), createRng(1), 800, 600);
     world.capture(world.fish[0]!, "net");
