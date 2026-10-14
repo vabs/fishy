@@ -14,6 +14,8 @@ import { mountTechTree } from "./ui/tech-tree";
 /** Longest frame the sim will catch up on, so a backgrounded tab doesn't fast-forward a round. */
 const MAX_FRAME_SECONDS = 0.25;
 const TOAST_SECONDS = 6;
+/** The first-round tip disappears after the first catch, or after this long. */
+const HINT_SECONDS = 8;
 
 function element<T extends HTMLElement>(selector: string): T {
   const el = document.querySelector<T>(selector);
@@ -55,6 +57,7 @@ const end = {
   time: element("#end-time"),
 };
 const toast = element("#toast");
+const roundHint = element("#round-hint");
 
 const renderer = new Renderer(canvas);
 let save: SaveData;
@@ -109,6 +112,7 @@ function showToast(message: string): void {
 }
 
 function showOnly(screen: "hub" | "round" | "summary" | "end"): void {
+  if (screen !== "round") roundHint.hidden = true;
   hub.root.hidden = screen !== "hub";
   hud.root.hidden = screen !== "round" && screen !== "summary";
   summary.root.hidden = screen !== "summary";
@@ -136,7 +140,6 @@ function renderHub(): void {
 
 function hint(complete: boolean): string {
   if (complete) return "Every upgrade is yours. One last round to go.";
-  if (save.round === 1) return "Move your net over the fish. It catches them on its own.";
   if (TECH_NODES.some((node) => canBuy(node, save.upgrades, save.money))) return "Click a glowing upgrade to buy it.";
   return "Catch more fish to afford the next upgrade.";
 }
@@ -175,9 +178,19 @@ function showEnd(): void {
   showOnly("end");
 }
 
+/** Where the player goes between rounds. */
 function showHome(): void {
   if (save.finalRoundDone) showEnd();
+  else if (nothingToBuy()) startRound();
   else showHub();
+}
+
+/**
+ * True for a new game (and until the first upgrade is affordable): the tree would only show one
+ * locked node, so the player goes straight back to the water instead.
+ */
+function nothingToBuy(): boolean {
+  return Object.keys(save.upgrades).length === 0 && !TECH_NODES.some((node) => canBuy(node, save.upgrades, save.money));
 }
 
 function resize(): void {
@@ -199,6 +212,8 @@ function updateHud(): void {
   setText(hud.money, formatMoney(playing ? save.money + world.earned : save.money));
   const combo = world.combo > 0 ? ` · combo ×${world.comboMult.toFixed(1)}` : "";
   setText(hud.earned, playing ? `+${formatMoney(world.earned)} this round${combo}` : "");
+  const showHint = playing && playingRound === 1 && world.totalCaught === 0 && world.elapsed < HINT_SECONDS;
+  if (roundHint.hidden === showHint) roundHint.hidden = !showHint;
 }
 
 function frame(now: number): void {
@@ -258,7 +273,7 @@ hub.start.addEventListener("click", startRound);
 element("#continue-button").addEventListener("click", showHome);
 element("#play-again-button").addEventListener("click", () => {
   setSave(resetProgress(save));
-  showHub();
+  showHome();
 });
 
 showHome();

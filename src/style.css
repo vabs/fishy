@@ -231,6 +231,25 @@ body.playing #game {
   font-size: 13px;
 }
 
+/* First-round tip, shown until the first catch. */
+.round-hint {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  margin: 0;
+  transform: translateX(-50%);
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 600;
+  text-align: center;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+
+.round-hint[hidden] {
+  display: none;
+}
+
 .toast {
   position: fixed;
   bottom: 20px;

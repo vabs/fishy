@@ -1,6 +1,6 @@
 // Smoke test of the whole game flow in a real browser: npm run e2e
-// First visit -> name -> hub -> round -> summary -> buy an upgrade -> reload keeps progress ->
-// Final Round -> end screen -> Play Again. Needs Google Chrome installed.
+// First visit -> name -> straight into round 1 -> summary -> hub -> buy an upgrade -> reload keeps
+// progress -> Final Round -> end screen -> Play Again. Needs Google Chrome installed.
 import assert from "node:assert/strict";
 import { chaseFish, launchChrome, newPage, startDevServer } from "./lib/browser.mjs";
 
@@ -12,27 +12,28 @@ try {
   const page = await newPage(browser);
   await page.goto(dev.url);
 
-  step("first visit asks for a name");
+  step("first visit asks for a name, then goes straight into round 1 with a tip");
   await page.locator("dialog input").fill(NAME);
   await page.locator("dialog button[type=submit]").click();
-  await page.waitForSelector("#hub:not([hidden])");
-  assert.equal(await text(page, "#hub-name"), NAME);
-  assert.equal(await text(page, "#hub-money"), "$0");
-
-  step("a round plays and banks money");
-  await page.click("#start-button");
   await page.waitForSelector("#hud:not([hidden])");
-  await chaseFish(page, { steps: 120 });
-  await page.waitForSelector("#summary-panel:not([hidden])", { timeout: 30_000 });
-  assert.equal(await text(page, "#summary-title"), "Round 1 complete");
-  const banked = money(await text(page, "#summary-bank"));
-  assert.ok(banked > 0, "caught nothing in round 1");
+  assert.ok(await page.locator("#hub").isHidden(), "hub shown with nothing to buy");
+  await page.waitForSelector("#round-hint:not([hidden])");
 
-  step("the hub shows the money and the root upgrade can be bought");
-  await page.click("#continue-button");
-  await page.waitForSelector("#hub:not([hidden])");
-  assert.equal(money(await text(page, "#hub-money")), banked);
-  assert.equal(await text(page, "#hub-round"), "Round 2 next");
+  step("rounds bank money until the first upgrade is affordable, then the hub opens");
+  let round = 1;
+  for (;;) {
+    await chaseFish(page, { steps: 120 });
+    await page.waitForSelector("#summary-panel:not([hidden])", { timeout: 30_000 });
+    assert.equal(await text(page, "#summary-title"), `Round ${round} complete`);
+    await page.click("#continue-button");
+    round++;
+    await page.waitForSelector("#hub:not([hidden]), #hud:not([hidden])");
+    if (await page.locator("#hub").isVisible()) break;
+    assert.ok(round < 5, "never earned enough for the first upgrade");
+  }
+  assert.equal(await text(page, "#hub-name"), NAME);
+  assert.equal(await text(page, "#hub-round"), `Round ${round} next`);
+  const banked = money(await text(page, "#hub-money"));
   await page.click(".tech-node.is-root");
   const afterBuy = money(await text(page, "#hub-money"));
   assert.ok(afterBuy < banked, "buying the root upgrade didn't spend money");
@@ -61,18 +62,20 @@ try {
   assert.equal(await text(page, "#summary-title"), "Final Round complete");
   await page.click("#continue-button");
   await page.waitForSelector("#end-panel:not([hidden])");
-  assert.equal(await text(page, "#end-rounds"), "2");
+  assert.equal(await text(page, "#end-rounds"), String(round));
 
   step("the end screen survives a reload");
   await page.reload();
   await page.waitForSelector("#end-panel:not([hidden])");
 
-  step("Play Again starts over and keeps the name");
+  step("Play Again starts over in round 1 and keeps the name");
   await page.click("#play-again-button");
-  await page.waitForSelector("#hub:not([hidden])");
-  assert.equal(await text(page, "#hub-name"), NAME);
-  assert.equal(await text(page, "#hub-money"), "$0");
-  assert.equal(await text(page, "#hub-round"), "Round 1 next");
+  await page.waitForSelector("#hud:not([hidden])");
+  await page.waitForFunction(() => document.querySelector("#hud-round")?.textContent === "Round 1");
+  const fresh = await page.evaluate(() => JSON.parse(localStorage.getItem("fishy.save")));
+  assert.equal(fresh.playerName, NAME);
+  assert.equal(fresh.money, 0);
+  assert.deepEqual(fresh.upgrades, {});
 
   assert.deepEqual(page.errors, [], "page errors");
   console.log("\nall good");
