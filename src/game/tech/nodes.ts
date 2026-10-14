@@ -256,7 +256,7 @@ export const TECH_NODES: readonly TechNode[] = [
   {
     id: "spawn.rate2",
     branch: "spawning",
-    name: "Feeding Frenzy",
+    name: "Teeming Waters",
     description: "Every fish type spawns 8% faster per level",
     maxLevel: 5,
     cost: { base: 60000, growth: 2 },
