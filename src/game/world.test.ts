@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 import { FISH } from "./fish";
 import { createRng } from "./rng";
 import { BASE_STATS, type Stats } from "./stats";
-import { STEP, World, type Fish } from "./world";
+import { STEP, World, isFrenzyRound, type Fish, type RoundOptions, type WorldEvent } from "./world";
 
-function makeWorld(overrides: Partial<Stats> = {}): World {
+function makeWorld(overrides: Partial<Stats> = {}, round?: RoundOptions): World {
   // No timed spawns unless a test asks for them, so fish counts stay predictable.
-  return new World({ ...BASE_STATS, spawnRateMult: 0, ...overrides }, createRng(42), 800, 600);
+  return new World({ ...BASE_STATS, spawnRateMult: 0, ...overrides }, createRng(42), 800, 600, round);
 }
 
 /** Advances the world, calling `beforeStep` first on every step (e.g. to move the pointer). */
@@ -215,5 +215,187 @@ describe("World round mechanics", () => {
       fish: { ...BASE_STATS.fish, normal: { rate: 0, rateMult: 1, valueMult: 1 }, monster: { rate: 1, rateMult: 1, valueMult: 1 } },
     });
     expect(world.countOf("monster")).toBe(1);
+  });
+});
+
+describe("Feeding Frenzy", () => {
+  const FRENZY_ROUND: RoundOptions = { round: 5, final: false };
+  /** A 20 s frenzy round with no fish unless asked: the wave runs from 7 s to 13 s. */
+  const frenzyWorld = (overrides: Partial<Stats> = {}, round = FRENZY_ROUND) =>
+    makeWorld({ startFish: 0, roundSeconds: 20, frenzySeconds: 6, ...overrides }, round);
+  /** Normal fish spawning at `rate` per second, and nothing else. */
+  const spawning = (rate: number): Partial<Stats> => ({
+    spawnRateMult: 1,
+    fish: { ...BASE_STATS.fish, normal: { rate, rateMult: 1, valueMult: 1 } },
+  });
+
+  it("comes in every fifth round and in the Final Round", () => {
+    const rounds = Array.from({ length: 21 }, (_, i) => i + 1).filter((round) => isFrenzyRound({ round, final: false }));
+    expect(rounds).toEqual([5, 10, 15, 20]);
+    expect(isFrenzyRound({ round: 7, final: true })).toBe(true);
+    expect(makeWorld({}, { round: 4, final: false }).frenzy).toBeNull();
+    expect(makeWorld({}, { round: 10, final: false }).frenzy).not.toBeNull();
+    expect(makeWorld({}, { round: 3, final: true }).frenzy).not.toBeNull();
+  });
+
+  it("never comes in a world built without round options, which plays round 1", () => {
+    expect(makeWorld().frenzy).toBeNull();
+    expect(makeWorld().round).toEqual({ round: 1, final: false });
+  });
+
+  it("leaves rounds without a frenzy exactly as they were", () => {
+    const play = (round?: RoundOptions) => {
+      const world = new World({ ...BASE_STATS }, createRng(7), 800, 600, round);
+      run(world, 10, () => {
+        world.pointer = { x: 400 + Math.sin(world.timeLeft) * 200, y: 300 };
+      });
+      return { earned: world.earned, fish: world.fish.map((f) => [f.kind, f.x, f.y]), next: world.rng() };
+    };
+    expect(play({ round: 4, final: false })).toEqual(play());
+  });
+
+  it("starts 35% into the round's base length and lasts frenzySeconds, whatever time bonuses add", () => {
+    const world = frenzyWorld({ startFish: 10, timeBonusChance: 1, timeBonusSeconds: 2 });
+    expect(world.frenzy).toMatchObject({ start: 7, end: 13 });
+    for (const fish of [...world.fish]) world.capture(fish, "net");
+    run(world, STEP);
+    expect(world.timeLeft).toBeGreaterThan(30);
+
+    run(world, 6.9);
+    expect(world.frenzyActive).toBe(false);
+    expect(world.frenzyLeft).toBe(0);
+    run(world, 0.2);
+    expect(world.frenzyActive).toBe(true);
+    expect(world.frenzyLeft).toBeCloseTo(5.9, 1);
+    run(world, 5.8);
+    expect(world.frenzyActive).toBe(true);
+    run(world, 0.2);
+    expect(world.frenzyActive).toBe(false);
+    expect(world.frenzy).toMatchObject({ start: 7, end: 13 });
+  });
+
+  it("starts later in longer rounds and lasts longer with a longer wave", () => {
+    expect(frenzyWorld({ roundSeconds: 30, frenzySeconds: 9 }).frenzy).toMatchObject({ start: 10.5, end: 19.5 });
+  });
+
+  it("announces its start and its end once each", () => {
+    const world = frenzyWorld();
+    const events: WorldEvent[] = [];
+    run(world, 15, () => events.push(...world.drainEvents()));
+    events.push(...world.drainEvents());
+    expect(events.filter((e) => e.type === "frenzy")).toEqual([
+      { type: "frenzy", phase: "start" },
+      { type: "frenzy", phase: "end" },
+    ]);
+  });
+
+  it("makes fish spawn four times as fast, only while the wave runs", () => {
+    const world = frenzyWorld(spawning(10));
+    run(world, 1);
+    const counts = [world.fish.length];
+    for (let i = 0; i < 3; i++) {
+      run(world, 6);
+      counts.push(world.fish.length);
+    }
+    const [before, during, after] = [counts[1]! - counts[0]!, counts[2]! - counts[1]!, counts[3]! - counts[2]!];
+    expect(before).toBeGreaterThanOrEqual(59);
+    expect(before).toBeLessThanOrEqual(61);
+    expect(during).toBeGreaterThanOrEqual(238);
+    expect(during).toBeLessThanOrEqual(242);
+    expect(Math.abs(after - before)).toBeLessThanOrEqual(1);
+  });
+
+  it("follows the frenzy spawn multiplier", () => {
+    const world = frenzyWorld({ ...spawning(10), frenzySpawnMult: 2 });
+    run(world, 7);
+    const before = world.fish.length;
+    run(world, 6);
+    expect(Math.abs(world.fish.length - before - 120)).toBeLessThanOrEqual(2);
+  });
+
+  it("pours the new fish in just behind a front that sweeps across the sea, swimming with it", () => {
+    const world = frenzyWorld(spawning(10));
+    const wave = world.frenzy!;
+    const { cx, rx, minOrbit } = world.swimArea();
+    run(world, 6.5);
+    const fronts: number[] = [];
+    let checked = 0;
+    while (world.elapsed < 13.5) {
+      world.update(STEP);
+      const front = world.frenzyFront;
+      if (front === null) continue;
+      fronts.push(front);
+      for (const fish of world.fish) {
+        // Fish placed next to the boat are pushed out to its clearance, and fish are kept off the
+        // swimming area's very ends; the rest sit where they poured in.
+        if (fish.age > 0 || fish.orbit <= minOrbit || Math.abs(fish.x - cx) > 0.95 * rx) continue;
+        const behind = wave.sweep * (front - fish.x);
+        expect(behind).toBeGreaterThanOrEqual(-1e-6);
+        expect(behind).toBeLessThanOrEqual(80);
+        expect(Math.sign(Math.cos(fish.heading))).toBe(wave.sweep);
+        checked++;
+      }
+    }
+    expect(checked).toBeGreaterThan(200);
+    // From one side of the swimming area to the other.
+    expect(Math.abs(fronts[0]! - (cx - wave.sweep * rx))).toBeLessThan(5);
+    expect(Math.abs(fronts[fronts.length - 1]! - (cx + wave.sweep * rx))).toBeLessThan(5);
+    expect(world.frenzyFront).toBeNull();
+  });
+
+  it("pays 1.5× for fish caught while the wave runs, on top of the other multipliers", () => {
+    const world = frenzyWorld({ startFish: 4, abilityValueMult: 1.5 });
+    const [early, inWave, byCurrent, late] = world.fish;
+    run(world, 1);
+    world.capture(early!, "net");
+    run(world, STEP);
+    expect(world.earned).toBeCloseTo(1);
+
+    run(world, 7);
+    world.capture(inWave!, "net");
+    world.capture(byCurrent!, "electric");
+    run(world, STEP);
+    expect(world.earned).toBeCloseTo(1 + 1.5 + 1.5 * 1.5);
+    expect(world.frenzyEarned).toBeCloseTo(1.5 + 1.5 * 1.5);
+    expect(world.frenzyCaught).toBe(2);
+
+    run(world, 6);
+    world.capture(late!, "net");
+    run(world, STEP);
+    expect(world.earned).toBeCloseTo(1 + 1.5 + 2.25 + 1);
+    expect(world.frenzyEarned).toBeCloseTo(3.75);
+    expect(world.frenzyCaught).toBe(2);
+  });
+
+  it("follows the frenzy value multiplier", () => {
+    const world = frenzyWorld({ startFish: 1, frenzyValueMult: 2.5 });
+    run(world, 8);
+    world.capture(world.fish[0]!, "net");
+    run(world, STEP);
+    expect(world.earned).toBeCloseTo(2.5);
+  });
+
+  it("tallies what the wave earned as part of the round's totals", () => {
+    const world = frenzyWorld({ ...spawning(4), startFish: 20, netRadius: 120 }, { round: 9, final: true });
+    let inWave = false;
+    let tally = 0;
+    let caught = 0;
+    run(world, 20, () => {
+      const fish = world.fish.find((f) => !f.captured);
+      if (fish) world.pointer = { x: fish.x, y: fish.y };
+      for (const event of world.drainEvents()) {
+        if (event.type === "frenzy") inWave = event.phase === "start";
+        else if (event.type === "capture" && inWave) {
+          tally += event.value;
+          caught++;
+        }
+      }
+    });
+    expect(caught).toBeGreaterThan(0);
+    expect(world.frenzyCaught).toBe(caught);
+    expect(world.frenzyEarned).toBeCloseTo(tally);
+    expect(world.frenzyEarned).toBeLessThan(world.earned);
+    const rows = Object.values(world.earnedBy).reduce<number>((sum, n) => sum + (n ?? 0), 0);
+    expect(rows).toBeCloseTo(world.earned);
   });
 });

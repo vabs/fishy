@@ -14,6 +14,14 @@ const BOAT_CLEARANCE = 70;
 /** Captures handled per step. Any beyond this wait for the next step. */
 const MAX_CAPTURES_PER_STEP = 200;
 const HIT_FLASH_SECONDS = 0.12;
+/** A Feeding Frenzy wave comes in every this many rounds, and in the Final Round. */
+export const FRENZY_EVERY = 5;
+/** The wave starts this far into the round, as a share of the round's base length. */
+const FRENZY_START = 0.35;
+/** Fish pour in within this distance behind the wave's front, px. */
+const FRENZY_BAND = 70;
+/** Fish pour in no closer to the swimming area's sides than this, as a fraction of its half-width. */
+const FRENZY_REACH = 0.96;
 
 export interface Point {
   x: number;
@@ -86,6 +94,7 @@ export type WorldEvent =
   | { type: "tick"; x: number; y: number; radius: number; hits: number; crits: number }
   | { type: "capture"; kind: FishKind; source: CaptureSource; x: number; y: number; value: number; combo: number }
   | { type: "time-bonus"; x: number; y: number; seconds: number }
+  | { type: "frenzy"; phase: "start" | "end" }
   | FxEvent;
 
 export interface SpawnOptions {
@@ -93,6 +102,8 @@ export interface SpawnOptions {
   at?: Point;
   /** Credit this fish's catch to another type in the round summary. */
   credit?: FishKind;
+  /** Swim this way round the boat instead of a random one. */
+  dir?: 1 | -1;
 }
 
 /** Facts about the round being played that aren't upgrades. */
@@ -101,6 +112,23 @@ export interface RoundOptions {
   round: number;
   /** True for the Final Round, played once the whole tree is bought. */
   final: boolean;
+}
+
+/** True for a round with a Feeding Frenzy wave: every fifth round, and the Final Round. */
+export function isFrenzyRound({ round, final }: RoundOptions): boolean {
+  return final || (round > 0 && round % FRENZY_EVERY === 0);
+}
+
+/**
+ * A Feeding Frenzy wave. For a few seconds every type spawns faster and every catch is worth more.
+ * A front sweeps once across the sea and the new fish pour in just behind it.
+ */
+export interface FrenzyWave {
+  /** Seconds since the round started. Time bonuses don't move the wave. */
+  start: number;
+  end: number;
+  /** Which way the front sweeps: 1 from the left side to the right, -1 from the right to the left. */
+  sweep: 1 | -1;
 }
 
 /** One round of play. No DOM access: input writes `pointer`, the renderer reads the rest. */
@@ -121,6 +149,11 @@ export class World {
   /** Captures in the current combo after the first. */
   combo = 0;
   pointer: Point | null = null;
+  /** This round's Feeding Frenzy wave, or null in a round without one. */
+  readonly frenzy: FrenzyWave | null;
+  /** Fish caught while the Feeding Frenzy wave ran, and the money they earned. Part of the totals above. */
+  frenzyCaught = 0;
+  frenzyEarned = 0;
 
   private events: WorldEvent[] = [];
   private captureQueue: { fish: Fish; source: CaptureSource }[] = [];
@@ -131,6 +164,8 @@ export class World {
   /** Seconds time bonuses have added this round. Capped at roundSeconds so chains can't stretch a round forever. */
   private bonusTime = 0;
   private nextId = 1;
+  /** Whether the frenzy wave ran last step, so its start and end are announced once each. */
+  private frenzyRunning = false;
 
   constructor(
     readonly stats: Stats,
@@ -140,6 +175,13 @@ export class World {
     readonly round: RoundOptions = { round: 1, final: false },
   ) {
     this.timeLeft = stats.roundSeconds;
+    // Only a frenzy round draws a random number for it, so every other round plays out as before.
+    if (isFrenzyRound(round)) {
+      const start = stats.roundSeconds * FRENZY_START;
+      this.frenzy = { start, end: start + stats.frenzySeconds, sweep: this.rng() < 0.5 ? 1 : -1 };
+    } else {
+      this.frenzy = null;
+    }
     for (let i = 0; i < stats.startFish; i++) this.spawn();
   }
 
@@ -166,6 +208,29 @@ export class World {
 
   get comboMult(): number {
     return Math.min(1 + this.combo * this.stats.comboStep, this.stats.comboMax);
+  }
+
+  /** True while the Feeding Frenzy wave runs. */
+  get frenzyActive(): boolean {
+    const wave = this.frenzy;
+    return wave !== null && this.elapsed >= wave.start && this.elapsed < wave.end;
+  }
+
+  /** Seconds left in the Feeding Frenzy wave while it runs, else 0. */
+  get frenzyLeft(): number {
+    return this.frenzy && this.frenzyActive ? this.frenzy.end - this.elapsed : 0;
+  }
+
+  /**
+   * x of the Feeding Frenzy wave's front while it runs, px, else null. The front crosses the
+   * swimming area from side to side once over the length of the wave.
+   */
+  get frenzyFront(): number | null {
+    const wave = this.frenzy;
+    if (!wave || !this.frenzyActive) return null;
+    const { cx, rx } = this.swimArea();
+    const t = (this.elapsed - wave.start) / (wave.end - wave.start);
+    return cx + wave.sweep * rx * (2 * t - 1);
   }
 
   resize(width: number, height: number): void {
@@ -199,6 +264,7 @@ export class World {
   update(dt: number): void {
     if (this.over) return;
     this.elapsed += dt;
+    this.announceFrenzy();
     for (const kind of FISH_KINDS) FISH_SPECS[kind].update?.(this, dt);
     this.moveFish(dt);
     this.spawnFish(dt);
@@ -242,7 +308,7 @@ export class World {
       // Start the wobble at its midpoint so the fish appears exactly where asked.
       wobblePhase = 0;
     }
-    const dir = this.rng() < 0.5 ? 1 : -1;
+    const dir = options.dir ?? (this.rng() < 0.5 ? 1 : -1);
     const fish: Fish = {
       id: this.nextId++,
       kind: k,
@@ -352,17 +418,42 @@ export class World {
 
   /** Every type spawns on its own clock, so unlocking or boosting one never slows another. */
   private spawnFish(dt: number): void {
+    // During a Feeding Frenzy every clock runs faster and every new fish pours in behind the wave.
+    const wave = this.frenzy;
+    const front = this.frenzyFront;
+    const mult = front === null ? 1 : this.stats.frenzySpawnMult;
     for (const kind of FISH_KINDS) {
-      const rate = spawnRate(this.stats, kind);
+      const rate = spawnRate(this.stats, kind) * mult;
       if (rate <= 0) continue;
       // Each type starts part-way to its first spawn, so types don't all arrive in step.
       let progress = (this.spawnTimers.get(kind) ?? this.rng()) + rate * dt;
       while (progress >= 1) {
         progress -= 1;
-        this.spawn(kind);
+        if (wave && front !== null) this.spawnInWave(kind, wave, front);
+        else this.spawn(kind);
       }
       this.spawnTimers.set(kind, progress);
     }
+  }
+
+  /** Spawns a fish just behind the frenzy wave's front, swimming the way the wave sweeps. */
+  private spawnInWave(kind: FishKind, wave: FrenzyWave, front: number): void {
+    const { cx, cy, rx, ry } = this.swimArea();
+    const x = front - wave.sweep * this.rng() * FRENZY_BAND;
+    const u = Math.max(-FRENZY_REACH, Math.min(FRENZY_REACH, (x - cx) / rx));
+    const y = cy + (this.rng() * 2 - 1) * ry * Math.sqrt(1 - u * u);
+    // Clockwise is rightwards above the boat and leftwards below it, so fish in the two halves go
+    // opposite ways round to travel with the wave.
+    const dir = (y < cy) === (wave.sweep === 1) ? 1 : -1;
+    this.spawn(kind, { at: { x: cx + u * rx, y }, dir });
+  }
+
+  /** Emits an event when the frenzy wave starts and when it ends. */
+  private announceFrenzy(): void {
+    const running = this.frenzyActive;
+    if (running === this.frenzyRunning) return;
+    this.frenzyRunning = running;
+    this.emit({ type: "frenzy", phase: running ? "start" : "end" });
   }
 
   private tickNet(dt: number): void {
@@ -393,12 +484,19 @@ export class World {
 
   private processCaptures(): void {
     if (this.captureQueue.length === 0) return;
+    const frenzy = this.frenzyActive;
+    const frenzyMult = frenzy ? this.stats.frenzyValueMult : 1;
     for (const { fish, source } of this.captureQueue.splice(0, MAX_CAPTURES_PER_STEP)) {
       this.updateCombo();
       const sourceMult = source === "net" ? 1 : this.stats.abilityValueMult;
       const value =
-        FISH[fish.kind].value * this.stats.fish[fish.kind].valueMult * this.stats.valueMult * sourceMult * this.comboMult;
+        FISH[fish.kind].value * this.stats.fish[fish.kind].valueMult * this.stats.valueMult * sourceMult * frenzyMult *
+        this.comboMult;
       this.earned += value;
+      if (frenzy) {
+        this.frenzyCaught++;
+        this.frenzyEarned += value;
+      }
       this.caught[fish.kind] = (this.caught[fish.kind] ?? 0) + 1;
       const credit = fish.credit ?? fish.kind;
       this.caughtBy[credit] = (this.caughtBy[credit] ?? 0) + 1;

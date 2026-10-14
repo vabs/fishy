@@ -61,8 +61,13 @@ function botTarget(world: World, from: Point): Point | null {
   return best;
 }
 
-function playRound(upgrades: Upgrades, seed: number): { earned: number; seconds: number; caught: Partial<Record<FishKind, number>> } {
-  const world = new World(applyUpgrades(BASE_STATS, upgrades), createRng(seed), WIDTH, HEIGHT);
+function playRound(
+  upgrades: Upgrades,
+  round: number,
+  seed: number,
+): { earned: number; seconds: number; caught: Partial<Record<FishKind, number>>; frenzyEarned: number } {
+  // The real round number, so every fifth round brings its Feeding Frenzy wave.
+  const world = new World(applyUpgrades(BASE_STATS, upgrades), createRng(seed), WIDTH, HEIGHT, { round, final: false });
   let pointer: Point = { x: WIDTH / 2, y: HEIGHT / 2 };
   let target: Point | null = null;
   let retarget = 0;
@@ -83,7 +88,7 @@ function playRound(upgrades: Upgrades, seed: number): { earned: number; seconds:
     world.update(STEP);
     world.drainEvents();
   }
-  return { earned: world.earned, seconds: world.elapsed, caught: world.caught };
+  return { earned: world.earned, seconds: world.elapsed, caught: world.caught, frenzyEarned: world.frenzyEarned };
 }
 
 /** A visible fish unlock the bot is willing to save for: no more than this many rounds of income. */
@@ -118,15 +123,19 @@ describe.runIf(import.meta.env.PACING)("pacing", () => {
     let money = 0;
     let roundSeconds = 0;
     let rounds = 0;
+    let earned = 0;
+    let frenzyEarned = 0;
     const lines: string[] = [];
     const milestones: string[] = [];
     const maxedAt: string[] = [];
 
     while (!isTreeComplete(upgrades) && rounds < MAX_ROUNDS) {
       rounds++;
-      const round = playRound(upgrades, 1000 + rounds);
+      const round = playRound(upgrades, rounds, 1000 + rounds);
       roundSeconds += round.seconds;
       money += round.earned;
+      earned += round.earned;
+      frenzyEarned += round.frenzyEarned;
       const result = shop(upgrades, money, round.earned);
       upgrades = result.upgrades;
       money = result.money;
@@ -135,7 +144,8 @@ describe.runIf(import.meta.env.PACING)("pacing", () => {
         if (id.endsWith(".unlock")) milestones.push(`${id} at round ${rounds} (${now})`);
         if (isMaxed(getNode(id)!, upgrades)) maxedAt.push(`${id} maxed at ${now}`);
       }
-      if (rounds <= 3 || rounds % 10 === 0) {
+      // Every tenth round has a Feeding Frenzy, so the round before it shows a plain round too.
+      if (rounds <= 3 || rounds % 10 === 0 || rounds % 10 === 9) {
         const owned = TECH_NODES.reduce((sum, n) => sum + levelOf(n, upgrades), 0);
         const caught = Object.values(round.caught).reduce((sum, n) => sum + (n ?? 0), 0);
         lines.push(
@@ -146,6 +156,7 @@ describe.runIf(import.meta.env.PACING)("pacing", () => {
             `${(caught / round.seconds).toFixed(1).padStart(5)} fish/s`,
             `earned $${Math.round(round.earned).toLocaleString("en-US").padStart(9)}`,
             `levels ${String(owned).padStart(3)}`,
+            round.frenzyEarned > 0 ? `frenzy $${Math.round(round.frenzyEarned).toLocaleString("en-US")}` : "",
           ].join("  "),
         );
       }
@@ -160,6 +171,7 @@ describe.runIf(import.meta.env.PACING)("pacing", () => {
         "Last nodes maxed:",
         ...maxedAt.slice(-15),
         `Complete: ${isTreeComplete(upgrades)} after ${rounds} rounds`,
+        `Feeding Frenzy waves earned ${((frenzyEarned / earned) * 100).toFixed(1)}% of all money`,
         `In rounds ${minutes(roundSeconds)}, with ${HUB_SECONDS} s per round in the hub ${minutes(total)}`,
       ].join("\n"),
     );
