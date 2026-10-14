@@ -1,4 +1,5 @@
-import { z } from "zod";
+// zod/mini: same validation as "zod" for these simple types, at a fraction of the bundle size.
+import * as z from "zod/mini";
 import { MIGRATIONS, migrate, type Migrations, type RawSave } from "./migrations";
 import { SAVE_ERRORS, SAVE_VERSION, repairName, type NodeInfo, type SaveData } from "./model";
 
@@ -8,7 +9,7 @@ export type SaveResult = { ok: true; save: SaveData } | { ok: false; error: stri
  * The shape of a current-version save. Deliberately loose on values (any number, any string):
  * out-of-range values are repaired afterwards rather than rejecting the whole save.
  */
-const saveSchema: z.ZodType<SaveData> = z.object({
+const saveSchema: z.ZodMiniType<SaveData> = z.object({
   version: z.literal(SAVE_VERSION),
   playerName: z.string(),
   money: z.number(),
