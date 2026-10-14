@@ -50,7 +50,7 @@ export interface Abilities {
     speed: number;
     /** Hit radius, px. */
     radius: number;
-    /** Projectiles launched per captured Star. */
+    /** Projectiles launched per captured Star: the Star itself, then smaller shards. */
     count: number;
   };
 }

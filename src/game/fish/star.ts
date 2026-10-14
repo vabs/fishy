@@ -14,6 +14,13 @@ const ZIG_RATE_MIN = 0.75;
 const ZIG_RATE_MAX = 1.05;
 /** Seconds before the same shot can hit the same fish again. */
 const HIT_COOLDOWN = 0.25;
+/**
+ * Every projectile after the first (the extra ones Constellation adds) is a shard: this much of the
+ * Star's size, and half its bounces, rounded up. Full-strength extras let Star shots catch most of
+ * the money late in a game.
+ */
+const SHARD_SIZE = 0.8;
+const SHARD_BOUNCES = 0.5;
 /** Cooldowns this close to 0 count as over (float error from adding up steps). */
 const EPSILON = 1e-9;
 /** Seconds of past path drawn behind a shot. */
@@ -22,7 +29,10 @@ const TRAIL_DOTS = 7;
 /** Shot spin, radians/s. */
 const SHOT_SPIN = 9;
 
-/** Special: small, fast, glowing; zig-zags. On capture it becomes projectiles that bounce off the edges. */
+/**
+ * Special: small, fast, glowing; zig-zags. On capture it becomes a projectile that bounces off the
+ * edges, plus a smaller shard per Constellation level.
+ */
 export const star: FishSpec = {
   def: {
     name: "Star",
@@ -70,7 +80,10 @@ export const star: FishSpec = {
   },
 };
 
-/** Turns a captured Star into `count` projectiles fanned out in random directions. */
+/**
+ * Turns a captured Star into `count` projectiles fanned out in random directions: the Star itself,
+ * then shards.
+ */
 function launch(world: World, x: number, y: number): void {
   const a = world.stats.ability.star;
   const count = Math.max(0, Math.round(a.count));
@@ -79,15 +92,16 @@ function launch(world: World, x: number, y: number): void {
   const [left, right, top, bottom] = bounds(world, a.radius);
   for (let i = 0; i < count; i++) {
     const angle = start + i * spread + range(world.rng, -0.25, 0.25) * spread;
+    const shard = i > 0;
     world.shots.push({
       kind: "star",
       x: clamp(x, left, right),
       y: clamp(y, top, bottom),
       vx: Math.cos(angle) * a.speed,
       vy: Math.sin(angle) * a.speed,
-      radius: a.radius,
+      radius: shard ? a.radius * SHARD_SIZE : a.radius,
       damage: a.damage,
-      bouncesLeft: a.bounces,
+      bouncesLeft: shard ? Math.ceil(a.bounces * SHARD_BOUNCES) : a.bounces,
       age: 0,
       cooldowns: new Map(),
     });

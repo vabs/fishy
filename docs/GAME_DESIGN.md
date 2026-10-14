@@ -135,8 +135,12 @@ A rare special fish, separate from the seven types above.
   again, so a fish isn't hit every frame.
 - A fish reduced to 0 HP by a star is captured, and its effect fires. A star can capture another
   star, which launches a second projectile.
+- Each Constellation level adds a shard to every launch: a smaller star (80% of the size) that fades
+  after half as many bounces, rounded up. Shards deal full damage. Full-strength extra stars let Star
+  shots catch about three quarters of a late round's money, leaving little for the net and the other
+  abilities; shards bring that to about two thirds.
 
-Upgrades: spawn chance, bounces, damage, speed, size (hit radius), several stars at once.
+Upgrades: spawn chance, bounces, damage, speed, size (hit radius), shards per catch (Constellation).
 Possible late upgrades: split on bounce, damaging trail.
 
 ## Silhouette lens
@@ -217,7 +221,7 @@ so drawing thousands of fish stays cheap.
 **Star fish**
 - Unlock and spawn chance
 - Bounces, damage, speed, size
-- Several stars at once
+- Constellation: smaller shards launched alongside each Star
 
 ### Starting state
 

@@ -130,7 +130,7 @@ describe("Star shots", () => {
     expect(spawned.hits).toBe(1);
   });
 
-  it("launches `count` projectiles from the capture point in different directions", () => {
+  it("launches `count` projectiles from the capture point in different directions: the Star, then smaller shards", () => {
     const world = makeWorld((s) => {
       s.ability.star.count = 3;
     });
@@ -145,7 +145,13 @@ describe("Star shots", () => {
       expect(shot.x).toBeCloseTo(launch!.x);
       expect(shot.y).toBeCloseTo(launch!.y);
       expect(Math.hypot(shot.vx, shot.vy)).toBeCloseTo(a.speed);
-      expect(shot).toMatchObject({ radius: a.radius, damage: a.damage, bouncesLeft: a.bounces });
+      expect(shot.damage).toBe(a.damage);
+    }
+    const [first, ...shards] = world.shots;
+    expect(first).toMatchObject({ radius: a.radius, bouncesLeft: a.bounces });
+    for (const shard of shards) {
+      expect(shard.radius).toBeCloseTo(a.radius * 0.8);
+      expect(shard.bouncesLeft).toBe(2);
     }
     const angles = world.shots.map((s) => Math.atan2(s.vy, s.vx));
     for (let i = 0; i < angles.length; i++) {
@@ -184,6 +190,38 @@ describe("Star shots", () => {
       expect(faded).toBe(1);
     });
   }
+
+  it.each([[0, 0], [3, 2], [6, 3], [11, 6]])("gives shards half of the Star's %i bounces, rounded up: %i", (bounces, shardBounces) => {
+    const world = makeWorld((s) => {
+      s.ability.star.count = 3;
+      s.ability.star.bounces = bounces;
+    });
+    world.capture(spawnAt(world, "star", 300, 200), "net");
+    run(world, STEP);
+    expect(world.shots.map((shot) => shot.bouncesLeft)).toEqual([bounces, shardBounces, shardBounces]);
+  });
+
+  it("fades a shard after its own, smaller number of bounces", () => {
+    const world = makeWorld((s) => {
+      s.ability.star.count = 2;
+      s.ability.star.bounces = 3;
+    });
+    world.capture(spawnAt(world, "star", 300, 200), "net");
+    run(world, STEP);
+    expect(world.shots).toHaveLength(2);
+
+    let bounced = 0;
+    let faded = 0;
+    for (let i = 0; i < 60 * 60 && world.shots.length > 0; i++) {
+      run(world, STEP, (events) => {
+        bounced += fxNamed(events, "bounce").length;
+        faded += fxNamed(events, "fade").length;
+      });
+    }
+    expect(world.shots).toHaveLength(0);
+    expect(bounced).toBe(3 + 2);
+    expect(faded).toBe(2);
+  });
 
   it("hits a fish it sits on once per cooldown", () => {
     const world = makeWorld();
