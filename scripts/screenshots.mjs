@@ -23,6 +23,13 @@ try {
   await first.waitForTimeout(400);
   await save(await first.screenshot(), "name-prompt");
 
+  // Then the how-to-play slides, with the net demo mid-sweep.
+  await first.locator("dialog input").fill("Skipper");
+  await first.locator("dialog button[type=submit]").click();
+  await first.locator("dialog.intro").waitFor();
+  await first.waitForTimeout(2_600);
+  await save(await first.screenshot(), "how-to-play");
+
   // Mid-game: a save with a good part of the tree bought.
   const mid = await newPage(browser);
   const upgrades = buyCheapest(tech, MID_GAME_BUDGET);

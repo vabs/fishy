@@ -1,0 +1,165 @@
+/* "How to play" slides. Builds on .dialog (dialog.css). */
+
+.dialog.intro {
+  width: min(480px, calc(100vw - 32px));
+  padding: 24px 24px 20px;
+}
+
+.intro-viewport {
+  overflow: hidden;
+}
+
+.intro-track {
+  display: flex;
+  transition: transform 260ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .intro-track {
+    transition: none;
+  }
+}
+
+.intro-slide {
+  flex: 0 0 100%;
+  min-width: 0;
+}
+
+.intro-slide h2 {
+  margin: 18px 0 10px;
+}
+
+.dialog .intro-slide p {
+  min-height: 7.5em;
+  margin: 0;
+}
+
+.intro-demo,
+.intro-tree {
+  display: block;
+  width: 100%;
+  aspect-ratio: 400 / 190;
+  border-radius: 10px;
+}
+
+.intro-tree {
+  background: radial-gradient(ellipse at 50% 50%, #0d4561 0%, #093248 55%, #051c2a 100%);
+}
+
+.intro-tree-edges path {
+  fill: none;
+  stroke: rgba(185, 216, 228, 0.35);
+  stroke-width: 1.5;
+}
+
+.intro-tree-hull {
+  fill: #8a5a32;
+  stroke: #5b3a1f;
+  stroke-width: 3;
+}
+
+.intro-tree-deck {
+  fill: #b07a48;
+}
+
+.intro-tree .intro-tree-hull,
+.intro-tree .intro-tree-deck {
+  opacity: 0.35;
+}
+
+.intro-node {
+  fill: #0b3146;
+  stroke: rgba(185, 216, 228, 0.45);
+  stroke-width: 2;
+}
+
+.intro-node.is-owned {
+  fill: #9ad8f0;
+  stroke: #e6f7ff;
+}
+
+.intro-node.fish-normal.is-owned {
+  fill: #f4a259;
+}
+
+.intro-node.fish-uncommon.is-owned {
+  fill: #7bd389;
+}
+
+.intro-node.fish-rare {
+  stroke: #5b8def;
+}
+
+.intro-node.fish-electric {
+  stroke: #f7e04b;
+}
+
+.intro-node.is-ready {
+  stroke: var(--accent);
+  animation: intro-ready 1.6s ease-in-out infinite;
+}
+
+@keyframes intro-ready {
+  50% {
+    stroke-width: 4;
+    filter: drop-shadow(0 0 6px rgba(244, 162, 89, 0.8));
+  }
+}
+
+.intro-price rect {
+  fill: var(--accent);
+}
+
+.intro-price text {
+  fill: var(--accent-ink);
+  font: 700 10px system-ui, sans-serif;
+  text-anchor: middle;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .intro-node.is-ready {
+    animation: none;
+  }
+}
+
+.intro-dots {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin: 16px 0 18px;
+}
+
+.intro-dot {
+  width: 9px;
+  height: 9px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.25);
+  cursor: pointer;
+}
+
+.intro-dot[aria-current="step"] {
+  background: var(--accent);
+}
+
+.intro-dot:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.intro-actions {
+  justify-content: flex-start;
+}
+
+.intro-spacer {
+  flex: 1;
+}
+
+.intro-actions [hidden] {
+  display: none;
+}
+
+.dialog .dialog-button.is-finish {
+  padding-inline: 28px;
+}

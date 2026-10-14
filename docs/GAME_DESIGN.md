@@ -245,7 +245,7 @@ Stored in the browser's localStorage under `fishy.save`:
 
 ## Screens
 
-Name prompt (first visit only) → hub (tech tree, money, Start Round, export/import) → round →
+Name prompt and three how-to-play slides (first visit only; the hub's ? button reopens the slides) → hub (tech tree, money, Start Round, export/import) → round →
 round summary → hub → … → Final Round → end screen.
 
 ## Sound

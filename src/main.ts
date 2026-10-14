@@ -10,6 +10,7 @@ import { TECH_NODES, applyUpgrades, buy, canBuy, isTreeComplete, refundRemovedLe
 import { STEP, World, type Point } from "./game/world";
 import { createSave, loadSave, recordRound, resetProgress, sanitizeUpgrades, writeSave, type SaveData } from "./save";
 import { mountAudioControls } from "./ui/audio-controls";
+import { showIntro } from "./ui/intro";
 import { promptForName } from "./ui/name-prompt";
 import { mountSaveControls } from "./ui/save-controls";
 import { mountTechTree } from "./ui/tech-tree";
@@ -97,7 +98,8 @@ function applyDevOverrides(stats: Stats): Stats {
   return stats;
 }
 
-async function loadOrCreateSave(): Promise<SaveData> {
+/** The stored save, or a new one after asking for the player's name. `isNew` is true for the latter. */
+async function loadOrCreateSave(): Promise<{ save: SaveData; isNew: boolean }> {
   const stored = loadSave();
   if (stored) {
     // Balance updates can shorten or remove upgrades; pay back levels the save can no longer own.
@@ -107,11 +109,11 @@ async function loadOrCreateSave(): Promise<SaveData> {
       persist(loaded);
       showToast(`The upgrade tree was rebalanced. ${formatMoney(refund)} was refunded for upgrades that were shortened or removed.`);
     }
-    return loaded;
+    return { save: loaded, isNew: false };
   }
   const fresh = createSave(await promptForName());
   persist(fresh);
-  return fresh;
+  return { save: fresh, isNew: true };
 }
 
 /** Writes the save, and tells the player once per visit if the browser won't keep it. */
@@ -318,7 +320,8 @@ resize();
 requestAnimationFrame(frame);
 
 // The sea keeps drawing behind the name prompt on a first visit.
-save = await loadOrCreateSave();
+const loaded = await loadOrCreateSave();
+save = loaded.save;
 
 const tree = mountTechTree(hub.tree, {
   onBuy(nodeId) {
@@ -338,10 +341,15 @@ mountSaveControls(hub.save, {
   },
 });
 hub.start.addEventListener("click", startRound);
+element("#help-button").addEventListener("click", () => {
+  void showIntro({ playerName: save.playerName, mode: "replay" });
+});
 element("#continue-button").addEventListener("click", showHome);
 element("#play-again-button").addEventListener("click", () => {
   setSave(resetProgress(save));
   showHome();
 });
 
+// New players learn the basics before their first round.
+if (loaded.isNew) await showIntro({ playerName: save.playerName, mode: "first" });
 showHome();

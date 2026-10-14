@@ -20,14 +20,16 @@ upgrades between rounds, unlock stranger fish, and work your way to the Final Ro
 - **Upgrade.** Between rounds, spend money in the tech tree: a bigger net, harder hits, faster
   ticks, longer rounds, new fish and their abilities.
 - **Finish.** Max out the whole tree to unlock the Final Round.
+- **New here?** First-time players get a three-slide walkthrough before round 1. The **?** button
+  in the hub shows it again.
 - **Sound.** Press **M**, or the speaker button, to mute. In the hub, the button next to it sets
   the music and effects volume.
 
 ![The tech tree: upgrade nodes spread out from a boat in branches for the net, time, economy, spawning and each fish type](docs/screenshots/tech-tree.png)
 
-| First visit | After a round | The end |
-| --- | --- | --- |
-| ![A dialog asks for your name](docs/screenshots/name-prompt.png) | ![Round summary: money earned this round, broken down by fish type](docs/screenshots/summary.png) | ![End screen thanking the player, with lifetime stats and a Play Again button](docs/screenshots/end.png) |
+| First visit | How to play | After a round | The end |
+| --- | --- | --- | --- |
+| ![A dialog asks for your name](docs/screenshots/name-prompt.png) | ![How-to-play slide: an animated net catching fish, explaining that the net catches on its own](docs/screenshots/how-to-play.png) | ![Round summary: money earned this round, broken down by fish type](docs/screenshots/summary.png) | ![End screen thanking the player, with lifetime stats and a Play Again button](docs/screenshots/end.png) |
 
 ## Fish
 

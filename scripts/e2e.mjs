@@ -12,10 +12,20 @@ try {
   const page = await newPage(browser);
   await page.goto(dev.url);
 
-  step("first visit asks for a name, then goes straight into round 1 with a tip");
+  step("first visit asks for a name, then shows three how-to-play slides");
   await page.locator("dialog input").fill(NAME);
   await page.locator("dialog button[type=submit]").click();
+  const intro = page.locator("dialog.intro");
+  await intro.waitFor();
+  assert.ok(await page.locator("#hud").isHidden(), "round started before the slides");
+  await intro.getByRole("button", { name: "Next" }).click();
+  await page.keyboard.press("ArrowRight");
+  assert.equal((await intro.locator(".intro-good-luck").innerText()).trim(), `Good luck, ${NAME}!`);
+
+  step("Let's play goes straight into round 1 with a tip");
+  await intro.getByRole("button", { name: "Let's play" }).click();
   await page.waitForSelector("#hud:not([hidden])");
+  assert.equal(await intro.count(), 0, "slides still open");
   assert.ok(await page.locator("#hub").isHidden(), "hub shown with nothing to buy");
   await page.waitForSelector("#round-hint:not([hidden])");
 
@@ -37,6 +47,13 @@ try {
   await page.click(".tech-node.is-root");
   const afterBuy = money(await text(page, "#hub-money"));
   assert.ok(afterBuy < banked, "buying the root upgrade didn't spend money");
+
+  step("the hub's help button reopens the slides, and Escape closes them");
+  await page.click("#help-button");
+  await intro.waitFor();
+  await page.keyboard.press("Escape");
+  await intro.waitFor({ state: "detached" });
+  assert.ok(await page.locator("#hub").isVisible());
 
   step("a reload keeps the save and skips the name prompt");
   await page.reload();
