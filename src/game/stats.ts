@@ -126,7 +126,7 @@ export const BASE_STATS: Stats = {
 
   ability: {
     uncommon: { schoolMin: 3, schoolMax: 5 },
-    rare: { armor: 1, pierce: false },
+    rare: { armor: 0.5, pierce: false },
     electric: { jumps: 2, damage: 1, range: 120 },
     epic: { chance: 0.25, range: 90 },
     goober: { tier: 0, count: 3 },
