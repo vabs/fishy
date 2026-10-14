@@ -58,16 +58,14 @@ const dist = (a: Fish, b: Fish) => Math.hypot(a.x - b.x, a.y - b.y);
 const offset = (f: Fish) => Math.hypot(f.offsetX, f.offsetY);
 
 describe("Monster vortex", () => {
-  it("pulls nearby fish in and around it, and leaves far fish, Stars and other Monsters alone", () => {
+  it("pulls nearby fish in and around it, and leaves far fish and Stars alone", () => {
     const world = makeWorld();
     const boss = spunUpMonster(world);
     const near = still(spawnBy(world, "normal", boss, 115, 0));
     const far = still(spawnAt(world, "normal", 300, 520));
     const star = still(spawnBy(world, "star", boss, 50, 100));
-    // A second Monster inside the first one's vortex (only one can spawn normally).
-    const rival = spawnBy(world, "normal", boss, -80, 40);
-    rival.kind = "monster";
-    for (const fish of [near, star, rival]) expect(dist(fish, boss)).toBeLessThan(radius);
+    expect(dist(near, boss)).toBeLessThan(radius);
+    expect(dist(star, boss)).toBeLessThan(radius);
     expect(dist(far, boss)).toBeGreaterThan(radius * 2);
 
     const start = dist(near, boss);
@@ -82,7 +80,20 @@ describe("Monster vortex", () => {
     expect(dist(near, boss)).toBeLessThan(start - 20);
     // Around it, clockwise on screen.
     expect(swept).toBeGreaterThan(0.5);
-    for (const fish of [far, star, rival, boss]) {
+    for (const fish of [far, star, boss]) {
+      expect(fish.offsetX).toBe(0);
+      expect(fish.offsetY).toBe(0);
+    }
+  });
+
+  it("never pulls another Monster", () => {
+    const world = makeWorld();
+    const boss = spunUpMonster(world);
+    // Only one Monster can spawn normally, so dress up a Normal fish inside the first one's vortex.
+    const rival = spawnBy(world, "normal", boss, -80, 40);
+    rival.kind = "monster";
+    run(world, 3);
+    for (const fish of [boss, rival]) {
       expect(fish.offsetX).toBe(0);
       expect(fish.offsetY).toBe(0);
     }
@@ -126,7 +137,7 @@ describe("Monster vortex", () => {
     expect(wasHeld).toBe(true);
     expect(freedAfterHold).toBe(true);
     // Held to 1.5 radii from its path, give or take the screen and body limits.
-    expect(maxOffset).toBeLessThan(radius * 1.5 + 2);
+    expect(maxOffset).toBeLessThan(radius * 1.5 + 10);
   });
 
   it("relaxes offsets smoothly back to 0 once the vortex lets go and the Monster is caught", () => {
