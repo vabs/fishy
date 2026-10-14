@@ -1,4 +1,4 @@
-import { FISH, FISH_KINDS, FISH_SPECS, type FishKind } from "./fish";
+import { FISH, FISH_KINDS, FISH_SPECS, type FishDef, type FishKind } from "./fish";
 import { pickWeighted, range, type Rng } from "./rng";
 import type { Stats } from "./stats";
 
@@ -198,8 +198,7 @@ export class World {
     const def = FISH[k];
     if (def.maxOnScreen !== undefined && this.countOf(k) >= def.maxOnScreen) return undefined;
 
-    const { cx, cy, rx, ry } = this.area();
-    const minOrbit = Math.min(0.9, BOAT_CLEARANCE / Math.min(rx, ry));
+    const { cx, cy, rx, ry, minOrbit } = this.swimArea();
     let angle = range(this.rng, 0, TAU);
     let orbit = range(this.rng, minOrbit, 1);
     let wobblePhase = range(this.rng, 0, TAU);
@@ -275,18 +274,23 @@ export class World {
     return pickWeighted(this.rng, weights);
   }
 
-  /** The ellipse fish swim in, fitted to the screen. */
-  private area(): { cx: number; cy: number; rx: number; ry: number } {
-    return {
-      cx: this._width / 2,
-      cy: this._height / 2,
-      rx: Math.max(this._width / 2 - EDGE_MARGIN, 1),
-      ry: Math.max(this._height / 2 - EDGE_MARGIN, 1),
-    };
+  /**
+   * The ellipse fish swim in, fitted to the screen. An orbit of 1 is its edge; `minOrbit` is the
+   * closest a fish may orbit, keeping it clear of the boat.
+   */
+  swimArea(): { cx: number; cy: number; rx: number; ry: number; minOrbit: number } {
+    const rx = Math.max(this._width / 2 - EDGE_MARGIN, 1);
+    const ry = Math.max(this._height / 2 - EDGE_MARGIN, 1);
+    return { cx: this._width / 2, cy: this._height / 2, rx, ry, minOrbit: Math.min(0.9, BOAT_CLEARANCE / Math.min(rx, ry)) };
+  }
+
+  /** A fish type's definition. Fish modules use this rather than importing the registry, which imports them. */
+  defOf(kind: FishKind): FishDef {
+    return FISH[kind];
   }
 
   private place(fish: Fish): void {
-    const { cx, cy, rx, ry } = this.area();
+    const { cx, cy, rx, ry } = this.swimArea();
     const wobble = Math.sin(fish.wobblePhase) * FISH[fish.kind].wobble;
     const cos = Math.cos(fish.angle);
     const sin = Math.sin(fish.angle);
@@ -295,7 +299,7 @@ export class World {
   }
 
   private moveFish(dt: number): void {
-    const { rx, ry } = this.area();
+    const { rx, ry } = this.swimArea();
     for (const fish of this.fish) {
       const spec = FISH_SPECS[fish.kind];
       // Path length per radian at this point on the ellipse, so speed is px/s everywhere.

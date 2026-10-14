@@ -14,13 +14,6 @@ const SLOT_JITTER = 2.5;
 const PHASE_STEP = 0.45;
 /** How quickly a member closes the gap to its slot, 1/s. Holds formation without snapping. */
 const FOLLOW_RATE = 10;
-/**
- * World keeps these private: the gap between the swimming ellipse and the screen edge, and how close
- * to the boat a fish may orbit, px. Mirrored here only to lay out schools, so a small mismatch just
- * nudges the spacing.
- */
-const EDGE_MARGIN = 30;
-const BOAT_CLEARANCE = 70;
 
 /**
  * Set while a school's members are being spawned, so they don't start schools of their own.
@@ -88,7 +81,7 @@ export const uncommon: FishSpec = {
     const a = anchor.state;
     const back = (s.slotBack ?? 0) - (a.slotBack ?? 0);
     const side = (s.slotSide ?? 0) - (a.slotSide ?? 0);
-    const slot = slotFor(swimArea(world), anchor, back, side);
+    const slot = slotFor(world.swimArea(), anchor, back, side);
     const k = 1 - Math.exp(-FOLLOW_RATE * dt);
     fish.angle += Math.atan2(Math.sin(slot.angle - fish.angle), Math.cos(slot.angle - fish.angle)) * k;
     fish.orbit += (slot.orbit - fish.orbit) * k;
@@ -121,7 +114,7 @@ function formSchool(world: World, leader: Fish): void {
   if (size <= 1) return;
 
   const def = uncommon.def;
-  const area = swimArea(world);
+  const area = world.swimArea();
   // Put the second lane on whichever side has more room, so no slot crosses the edge or the boat.
   const outward = leader.orbit < 0.6 ? 1 : -1;
 
@@ -158,16 +151,7 @@ function formSchool(world: World, leader: Fish): void {
   }
 }
 
-type SwimArea = ReturnType<typeof swimArea>;
-
-/** The ellipse fish swim in, laid out the way World lays it out. */
-function swimArea(world: World) {
-  const cx = world.width / 2;
-  const cy = world.height / 2;
-  const rx = Math.max(cx - EDGE_MARGIN, 1);
-  const ry = Math.max(cy - EDGE_MARGIN, 1);
-  return { cx, cy, rx, ry, minOrbit: Math.min(0.9, BOAT_CLEARANCE / Math.min(rx, ry)) };
-}
+type SwimArea = ReturnType<World["swimArea"]>;
 
 /**
  * Where a fish sits that is `back` px behind `anchor` along the anchor's orbit and `side` px off it

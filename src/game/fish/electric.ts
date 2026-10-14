@@ -1,6 +1,7 @@
 import type { Effect } from "../fx";
 import { range } from "../rng";
 import type { Fish, FxEvent, Point, World } from "../world";
+import { shade } from "./color";
 import type { FishDef, FishSpec } from "./types";
 
 const TAU = Math.PI * 2;
@@ -136,14 +137,9 @@ function startDart(world: World, fish: Fish): void {
   }
 }
 
-/**
- * Orbit range the world spawns fish in: 1 is the edge of the swimming area (30 px inside the screen)
- * and fish stay 70 px clear of the boat. Mirrors World.spawn.
- */
+/** Orbit range the world spawns fish in: clear of the boat, out to the edge of the swimming area. */
 export function orbitBounds(world: World): { min: number; max: number } {
-  const rx = Math.max(world.width / 2 - 30, 1);
-  const ry = Math.max(world.height / 2 - 30, 1);
-  return { min: Math.min(0.9, 70 / Math.min(rx, ry)), max: 1 };
+  return { min: world.swimArea().minOrbit, max: 1 };
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -260,16 +256,6 @@ function smoothstep(from: number, to: number, x: number): number {
   return t * t * (3 - 2 * t);
 }
 
-/** Lightens (amount > 0) or darkens (amount < 0) a #rrggbb colour. */
-function shade(hex: string, amount: number): string {
-  const n = parseInt(hex.slice(1), 16);
-  const channel = (shift: number) => {
-    const c = (n >> shift) & 0xff;
-    const v = amount >= 0 ? c + (255 - c) * amount : c * (1 + amount);
-    return Math.round(v);
-  };
-  return `rgb(${channel(16)}, ${channel(8)}, ${channel(0)})`;
-}
 
 // ---------------------------------------------------------------------------------------------
 // Lightning effect (render only, so Math.random is fine here)

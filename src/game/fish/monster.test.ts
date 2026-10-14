@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-// world first: it loads the fish registry, which the fish modules import too.
 import { STEP, World, type Fish, type FxEvent, type WorldEvent } from "../world";
 import { createRng } from "../rng";
 import { BASE_STATS, cloneStats, type Stats } from "../stats";

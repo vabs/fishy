@@ -1,7 +1,6 @@
 import type { Effect } from "../fx";
 import { range } from "../rng";
 import type { FxEvent, Shot, World } from "../world";
-import { FISH } from "./index";
 import type { FishDef, FishSpec } from "./types";
 
 const TAU = Math.PI * 2;
@@ -152,7 +151,7 @@ function stepShot(world: World, shot: Shot, dt: number): boolean {
 function hitFish(world: World, shot: Shot, fromX: number, fromY: number): void {
   for (const fish of world.fish) {
     if (fish.captured || shot.cooldowns.has(fish.id)) continue;
-    const reach = shot.radius + FISH[fish.kind].size * 0.4;
+    const reach = shot.radius + world.defOf(fish.kind).size * 0.4;
     if (segmentDistance(fish.x, fish.y, fromX, fromY, shot.x, shot.y) > reach) continue;
     shot.cooldowns.set(fish.id, HIT_COOLDOWN);
     world.damage(fish, shot.damage, "star");

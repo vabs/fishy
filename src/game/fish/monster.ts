@@ -1,6 +1,5 @@
 import type { Effect } from "../fx";
 import type { Fish, FxEvent, World } from "../world";
-import { FISH } from "./index";
 import type { FishDef, FishKind, FishSpec } from "./types";
 
 const TAU = Math.PI * 2;
@@ -140,6 +139,7 @@ function pullFish(world: World, dt: number): void {
 function pullOne(world: World, fish: Fish, vortices: Vortex[], radius: number, strength: number, dt: number): void {
   const state = fish.state;
   const held = state[HELD] === 1;
+  const size = world.defOf(fish.kind).size;
 
   let vortex: Vortex | undefined;
   let dist = Infinity;
@@ -165,7 +165,7 @@ function pullOne(world: World, fish: Fish, vortices: Vortex[], radius: number, s
   let ny = oy;
   if (vortex && grip > 0) {
     // Carried along with the Monster and around it; its own swimming is held back by the grip.
-    const [fx, fy] = flow(fish, vortex.fish, dist, radius, strength);
+    const [fx, fy] = flow(fish, size, vortex.fish, dist, radius, strength);
     nx += grip * (fx + vortex.vx - ownVx) * dt;
     ny += grip * (fy + vortex.vy - ownVy) * dt;
   }
@@ -187,7 +187,6 @@ function pullOne(world: World, fish: Fish, vortices: Vortex[], radius: number, s
   // Keep where the fish will be next step clear of the Monster's body and the boat, and on screen.
   const baseX = ownX + ownVx * dt;
   const baseY = ownY + ownVy * dt;
-  const size = FISH[fish.kind].size;
   let x = baseX + nx;
   let y = baseY + ny;
   if (vortex && inside) {
@@ -223,10 +222,10 @@ function pullOne(world: World, fish: Fish, vortices: Vortex[], radius: number, s
 }
 
 /** Vortex velocity at a fish, relative to the Monster: around it and onto the fish's ring. Px/s. */
-function flow(fish: Fish, centre: Fish, dist: number, radius: number, strength: number): [number, number] {
+function flow(fish: Fish, size: number, centre: Fish, dist: number, radius: number, strength: number): [number, number] {
   const ux = dist > 1e-6 ? (fish.x - centre.x) / dist : 1;
   const uy = dist > 1e-6 ? (fish.y - centre.y) / dist : 0;
-  let radial = clamp((ringRadius(fish, radius) - dist) * RING_STIFFNESS, -strength, strength);
+  let radial = clamp((ringRadius(fish, size, radius) - dist) * RING_STIFFNESS, -strength, strength);
   let around = strength * SWIRL;
   const speed = Math.hypot(radial, around);
   if (speed > strength) {
@@ -237,8 +236,8 @@ function flow(fish: Fish, centre: Fish, dist: number, radius: number, strength: 
 }
 
 /** Each fish settles on its own ring just outside the Monster's body, so they bunch without stacking. */
-function ringRadius(fish: Fish, radius: number): number {
-  const inner = monster.def.size * BODY_RADIUS + FISH[fish.kind].size * 0.5 + 6;
+function ringRadius(fish: Fish, size: number, radius: number): number {
+  const inner = monster.def.size * BODY_RADIUS + size * 0.5 + 6;
   const spread = Math.max(0, radius * 0.85 - inner) * 0.45;
   return inner + spread * ((fish.id * 0.618034) % 1);
 }
