@@ -231,10 +231,6 @@ body.playing #game {
   gap: 20px;
 }
 
-.hub-tools-toggle {
-  display: none;
-}
-
 /* In the bar the export/import message hangs below the buttons instead of taking a row, so the
    buttons line up with Start Round. */
 .hub-save .save-controls {
@@ -284,6 +280,11 @@ body.playing #game {
 .icon-button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+/* Phones only: after .icon-button so it isn't overridden; the phone layout shows it again. */
+.hub-tools-toggle {
+  display: none;
 }
 
 .hub-tree {

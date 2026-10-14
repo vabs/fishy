@@ -72,6 +72,7 @@ try {
   await page.waitForSelector("#hub:not([hidden])");
   assert.equal(await text(page, "#hub-name"), NAME);
   assert.equal(money(await text(page, "#hub-money")), afterBuy);
+  assert.equal(await page.isVisible("#hub-tools-toggle"), false, "the phone tools menu button shows on desktop");
   assert.equal(await paletteSwitch.getAttribute("aria-pressed"), "true");
   assert.notEqual(await starColour(), standardStar);
 
