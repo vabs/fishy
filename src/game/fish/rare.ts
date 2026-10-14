@@ -22,7 +22,7 @@ export const rare: FishSpec = {
     name: "Rare",
     // With base armour 0.5, a base net (1 damage) needs 12 ticks; 2 damage needs 4.
     hp: 6,
-    value: 12,
+    value: 15,
     speed: 25,
     size: 40,
     wobble: 6,

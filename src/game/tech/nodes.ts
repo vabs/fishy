@@ -356,18 +356,18 @@ export const TECH_NODES: readonly TechNode[] = [
   unlock("uncommon", {
     name: "Uncommon Fish",
     description: "Uncommon fish start spawning, in schools of 3–5",
-    rate: 0.375,
+    rate: 0.25,
     cost: 110,
     requires: ["normal.value"],
   }),
   spawnMore("uncommon", { name: "Uncommon Shoals", per: 0.3, maxLevel: 5, cost: { base: 170, growth: 1.6 }, requires: ["uncommon.unlock"] }),
-  fishValue("uncommon", { name: "Bright Fins", per: 0.25, maxLevel: 6, cost: { base: 140, growth: 1.6 }, requires: ["uncommon.unlock"] }),
+  fishValue("uncommon", { name: "Bright Fins", per: 0.1, maxLevel: 6, cost: { base: 140, growth: 1.6 }, requires: ["uncommon.unlock"] }),
   {
     id: "uncommon.school",
     ...fishBranch("uncommon"),
     name: "Bigger Schools",
     description: "+1 fish in every Uncommon school per level",
-    maxLevel: 3,
+    maxLevel: 1,
     cost: { base: 990, growth: 2.2 },
     requires: ["uncommon.value"],
     apply(stats, level) {
@@ -420,15 +420,15 @@ export const TECH_NODES: readonly TechNode[] = [
     cost: 7900,
     requires: ["rare.unlock"],
   }),
-  spawnMore("electric", { name: "Storm Season", per: 0.3, maxLevel: 5, cost: { base: 3700, growth: 1.6 }, requires: ["electric.unlock"] }),
-  fishValue("electric", { name: "Live Wires", per: 0.25, maxLevel: 6, cost: { base: 4300, growth: 1.6 }, requires: ["electric.unlock"] }),
+  spawnMore("electric", { name: "Storm Season", per: 0.3, maxLevel: 5, cost: { base: 4810, growth: 1.6 }, requires: ["electric.unlock"] }),
+  fishValue("electric", { name: "Live Wires", per: 0.25, maxLevel: 6, cost: { base: 5590, growth: 1.6 }, requires: ["electric.unlock"] }),
   {
     id: "electric.jumps",
     ...fishBranch("electric"),
     name: "Chain Lightning",
     description: "+1 jump for each Electric current, per level",
     maxLevel: 6,
-    cost: { base: 5700, growth: 1.6 },
+    cost: { base: 7410, growth: 1.6 },
     requires: ["electric.value"],
     apply(stats, level) {
       stats.ability.electric.jumps += level;
@@ -440,7 +440,7 @@ export const TECH_NODES: readonly TechNode[] = [
     name: "High Voltage",
     description: "+1 current damage per level",
     maxLevel: 5,
-    cost: { base: 7900, growth: 1.7 },
+    cost: { base: 10270, growth: 1.7 },
     requires: ["electric.value"],
     apply(stats, level) {
       stats.ability.electric.damage += level;
@@ -452,7 +452,7 @@ export const TECH_NODES: readonly TechNode[] = [
     name: "Long Arc",
     description: "+20 px current jump range per level",
     maxLevel: 5,
-    cost: { base: 5700, growth: 1.6 },
+    cost: { base: 7410, growth: 1.6 },
     requires: ["electric.weight"],
     apply(stats, level) {
       stats.ability.electric.range += 20 * level;
@@ -463,19 +463,19 @@ export const TECH_NODES: readonly TechNode[] = [
   unlock("epic", {
     name: "Epic Fish",
     description: "Epic fish start spawning. When caught, they may net the fish around them",
-    rate: 0.125,
+    rate: 0.2,
     cost: 28000,
     requires: ["electric.unlock"],
   }),
-  spawnMore("epic", { name: "Deep Lures", per: 0.3, maxLevel: 5, cost: { base: 11000, growth: 1.6 }, requires: ["epic.unlock"] }),
-  fishValue("epic", { name: "Glowing Lure", per: 0.25, maxLevel: 6, cost: { base: 13000, growth: 1.6 }, requires: ["epic.unlock"] }),
+  spawnMore("epic", { name: "Deep Lures", per: 0.3, maxLevel: 5, cost: { base: 14300, growth: 1.6 }, requires: ["epic.unlock"] }),
+  fishValue("epic", { name: "Glowing Lure", per: 0.25, maxLevel: 6, cost: { base: 16900, growth: 1.6 }, requires: ["epic.unlock"] }),
   {
     id: "epic.chance",
     ...fishBranch("epic"),
     name: "Epic Haul",
     description: "+5% chance per level for each fish in range to be captured with an Epic fish",
     maxLevel: 6,
-    cost: { base: 19000, growth: 1.6 },
+    cost: { base: 24700, growth: 1.6 },
     requires: ["epic.value"],
     apply(stats, level) {
       stats.ability.epic.chance += 0.05 * level;
@@ -487,7 +487,7 @@ export const TECH_NODES: readonly TechNode[] = [
     name: "Wide Lure",
     description: "+15 px Epic capture range per level",
     maxLevel: 6,
-    cost: { base: 15000, growth: 1.6 },
+    cost: { base: 19500, growth: 1.6 },
     requires: ["epic.weight"],
     apply(stats, level) {
       stats.ability.epic.range += 15 * level;
@@ -498,19 +498,19 @@ export const TECH_NODES: readonly TechNode[] = [
   unlock("goober", {
     name: "Goober Fish",
     description: "Goober fish start spawning. When caught, they burst into Normal fish",
-    rate: 0.1,
+    rate: 0.04,
     cost: 72000,
     requires: ["epic.unlock"],
   }),
-  spawnMore("goober", { name: "Goober Bloom", per: 0.3, maxLevel: 5, cost: { base: 24000, growth: 1.6 }, requires: ["goober.unlock"] }),
-  fishValue("goober", { name: "Squishy Treats", per: 0.25, maxLevel: 6, cost: { base: 24000, growth: 1.6 }, requires: ["goober.unlock"] }),
+  spawnMore("goober", { name: "Goober Bloom", per: 0.3, maxLevel: 5, cost: { base: 31200, growth: 1.6 }, requires: ["goober.unlock"] }),
+  fishValue("goober", { name: "Squishy Treats", per: 0.25, maxLevel: 6, cost: { base: 31200, growth: 1.6 }, requires: ["goober.unlock"] }),
   {
     id: "goober.tier",
     ...fishBranch("goober"),
     name: "Goober Evolution",
     description: "Goobers burst into the next fish type up, per level: Normal → Uncommon → Rare → Electric → Epic",
     maxLevel: 4,
-    cost: { base: 49000, growth: 2 },
+    cost: { base: 63700, growth: 2 },
     requires: ["goober.value"],
     apply(stats, level) {
       stats.ability.goober.tier = Math.min(4, stats.ability.goober.tier + level);
@@ -521,8 +521,8 @@ export const TECH_NODES: readonly TechNode[] = [
     ...fishBranch("goober"),
     name: "Goober Brood",
     description: "+1 fish per Goober burst, per level",
-    maxLevel: 5,
-    cost: { base: 28000, growth: 1.6 },
+    maxLevel: 1,
+    cost: { base: 36400, growth: 1.6 },
     requires: ["goober.weight"],
     apply(stats, level) {
       stats.ability.goober.count += level;
@@ -537,15 +537,15 @@ export const TECH_NODES: readonly TechNode[] = [
     cost: 120000,
     requires: ["goober.unlock"],
   }),
-  spawnMore("monster", { name: "Here Be Monsters", per: 0.3, maxLevel: 5, cost: { base: 49000, growth: 1.6 }, requires: ["monster.unlock"] }),
-  fishValue("monster", { name: "Monster Bounty", per: 0.25, maxLevel: 6, cost: { base: 49000, growth: 1.6 }, requires: ["monster.unlock"] }),
+  spawnMore("monster", { name: "Here Be Monsters", per: 0.3, maxLevel: 5, cost: { base: 63700, growth: 1.6 }, requires: ["monster.unlock"] }),
+  fishValue("monster", { name: "Monster Bounty", per: 0.25, maxLevel: 6, cost: { base: 63700, growth: 1.6 }, requires: ["monster.unlock"] }),
   {
     id: "monster.pullRadius",
     ...fishBranch("monster"),
     name: "Maelstrom",
     description: "+20 px whirlpool radius per level",
     maxLevel: 4,
-    cost: { base: 60000, growth: 1.6 },
+    cost: { base: 78000, growth: 1.6 },
     requires: ["monster.weight"],
     apply(stats, level) {
       stats.ability.monster.pullRadius += 20 * level;
@@ -557,7 +557,7 @@ export const TECH_NODES: readonly TechNode[] = [
     name: "Undertow",
     description: "+12 px/s whirlpool pull per level",
     maxLevel: 4,
-    cost: { base: 60000, growth: 1.6 },
+    cost: { base: 78000, growth: 1.6 },
     requires: ["monster.value"],
     apply(stats, level) {
       stats.ability.monster.pullStrength += 12 * level;
@@ -568,7 +568,7 @@ export const TECH_NODES: readonly TechNode[] = [
   unlock("star", {
     name: "Star Fish",
     description: "Glowing Star fish start spawning, rarely. When caught, they shoot off and bounce around the screen",
-    rate: 0.025,
+    rate: 0.075,
     cost: 220000,
     requires: ["monster.unlock"],
   }),
@@ -578,7 +578,7 @@ export const TECH_NODES: readonly TechNode[] = [
     name: "Starfall",
     description: "Star fish spawn 50% more often per level",
     maxLevel: 5,
-    cost: { base: 72000, growth: 1.5 },
+    cost: { base: 93600, growth: 1.5 },
     requires: ["star.unlock"],
     apply(stats, level) {
       stats.fish.star.rateMult += 0.5 * level;
@@ -590,7 +590,7 @@ export const TECH_NODES: readonly TechNode[] = [
     name: "Sharp Points",
     description: "+1 Star damage per level",
     maxLevel: 4,
-    cost: { base: 84000, growth: 1.6 },
+    cost: { base: 109200, growth: 1.6 },
     requires: ["star.unlock"],
     apply(stats, level) {
       stats.ability.star.damage += level;
@@ -602,7 +602,7 @@ export const TECH_NODES: readonly TechNode[] = [
     name: "Ricochet",
     description: "+1 bounce before a Star fades, per level",
     maxLevel: 4,
-    cost: { base: 84000, growth: 1.6 },
+    cost: { base: 109200, growth: 1.6 },
     requires: ["star.damage"],
     apply(stats, level) {
       stats.ability.star.bounces += level;
@@ -614,7 +614,7 @@ export const TECH_NODES: readonly TechNode[] = [
     name: "Shooting Star",
     description: "+60 px/s Star speed per level",
     maxLevel: 4,
-    cost: { base: 72000, growth: 1.5 },
+    cost: { base: 93600, growth: 1.5 },
     requires: ["star.chance"],
     apply(stats, level) {
       stats.ability.star.speed += 60 * level;
@@ -626,7 +626,7 @@ export const TECH_NODES: readonly TechNode[] = [
     name: "Supernova",
     description: "+3 px Star hit radius per level",
     maxLevel: 4,
-    cost: { base: 72000, growth: 1.5 },
+    cost: { base: 93600, growth: 1.5 },
     requires: ["star.damage"],
     apply(stats, level) {
       stats.ability.star.radius += 3 * level;
@@ -638,7 +638,7 @@ export const TECH_NODES: readonly TechNode[] = [
     name: "Constellation",
     description: "+1 Star launched per Star caught, per level",
     maxLevel: 3,
-    cost: { base: 340000, growth: 2 },
+    cost: { base: 442000, growth: 2 },
     requires: ["star.bounces"],
     apply(stats, level) {
       stats.ability.star.count += level;

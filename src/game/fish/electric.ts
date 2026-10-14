@@ -36,7 +36,7 @@ export const electric: FishSpec = {
   def: {
     name: "Electric",
     hp: 4,
-    value: 8,
+    value: 26,
     speed: 30,
     size: 50,
     // Kept small: a wobble faster than the slow drift would swing the eel's heading in and out.

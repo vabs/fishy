@@ -55,7 +55,7 @@ export const monster: FishSpec = {
   def: {
     name: "Monster",
     hp: 60,
-    value: 80,
+    value: 380,
     speed: 15,
     size: 110,
     wobble: 4,

@@ -129,7 +129,7 @@ export const BASE_STATS: Stats = {
     rare: { armor: 0.5, pierce: false },
     electric: { jumps: 2, damage: 1, range: 120 },
     epic: { chance: 0.25, range: 90 },
-    goober: { tier: 0, count: 3 },
+    goober: { tier: 0, count: 2 },
     monster: { pullRadius: 140, pullStrength: 40 },
     star: { bounces: 3, damage: 2, speed: 500, radius: 14, count: 1 },
   },

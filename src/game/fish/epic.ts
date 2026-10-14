@@ -45,7 +45,7 @@ export const epic: FishSpec = {
   def: {
     name: "Epic",
     hp: 5,
-    value: 15,
+    value: 30,
     speed: 45,
     size: 36,
     wobble: 8,

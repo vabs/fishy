@@ -25,7 +25,7 @@ export const star: FishSpec = {
   def: {
     name: "Star",
     hp: 3,
-    value: 10,
+    value: 360,
     speed: 90,
     size: 24,
     wobble: 0,

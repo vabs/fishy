@@ -37,7 +37,7 @@ export const goober: FishSpec = {
   def: {
     name: "Goober",
     hp: 6,
-    value: 5,
+    value: 140,
     speed: 20,
     size: 34,
     // A big, slow bob. Heading follows velocity, so a faster bob would outrun the orbit speed and
