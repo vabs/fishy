@@ -194,7 +194,10 @@ function startRound(): void {
   setToolsOpen(false);
   showOnly("round");
   resize();
-  world = new World(stats, createRng(Date.now()), viewport.worldWidth, viewport.worldHeight);
+  world = new World(stats, createRng(Date.now()), viewport.worldWidth, viewport.worldHeight, {
+    round: playingRound,
+    final: finalRound,
+  });
   accumulator = 0;
   lastFrame = performance.now();
   roundHint.textContent = touchLayout.matches
@@ -214,11 +217,11 @@ function endRound(finished: World): void {
   summary.earned.textContent = formatMoney(finished.earned);
   summary.fish.textContent = finished.totalCaught.toLocaleString("en-US");
   summary.total.textContent = formatMoney(finished.earned);
-  const kinds = FISH_KINDS.filter((kind) => finished.caught[kind]).sort(
+  const kinds = FISH_KINDS.filter((kind) => finished.caughtBy[kind]).sort(
     (a, b) => (finished.earnedBy[b] ?? 0) - (finished.earnedBy[a] ?? 0),
   );
   const shares = wholeShares(kinds.map((kind) => finished.earnedBy[kind] ?? 0), finished.earned);
-  summary.rows.replaceChildren(...kinds.map((kind, i) => summaryRow(kind, finished.caught[kind] ?? 0, shares[i] ?? 0)));
+  summary.rows.replaceChildren(...kinds.map((kind, i) => summaryRow(kind, finished.caughtBy[kind] ?? 0, shares[i] ?? 0)));
   summary.table.hidden = kinds.length === 0;
   summary.empty.hidden = kinds.length > 0;
   showOnly("summary");

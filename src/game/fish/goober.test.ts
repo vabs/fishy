@@ -90,6 +90,21 @@ describe("Goober burst", () => {
     expect(spawned).toHaveLength(0);
   });
 
+  it("credits its burst fish to the Goober in the round summary", () => {
+    const { world, spawned } = pop((s) => {
+      s.ability.goober.tier = 1;
+      s.ability.goober.count = 2;
+    });
+    for (const fish of spawned) world.capture(fish, "net");
+    run(world, STEP);
+    const goober = world.defOf("goober").value;
+    const uncommon = world.defOf("uncommon").value;
+    expect(world.caught).toEqual({ goober: 1, uncommon: 2 });
+    expect(world.caughtBy).toEqual({ goober: 3 });
+    expect(world.earnedBy.goober).toBeCloseTo(goober + 2 * uncommon);
+    expect(world.earnedBy.uncommon).toBeUndefined();
+  });
+
   it("emits a burst fx event where it popped", () => {
     const { world, goober } = pop();
     const burst = world.drainEvents().find((e) => e.type === "fx" && e.kind === "goober");

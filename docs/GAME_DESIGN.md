@@ -108,6 +108,9 @@ Normal → Uncommon → Rare → Electric → Epic.
 
 A Goober never spawns a Goober, Monster or Star, so it can't loop forever.
 
+The round summary counts burst fish under Goober: their catches and money show in the Goober row,
+not in the row of their own type. Lifetime stats still count them as their own type.
+
 Upgrades: spawn tier, spawn count.
 
 ### Monster (Whirlpool)

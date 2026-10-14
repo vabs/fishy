@@ -31,7 +31,7 @@ export function gooberTier(tier: number): (typeof GOOBER_TIERS)[number] {
 /**
  * Spawner. Slow, bobs strongly in and out, and now and then eases to a stop and swims the other
  * way. When captured it bursts into `ability.goober.count` fish of its tier at its own position,
- * which is usually inside the net.
+ * which is usually inside the net. The round summary credits those fish to the Goober.
  */
 export const goober: FishSpec = {
   def: {
@@ -91,7 +91,7 @@ export const goober: FishSpec = {
     for (let i = 0; i < n; i++) {
       const a = start + (i * TAU) / n + range(world.rng, -0.2, 0.2);
       const r = spread * range(world.rng, 0.8, 1.1);
-      world.spawn(kind, { at: { x: fish.x + Math.cos(a) * r, y: fish.y + Math.sin(a) * r } });
+      world.spawn(kind, { at: { x: fish.x + Math.cos(a) * r, y: fish.y + Math.sin(a) * r }, credit: "goober" });
     }
     world.emit({ type: "fx", kind: "goober", name: "burst", x: fish.x, y: fish.y, radius: spread + goober.def.size / 2 });
   },

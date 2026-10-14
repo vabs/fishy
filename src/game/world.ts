@@ -47,6 +47,8 @@ export interface Fish {
   /** Seconds left on the hit flash. */
   hitFlash: number;
   captured: boolean;
+  /** The type this fish's catch is credited to in the round summary, when not its own (a Goober's burst fish). */
+  credit?: FishKind;
   /** Free per-fish state for the type's hooks (timers, flags). */
   state: Record<string, number>;
 }
@@ -89,6 +91,16 @@ export type WorldEvent =
 export interface SpawnOptions {
   /** Spawn at this screen position instead of a random spot. */
   at?: Point;
+  /** Credit this fish's catch to another type in the round summary. */
+  credit?: FishKind;
+}
+
+/** Facts about the round being played that aren't upgrades. */
+export interface RoundOptions {
+  /** The round's number, from 1. */
+  round: number;
+  /** True for the Final Round, played once the whole tree is bought. */
+  final: boolean;
 }
 
 /** One round of play. No DOM access: input writes `pointer`, the renderer reads the rest. */
@@ -100,8 +112,11 @@ export class World {
   elapsed = 0;
   /** Money earned this round. Banked when the round ends. */
   earned = 0;
+  /** Fish caught this round per type. */
   caught: Partial<Record<FishKind, number>> = {};
-  /** Money earned this round per fish type. */
+  /** Fish caught this round per summary row: like `caught`, but a Goober's burst fish count as Goober. */
+  caughtBy: Partial<Record<FishKind, number>> = {};
+  /** Money earned this round per summary row, credited like `caughtBy`. */
   earnedBy: Partial<Record<FishKind, number>> = {};
   /** Captures in the current combo after the first. */
   combo = 0;
@@ -122,6 +137,7 @@ export class World {
     readonly rng: Rng,
     private _width: number,
     private _height: number,
+    readonly round: RoundOptions = { round: 1, final: false },
   ) {
     this.timeLeft = stats.roundSeconds;
     for (let i = 0; i < stats.startFish; i++) this.spawn();
@@ -246,6 +262,7 @@ export class World {
       age: 0,
       hitFlash: 0,
       captured: false,
+      ...(options.credit ? { credit: options.credit } : {}),
       state: {},
     };
     this.place(fish);
@@ -383,7 +400,9 @@ export class World {
         FISH[fish.kind].value * this.stats.fish[fish.kind].valueMult * this.stats.valueMult * sourceMult * this.comboMult;
       this.earned += value;
       this.caught[fish.kind] = (this.caught[fish.kind] ?? 0) + 1;
-      this.earnedBy[fish.kind] = (this.earnedBy[fish.kind] ?? 0) + value;
+      const credit = fish.credit ?? fish.kind;
+      this.caughtBy[credit] = (this.caughtBy[credit] ?? 0) + 1;
+      this.earnedBy[credit] = (this.earnedBy[credit] ?? 0) + value;
       this.emit({ type: "capture", kind: fish.kind, source, x: fish.x, y: fish.y, value, combo: this.combo });
 
       FISH_SPECS[fish.kind].onCapture?.(this, fish, source);
