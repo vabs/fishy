@@ -138,8 +138,8 @@ export const BASE_STATS: Stats = {
   comboStep: 0.1,
   comboMax: 2,
 
-  frenzySeconds: 6,
-  frenzySpawnMult: 4,
+  frenzySeconds: 5,
+  frenzySpawnMult: 3,
   frenzyValueMult: 1.5,
   goldenRate: 0.06,
   goldenValueMult: 10,

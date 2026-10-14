@@ -60,10 +60,10 @@ nearly every fish anyway.
 
 Every fifth round (5, 10, 15, …) and the Final Round have a Feeding Frenzy wave.
 
-- It starts 35% of the way through the round's base length and lasts 6 s. Time bonuses don't move
+- It starts 35% of the way through the round's base length and lasts 5 s. Time bonuses don't move
   it.
 - A front sweeps once across the sea, from a random side to the other, over the length of the wave.
-  While it runs every unlocked type spawns 4× as fast, and every new fish pours in just behind the
+  While it runs every unlocked type spawns 3× as fast, and every new fish pours in just behind the
   front, swimming the way the wave goes.
 - Fish caught during the wave are worth 1.5×, on top of every other multiplier.
 - Upgrades: Rising Tide (Time) makes the wave longer; Frenzy Feast (Economy) raises the bonus.

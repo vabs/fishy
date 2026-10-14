@@ -222,11 +222,11 @@ describe("Feeding Frenzy", () => {
   const FRENZY_ROUND: RoundOptions = { round: 5, final: false };
   /**
    * A 20 s frenzy round with no fish, golden fish or chests unless asked: the wave runs from 7 s
-   * to 13 s.
+   * to 13 s and spawns fish four times as fast.
    */
   const frenzyWorld = (overrides: Partial<Stats> = {}, round = FRENZY_ROUND) =>
     makeWorld(
-      { startFish: 0, roundSeconds: 20, frenzySeconds: 6, goldenRate: 0, chestChance: 0, ...overrides },
+      { startFish: 0, roundSeconds: 20, frenzySeconds: 6, frenzySpawnMult: 4, goldenRate: 0, chestChance: 0, ...overrides },
       round,
     );
   /** Normal fish spawning at `rate` per second, and nothing else. */
