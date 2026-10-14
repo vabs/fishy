@@ -410,12 +410,13 @@ export const TECH_NODES: readonly TechNode[] = [
     id: "rare.armor",
     ...fishBranch("rare"),
     name: "Brittle Scales",
-    description: "−0.25 Rare armour per level",
+    description: "−25% Rare armour per level",
     maxLevel: 4,
     cost: { base: 600, growth: 2 },
     requires: ["rare.weight"],
     apply(stats, level) {
-      stats.ability.rare.armor = Math.max(0, stats.ability.rare.armor - 0.25 * level);
+      // Relative, so every level counts whatever the base armour is tuned to.
+      stats.ability.rare.armor *= Math.max(0, 1 - 0.25 * level);
     },
   },
 
