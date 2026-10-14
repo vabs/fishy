@@ -193,6 +193,30 @@ body.playing #game {
   margin-left: auto;
 }
 
+/* In the bar the export/import message hangs below the buttons instead of taking a row, so the
+   buttons line up with Start Round. */
+.hub-save .save-controls {
+  position: relative;
+}
+
+.hub-save .save-controls .save-controls-message {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-height: 0;
+  white-space: nowrap;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+
+/* Every button in the bar is the same height. */
+.hub-bar .primary-button,
+.hub-save .save-controls .save-controls-button {
+  display: inline-flex;
+  align-items: center;
+  height: 42px;
+  padding-block: 0;
+}
+
 .hub-tree {
   flex: 1;
   min-height: 0;
