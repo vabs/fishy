@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fishy: tech tree (dev)</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐟</text></svg>"
+    />
+    <style>
+      body {
+        display: flex;
+        flex-direction: column;
+      }
+
+      #bar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 16px;
+        background: var(--panel);
+        border-bottom: 1px solid var(--panel-edge);
+        font-size: 14px;
+      }
+
+      #money {
+        min-width: 140px;
+        font-size: 20px;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+      }
+
+      #status {
+        margin-left: auto;
+        color: var(--ink-muted);
+      }
+
+      #bar button {
+        padding: 6px 12px;
+        border: 1px solid var(--panel-edge);
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.06);
+        color: var(--ink);
+        font: inherit;
+        cursor: pointer;
+      }
+
+      #tree {
+        flex: 1;
+        min-height: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="bar">
+      <span id="money"></span>
+      <button type="button" data-add="10">+$10</button>
+      <button type="button" data-add="1000">+$1,000</button>
+      <button type="button" data-add="100000">+$100k</button>
+      <button type="button" id="cheapest">Buy cheapest</button>
+      <button type="button" id="max">Max all</button>
+      <button type="button" id="reset">Reset</button>
+      <span id="status"></span>
+    </div>
+    <div id="tree"></div>
+    <script type="module" src="./tech-tree.ts"></script>
+  </body>
+</html>
