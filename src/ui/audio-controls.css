@@ -1,0 +1,119 @@
+/* Sound controls: a mute button in the round's HUD, and mute plus a volume panel in the hub bar.
+   Quiet like the export/import buttons, so Start Round stays the obvious next step. */
+
+.audio-controls {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.audio-controls .audio-button {
+  display: inline-grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border: 1px solid var(--panel-edge);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--ink-muted);
+  cursor: pointer;
+}
+
+.audio-controls .audio-button svg {
+  width: 22px;
+  height: 22px;
+}
+
+.audio-controls .audio-button:hover,
+.audio-controls .audio-button[aria-expanded="true"] {
+  border-color: rgba(255, 255, 255, 0.3);
+  color: var(--ink);
+}
+
+.audio-controls .audio-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* In a round: a small round button floating at the top centre, clear of the timer and money. */
+.hud-audio {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: auto;
+}
+
+.audio-controls.is-hud .audio-button {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(6, 30, 45, 0.55);
+  opacity: 0.75;
+}
+
+.audio-controls.is-hud .audio-button:hover,
+.audio-controls.is-hud .audio-button:focus-visible,
+.audio-controls.is-hud.is-muted .audio-button {
+  opacity: 1;
+}
+
+.audio-controls.is-hud .audio-button svg {
+  width: 20px;
+  height: 20px;
+}
+
+.audio-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 20;
+  display: grid;
+  gap: 12px;
+  width: 260px;
+  padding: 16px 18px 14px;
+  border: 1px solid var(--panel-edge);
+  border-radius: 12px;
+  /* Opaque, as it opens over the tech tree. */
+  background: linear-gradient(var(--panel), var(--panel)), var(--page);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.4);
+}
+
+.audio-panel[hidden] {
+  display: none;
+}
+
+.audio-slider {
+  display: grid;
+  grid-template-columns: 4.2em 1fr 3.2em;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink-muted);
+  font-size: 14px;
+}
+
+.audio-slider input {
+  width: 100%;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.audio-slider input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.audio-slider output {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.audio-panel .audio-panel-note {
+  margin: 2px 0 0;
+  color: var(--ink-muted);
+  font-size: 12px;
+}

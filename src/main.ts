@@ -1,4 +1,5 @@
 import "./style.css";
+import { createGameAudio } from "./audio";
 import { formatDuration, formatMoney, wholeShares } from "./format";
 import { FISH, FISH_KINDS, type FishKind } from "./game/fish";
 import { Renderer } from "./game/render";
@@ -8,6 +9,7 @@ import { BASE_STATS, type Stats } from "./game/stats";
 import { TECH_NODES, applyUpgrades, buy, canBuy, isTreeComplete, refundRemovedLevels } from "./game/tech";
 import { STEP, World, type Point } from "./game/world";
 import { createSave, loadSave, recordRound, resetProgress, sanitizeUpgrades, writeSave, type SaveData } from "./save";
+import { mountAudioControls } from "./ui/audio-controls";
 import { promptForName } from "./ui/name-prompt";
 import { mountSaveControls } from "./ui/save-controls";
 import { mountTechTree } from "./ui/tech-tree";
@@ -64,6 +66,9 @@ const toast = element("#toast");
 const roundHint = element("#round-hint");
 
 const renderer = new Renderer(canvas);
+const audio = createGameAudio();
+mountAudioControls(element("#hud-audio"), audio, "hud");
+mountAudioControls(element("#hub-audio"), audio, "hub");
 let save: SaveData;
 let world: World | null = null;
 /** Stats of the round being played, or the base stats between rounds. */
@@ -135,6 +140,7 @@ function showOnly(screen: "hub" | "round" | "summary" | "end"): void {
   summary.root.hidden = screen !== "summary";
   end.root.hidden = screen !== "end";
   document.body.classList.toggle("playing", screen === "round");
+  audio.screen(screen, { final: finalRound, upgrades: save.upgrades });
 }
 
 function showHub(): void {
@@ -289,7 +295,11 @@ function frame(now: number): void {
       }
     }
   }
-  if (world) for (const event of world.drainEvents()) renderer.onEvent(event);
+  if (world) {
+    const events = world.drainEvents();
+    for (const event of events) renderer.onEvent(event);
+    audio.frame(events, world);
+  }
 
   renderer.draw({ world, pointer, stats }, dt);
   updateHud();
@@ -315,6 +325,7 @@ const tree = mountTechTree(hub.tree, {
     const result = buy(save.upgrades, save.money, nodeId);
     if (!result) return;
     setSave({ ...save, ...result });
+    audio.purchase(nodeId, save.upgrades);
     renderHub();
   },
 });

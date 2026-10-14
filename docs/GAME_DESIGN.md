@@ -246,12 +246,32 @@ Stored in the browser's localStorage under `fishy.save`:
 Name prompt (first visit only) → hub (tech tree, money, Start Round, export/import) → round →
 round summary → hub → … → Final Round → end screen.
 
+## Sound
+
+Cozy ocean lo-fi that sits behind the game. Everything is in D major pentatonic at 92 BPM, so
+every note fits.
+
+- **Music** is one continuous bed. The hub hears it under water (low-passed, quieter); a round
+  opens it up on the next downbeat and adds a groove; a combo layer follows the combo multiplier;
+  a short stinger ends each round. Three chapters (start, Electric fish, the Monster) change the
+  bed in the hub so it doesn't wear thin over a whole game. The beds are CC0 loop files once
+  chosen, and generated in code until then.
+- **Sound effects** are generated in code and in key: catches climb the scale with the combo, and
+  each ability (current, star, whirlpool, goober), time bonus and purchase has its own sound.
+  Late rounds capture hundreds of fish a second, so effects are rate-limited and batched.
+- **Controls**: M or a speaker button mutes; music and effects volumes are set in the hub. Sound
+  settings are stored apart from the save.
+
+How it is built and how to add the loop files: README, "Music and sound".
+
 ## Architecture
 
 - Static site: Vite + TypeScript, Canvas 2D, no framework or game engine. No server.
 - The simulation (`src/game/world.ts`) has no DOM access. It uses a seeded random number generator
   and a fixed 60 Hz step, so rounds can be replayed exactly in tests.
 - Rendering (`src/game/render.ts`) reads the world and draws it; it never changes game state.
+- Audio (`src/audio/`) works like rendering: it hears the world's events and the screen changes,
+  and never changes game state. The simulation knows nothing about sound.
 - Tests use vitest.
 
 ## Milestones
