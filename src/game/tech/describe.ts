@@ -54,7 +54,7 @@ const STAT_FORMATS: Record<string, [string, Format]> = {
   "ability.star.damage": ["Star damage", num(1)],
   "ability.star.speed": ["Star speed", unit("px/s")],
   "ability.star.radius": ["Star hit radius", unit("px")],
-  "ability.star.count": ["Stars per catch", num()],
+  "ability.star.count": ["Star shots per catch", num()],
   ...Object.fromEntries(
     FISH_KINDS.flatMap((kind) => [
       [`fish.${kind}.rate`, [`${FISH[kind].name} fish per second`, num(3)]],

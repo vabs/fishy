@@ -637,7 +637,7 @@ export const TECH_NODES: readonly TechNode[] = [
     id: "star.count",
     ...fishBranch("star"),
     name: "Constellation",
-    description: "+1 Star launched per Star caught, per level",
+    description: "+1 shard launched per Star caught, per level: a smaller Star that fades after half as many bounces",
     maxLevel: 3,
     cost: { base: 500000, growth: 1.5 },
     requires: ["star.bounces"],
