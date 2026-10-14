@@ -41,3 +41,11 @@ src/game/
 
 In dev, `?fish=electric,epic` makes only those types spawn, e.g.
 http://localhost:5173/?fish=electric,epic
+
+## Deploy
+
+Every push to `main` runs the tests, builds, and deploys `dist/` to GitHub Pages
+(`.github/workflows/deploy.yml`). The repo's Pages source must be set to "GitHub Actions".
+
+Saves live in the browser's localStorage, which is tied to the site's exact origin. Changing the
+domain later means players have to export and re-import their saves.
