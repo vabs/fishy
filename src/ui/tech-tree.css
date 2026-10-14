@@ -83,7 +83,12 @@
   opacity: 0.75;
 }
 
-/* Boat in the centre, under the root node. Same colours as the boat in a round. */
+/* Boat in the centre, under the root node. Same colours as the boat in a round, faded so it stays
+   in the background behind the nodes. */
+.tech-boat {
+  opacity: 0.35;
+}
+
 .tech-boat-hull {
   fill: #8a5a32;
   stroke: #5b3a1f;
