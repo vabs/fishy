@@ -91,8 +91,7 @@ export const goober: FishSpec = {
     for (let i = 0; i < n; i++) {
       const a = start + (i * TAU) / n + range(world.rng, -0.2, 0.2);
       const r = spread * range(world.rng, 0.8, 1.1);
-      // Burst fish don't count against maxFish: the burst is the Goober's reward.
-      world.spawn(kind, { at: { x: fish.x + Math.cos(a) * r, y: fish.y + Math.sin(a) * r }, ignoreCap: true });
+      world.spawn(kind, { at: { x: fish.x + Math.cos(a) * r, y: fish.y + Math.sin(a) * r } });
     }
     world.emit({ type: "fx", kind: "goober", name: "burst", x: fish.x, y: fish.y, radius: spread + goober.def.size / 2 });
   },

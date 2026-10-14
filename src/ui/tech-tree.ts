@@ -98,7 +98,6 @@ const ICONS: Record<string, string> = {
   "spawn.rate": '<path d="M-11 6 q2.75 -3.5 5.5 0 t5.5 0 t5.5 0 t5.5 0"/><path d="M0 -10.5 c-3.2 4.2 -3.2 7.5 0 7.5 s3.2 -3.3 0 -7.5z"/>',
   "spawn.rate2":
     '<path d="M-11 7 q2.75 -3.5 5.5 0 t5.5 0 t5.5 0 t5.5 0"/><path d="M-4.5 -10.5 c-3 4 -3 7 0 7 s3 -3 0 -7z M5 -7.5 c-2.6 3.4 -2.6 6 0 6 s2.6 -2.6 0 -6z"/>',
-  "spawn.max": '<circle cx="-5.2" cy="4" r="4"/><circle cx="5.2" cy="4" r="4"/><circle cx="0" cy="-5" r="4"/>',
   "spawn.start": '<path d="M-6 11 V-10.5 M-6 -9.5 H7.5 L4.5 -5 L7.5 -0.5 H-6"/>',
   "spawn.twin": `<path d="${fishPath(-1.5, -4.5, 1)}"/><path d="${fishPath(-1.5, 5, 1)}"/>`,
   "econ.value": COIN,

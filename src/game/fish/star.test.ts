@@ -12,8 +12,8 @@ function makeWorld(tune?: (stats: Stats) => void, seed = 42): World {
   const stats = cloneStats(BASE_STATS);
   stats.roundSeconds = 999;
   stats.startFish = 0;
-  stats.spawnSeconds = Infinity;
-  for (const kind of FISH_KINDS) stats.fish[kind].weight = 0;
+  stats.spawnRateMult = 0;
+  for (const kind of FISH_KINDS) stats.fish[kind].rate = 0;
   tune?.(stats);
   return new World(stats, createRng(seed), W, H);
 }
@@ -32,7 +32,7 @@ function run(world: World, seconds: number, afterStep?: (events: WorldEvent[]) =
 }
 
 function spawnAt(world: World, kind: Fish["kind"], x: number, y: number): Fish {
-  const fish = world.spawn(kind, { at: { x, y }, ignoreCap: true });
+  const fish = world.spawn(kind, { at: { x, y } });
   if (!fish) throw new Error(`could not spawn ${kind}`);
   expect(fish.x).toBeCloseTo(x);
   expect(fish.y).toBeCloseTo(y);
@@ -71,9 +71,8 @@ const fxNamed = (events: WorldEvent[], name: string) =>
 describe("Star fish", () => {
   it("zig-zags in and out of its orbit and stays on screen", () => {
     const world = makeWorld((s) => {
-      s.fish.star.weight = 1;
+      s.fish.star.rate = 1;
       s.startFish = 30;
-      s.maxFish = 30;
     });
     const stars = [...world.fish];
     const orbits = new Map(stars.map((f) => [f.id, [f.orbit, f.orbit]]));
@@ -206,10 +205,10 @@ describe("Star shots", () => {
   it("plays out the same for the same seed", () => {
     const play = () => {
       const world = makeWorld((s) => {
-        s.fish.normal.weight = 3;
-        s.fish.star.weight = 1;
+        s.fish.normal.rate = 1.875;
+        s.fish.star.rate = 0.625;
         s.startFish = 25;
-        s.spawnSeconds = 0.4;
+        s.spawnRateMult = 1;
         s.ability.star.count = 2;
         s.netRadius = 120;
       }, 9);

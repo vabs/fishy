@@ -73,13 +73,17 @@ let lastFrame = performance.now();
 let toastTimer = 0;
 let saveFailureShown = false;
 
-/** Dev only: `?fish=electric,epic` makes only those types spawn, to try a type out. */
+/**
+ * Dev only: `?fish=electric,epic` makes only those types spawn, sharing Normal's base spawn rate,
+ * to try a type out.
+ */
 function applyDevOverrides(stats: Stats): Stats {
   if (!import.meta.env.DEV) return stats;
   const only = new URLSearchParams(location.search).get("fish");
   if (only) {
     const kinds = only.split(",").filter((k): k is FishKind => k in stats.fish);
-    for (const kind of FISH_KINDS) stats.fish[kind].weight = kinds.includes(kind) ? 1 : 0;
+    const each = BASE_STATS.fish.normal.rate / Math.max(kinds.length, 1);
+    for (const kind of FISH_KINDS) stats.fish[kind].rate = kinds.includes(kind) ? each : 0;
   }
   return stats;
 }

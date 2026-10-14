@@ -1,6 +1,6 @@
 import { FISH, FISH_KINDS, FISH_SPECS, type FishDef, type FishKind } from "./fish";
 import { pickWeighted, range, type Rng } from "./rng";
-import type { Stats } from "./stats";
+import { spawnRate, type Stats } from "./stats";
 
 const TAU = Math.PI * 2;
 
@@ -89,8 +89,6 @@ export type WorldEvent =
 export interface SpawnOptions {
   /** Spawn at this screen position instead of a random spot. */
   at?: Point;
-  /** Spawn even when the water is at maxFish. maxOnScreen limits still apply. */
-  ignoreCap?: boolean;
 }
 
 /** One round of play. No DOM access: input writes `pointer`, the renderer reads the rest. */
@@ -110,7 +108,8 @@ export class World {
   private events: WorldEvent[] = [];
   private captureQueue: { fish: Fish; source: CaptureSource }[] = [];
   private tickTimer = 0;
-  private spawnTimer = 0;
+  /** Per type: progress towards its next spawn, in spawns. */
+  private spawnTimers = new Map<FishKind, number>();
   private lastCaptureAt = -Infinity;
   /** Seconds time bonuses have added this round. Capped at roundSeconds so chains can't stretch a round forever. */
   private bonusTime = 0;
@@ -192,9 +191,11 @@ export class World {
       .sort((a, b) => Math.hypot(a.x - point.x, a.y - point.y) - Math.hypot(b.x - point.x, b.y - point.y));
   }
 
-  /** Adds a fish of `kind`, or of a type picked by spawn weight. Undefined if nothing could spawn. */
+  /**
+   * Adds a fish of `kind`, or of a type picked in proportion to spawn rates. There's no limit on fish
+   * in the water, only a type's own maxOnScreen. Undefined if nothing could spawn.
+   */
   spawn(kind?: FishKind, options: SpawnOptions = {}): Fish | undefined {
-    if (!options.ignoreCap && this.fish.length >= this.stats.maxFish) return undefined;
     const k = kind ?? this.pickKind();
     if (!k) return undefined;
     const def = FISH[k];
@@ -271,7 +272,8 @@ export class World {
     for (const kind of FISH_KINDS) {
       const max = FISH[kind].maxOnScreen;
       if (max !== undefined && this.countOf(kind) >= max) continue;
-      weights[kind] = this.stats.fish[kind].weight;
+      // Proportions only: the global spawn multiplier is the same for every type.
+      weights[kind] = this.stats.fish[kind].rate * this.stats.fish[kind].rateMult;
     }
     return pickWeighted(this.rng, weights);
   }
@@ -318,12 +320,18 @@ export class World {
     }
   }
 
+  /** Every type spawns on its own clock, so unlocking or boosting one never slows another. */
   private spawnFish(dt: number): void {
-    const every = Math.max(this.stats.spawnSeconds, STEP);
-    this.spawnTimer += dt;
-    while (this.spawnTimer >= every) {
-      this.spawnTimer -= every;
-      this.spawn();
+    for (const kind of FISH_KINDS) {
+      const rate = spawnRate(this.stats, kind);
+      if (rate <= 0) continue;
+      // Each type starts part-way to its first spawn, so types don't all arrive in step.
+      let progress = (this.spawnTimers.get(kind) ?? this.rng()) + rate * dt;
+      while (progress >= 1) {
+        progress -= 1;
+        this.spawn(kind);
+      }
+      this.spawnTimers.set(kind, progress);
     }
   }
 

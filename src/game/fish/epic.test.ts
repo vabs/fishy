@@ -8,8 +8,8 @@ import { FISH_KINDS, type FishKind } from "./index";
 /** Stats where nothing spawns on its own, with a round long enough for any test. */
 function quietStats(overrides: Partial<Stats> = {}, ability: Partial<Stats["ability"]["epic"]> = {}): Stats {
   const stats = cloneStats(BASE_STATS);
-  for (const kind of FISH_KINDS) stats.fish[kind].weight = 0;
-  Object.assign(stats, { spawnSeconds: Infinity, startFish: 0, roundSeconds: 10_000 }, overrides);
+  for (const kind of FISH_KINDS) stats.fish[kind].rate = 0;
+  Object.assign(stats, { spawnRateMult: 0, startFish: 0, roundSeconds: 10_000 }, overrides);
   Object.assign(stats.ability.epic, ability);
   return stats;
 }

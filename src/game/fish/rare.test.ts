@@ -8,10 +8,10 @@ const SOURCES: CaptureSource[] = ["net", "electric", "epic", "star", "whirlpool"
 
 function makeWorld(tweak?: (stats: Stats) => void): World {
   const stats = cloneStats(BASE_STATS);
-  stats.spawnSeconds = Infinity;
+  stats.spawnRateMult = 0;
   stats.startFish = 0;
-  stats.fish.normal.weight = 0;
-  stats.fish.rare.weight = 1;
+  stats.fish.normal.rate = 0;
+  stats.fish.rare.rate = 1;
   tweak?.(stats);
   return new World(stats, createRng(42), 800, 600);
 }

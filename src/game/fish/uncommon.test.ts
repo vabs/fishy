@@ -6,10 +6,10 @@ import { STEP, World } from "../world";
 function makeWorld(seed = 42, tweak?: (stats: Stats) => void, width = 800, height = 600): World {
   const stats = cloneStats(BASE_STATS);
   // No timed or starting spawns unless a test asks, so fish counts stay predictable.
-  stats.spawnSeconds = Infinity;
+  stats.spawnRateMult = 0;
   stats.startFish = 0;
-  stats.fish.normal.weight = 0;
-  stats.fish.uncommon.weight = 1;
+  stats.fish.normal.rate = 0;
+  stats.fish.uncommon.rate = 1;
   tweak?.(stats);
   return new World(stats, createRng(seed), width, height);
 }
@@ -125,14 +125,15 @@ describe("Uncommon schools", () => {
     });
   });
 
-  it("respects maxFish: a school stops growing when the water is full", () => {
+  it("forms the full school however many fish are already in the water", () => {
     const world = makeWorld(1, (s) => {
-      s.maxFish = 2;
+      s.startFish = 60;
       s.ability.uncommon.schoolMin = 5;
       s.ability.uncommon.schoolMax = 5;
     });
+    const before = world.fish.length;
     world.spawn();
-    expect(world.fish).toHaveLength(2);
+    expect(world.fish.length - before).toBe(5);
   });
 
   it("does not start a school from a twin", () => {
@@ -154,7 +155,8 @@ describe("Uncommon schools", () => {
 
   it("still schools natural spawns in the steps after a capture", () => {
     const world = makeWorld(6, (s) => {
-      s.spawnSeconds = 0.1;
+      s.fish.uncommon.rate = 10;
+      s.spawnRateMult = 1;
       s.ability.uncommon.schoolMin = 3;
       s.ability.uncommon.schoolMax = 3;
     });

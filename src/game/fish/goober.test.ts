@@ -7,10 +7,10 @@ import type { FishKind } from "./types";
 
 function makeWorld(tweak?: (stats: Stats) => void, seed = 42): World {
   const stats = cloneStats(BASE_STATS);
-  stats.spawnSeconds = Infinity;
+  stats.spawnRateMult = 0;
   stats.startFish = 0;
-  stats.fish.normal.weight = 0;
-  stats.fish.goober.weight = 1;
+  stats.fish.normal.rate = 0;
+  stats.fish.goober.rate = 1;
   tweak?.(stats);
   return new World(stats, createRng(seed), 800, 600);
 }
@@ -81,15 +81,6 @@ describe("Goober burst", () => {
     const banned: FishKind[] = ["goober", "monster", "star"];
     for (let tier = -5; tier <= 20; tier++) expect(banned).not.toContain(gooberTier(tier));
     for (const kind of GOOBER_TIERS) expect(banned).not.toContain(kind);
-  });
-
-  it("ignores maxFish", () => {
-    const { world, spawned } = pop((s) => {
-      s.maxFish = 1;
-      s.ability.goober.count = 6;
-    });
-    expect(spawned).toHaveLength(6);
-    expect(world.fish.length).toBeGreaterThan(world.stats.maxFish);
   });
 
   it("spawns nothing for a count of 0", () => {

@@ -31,6 +31,13 @@ per frame, so chain reactions never recurse and the number of effects per frame 
 A fish captured by any source behaves exactly like a fish captured by the net: it pays its value and
 its on-capture effect fires.
 
+## Spawning
+
+- Every unlocked fish type spawns on its own clock at its own rate (fish per second). Unlocking or
+  upgrading one type adds fish; it never makes another type rarer.
+- There is no limit on fish in the water: fish keep arriving whether or not the player catches any.
+  The only per-type limit is the Monster, at most one at a time.
+
 ## Movement
 
 - Fish orbit the boat. The orbit is an ellipse fitted to the screen, so wide screens are used fully.
@@ -168,14 +175,13 @@ so drawing thousands of fish stays cheap.
 - Combo window and combo cap
 
 **Spawning**
-- Spawn rate
-- Maximum fish on screen
+- Spawn speed of every fish type
 - Fish already in the water when the round starts
 - Chance to spawn the same fish when a fish is captured
 
 **Per fish type** (Normal, Uncommon, Rare, Electric, Epic, Goober, Monster)
 - Unlock (all except Normal)
-- Spawn weight: how often this type spawns compared with the others
+- Spawn rate: this type spawns more often (never at the expense of another type)
 - Value
 - Type-specific upgrades:
   - Uncommon: school size

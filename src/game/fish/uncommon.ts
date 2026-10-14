@@ -32,8 +32,6 @@ const anchors = new WeakMap<World, Map<number, Fish>>();
  * Rules:
  * - Only natural spawns (timed spawns and the starting fish) form schools. Members, twins and
  *   Goober burst fish swim alone.
- * - Members respect `maxFish`: if the water fills up mid-school, the school is just smaller.
- *   Otherwise a high Uncommon weight would let schools blow straight through the cap.
  * - If the leader is caught, the next member in line becomes the anchor and the rest keep formation.
  */
 export const uncommon: FishSpec = {
@@ -130,7 +128,7 @@ function formSchool(world: World, leader: Fish): void {
         y: area.cy + Math.sin(slot.angle) * slot.orbit * area.ry,
       };
       const member = world.spawn("uncommon", { at });
-      // The water is full: the school stays as big as it got.
+      // Only a type's maxOnScreen can refuse a spawn; Uncommon has none, but stay safe.
       if (!member) break;
 
       member.dir = leader.dir;

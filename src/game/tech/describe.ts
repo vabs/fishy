@@ -29,8 +29,7 @@ const STAT_FORMATS: Record<string, [string, Format]> = {
   netDamage: ["Net damage", num(1)],
   critChance: ["Critical hit chance", percent],
   critMult: ["Critical hit damage", times],
-  spawnSeconds: ["Time between spawns", unit("s", 2)],
-  maxFish: ["Most fish at once", num()],
+  spawnRateMult: ["Spawn speed of every fish", times],
   startFish: ["Fish at round start", num()],
   twinChance: ["Twin chance", percent],
   valueMult: ["Value of every fish", times],
@@ -57,7 +56,8 @@ const STAT_FORMATS: Record<string, [string, Format]> = {
   "ability.star.count": ["Stars per catch", num()],
   ...Object.fromEntries(
     FISH_KINDS.flatMap((kind) => [
-      [`fish.${kind}.weight`, [`${FISH[kind].name} spawn weight`, num(3)]],
+      [`fish.${kind}.rate`, [`${FISH[kind].name} fish per second`, num(3)]],
+      [`fish.${kind}.rateMult`, [`${FISH[kind].name} spawn speed`, times]],
       [`fish.${kind}.valueMult`, [`${FISH[kind].name} value`, times]],
     ]),
   ),

@@ -8,8 +8,8 @@ import { FISH_KINDS, type FishKind } from "./index";
 /** Stats where only `kinds` spawn, with no timed spawns and a round long enough for any test. */
 function statsFor(kinds: FishKind[], ability: Partial<Stats["ability"]["electric"]> = {}): Stats {
   const stats = cloneStats(BASE_STATS);
-  for (const kind of FISH_KINDS) stats.fish[kind].weight = kinds.includes(kind) ? 1 : 0;
-  stats.spawnSeconds = Infinity;
+  for (const kind of FISH_KINDS) stats.fish[kind].rate = kinds.includes(kind) ? 1 : 0;
+  stats.spawnRateMult = 0;
   stats.startFish = 0;
   stats.roundSeconds = 10_000;
   Object.assign(stats.ability.electric, ability);

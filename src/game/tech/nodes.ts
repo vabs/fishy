@@ -23,8 +23,8 @@ function fishBranch(kind: FishKind): Pick<TechNode, "branch" | "fish"> {
   return { branch: kind === "star" ? "star" : "fish", fish: kind };
 }
 
-/** Starts a fish type spawning: its weight goes from 0 to `weight` (Normal fish have weight 1). */
-function unlock(kind: FishKind, opts: { name: string; description: string; weight: number; cost: number; requires: string[] }): TechNode {
+/** Starts a fish type spawning at `rate` fish per second (Normal fish start at 1.25). */
+function unlock(kind: FishKind, opts: { name: string; description: string; rate: number; cost: number; requires: string[] }): TechNode {
   return {
     id: `${kind}.unlock`,
     ...fishBranch(kind),
@@ -34,12 +34,16 @@ function unlock(kind: FishKind, opts: { name: string; description: string; weigh
     cost: { base: opts.cost, growth: 1 },
     requires: opts.requires,
     apply(stats) {
-      stats.fish[kind].weight += opts.weight;
+      stats.fish[kind].rate += opts.rate;
     },
   };
 }
 
-function spawnWeight(
+/**
+ * Makes one fish type spawn more often, without touching any other type. The id keeps its old
+ * "weight" name because ids are stored in save files.
+ */
+function spawnMore(
   kind: FishKind,
   opts: { name: string; per: number; maxLevel: number; cost: TechNode["cost"]; requires: string[] },
 ): TechNode {
@@ -47,12 +51,12 @@ function spawnWeight(
     id: `${kind}.weight`,
     ...fishBranch(kind),
     name: opts.name,
-    description: `${FISH_NAMES[kind]} fish spawn more often: +${opts.per} spawn weight per level (Normal fish start at 1)`,
+    description: `${FISH_NAMES[kind]} fish spawn ${Math.round(opts.per * 100)}% more often per level`,
     maxLevel: opts.maxLevel,
     cost: opts.cost,
     requires: opts.requires,
     apply(stats, level) {
-      stats.fish[kind].weight += opts.per * level;
+      stats.fish[kind].rateMult += opts.per * level;
     },
   };
 }
@@ -217,24 +221,12 @@ export const TECH_NODES: readonly TechNode[] = [
     id: "spawn.rate",
     branch: "spawning",
     name: "Chum the Water",
-    description: "Fish spawn 10% faster per level",
+    description: "Every fish type spawns 10% faster per level",
     maxLevel: 10,
     cost: { base: 15, growth: 1.55 },
     requires: ["econ.value"],
     apply(stats, level) {
-      stats.spawnSeconds *= 0.9 ** level;
-    },
-  },
-  {
-    id: "spawn.max",
-    branch: "spawning",
-    name: "Crowded Waters",
-    description: "+5 fish allowed in the water at once, per level",
-    maxLevel: 10,
-    cost: { base: 40, growth: 1.6 },
-    requires: ["spawn.rate"],
-    apply(stats, level) {
-      stats.maxFish += 5 * level;
+      stats.spawnRateMult *= 1.1 ** level;
     },
   },
   {
@@ -265,12 +257,12 @@ export const TECH_NODES: readonly TechNode[] = [
     id: "spawn.rate2",
     branch: "spawning",
     name: "Feeding Frenzy",
-    description: "Fish spawn 8% faster per level",
+    description: "Every fish type spawns 8% faster per level",
     maxLevel: 5,
     cost: { base: 2700, growth: 2 },
-    requires: ["spawn.max"],
+    requires: ["spawn.start"],
     apply(stats, level) {
-      stats.spawnSeconds *= 0.92 ** level;
+      stats.spawnRateMult *= 1.08 ** level;
     },
   },
 
@@ -350,13 +342,13 @@ export const TECH_NODES: readonly TechNode[] = [
   {
     id: "normal.weight",
     ...fishBranch("normal"),
-    name: "Fewer Minnows",
-    description: "Normal fish spawn less often, leaving room for other types: −0.1 Normal spawn weight per level",
+    name: "More Minnows",
+    description: "Normal fish spawn 20% more often per level",
     maxLevel: 5,
     cost: { base: 150, growth: 1.8 },
     requires: ["normal.value", "uncommon.unlock"],
     apply(stats, level) {
-      stats.fish.normal.weight -= 0.1 * level;
+      stats.fish.normal.rateMult += 0.2 * level;
     },
   },
 
@@ -364,11 +356,11 @@ export const TECH_NODES: readonly TechNode[] = [
   unlock("uncommon", {
     name: "Uncommon Fish",
     description: "Uncommon fish start spawning, in schools of 3–5",
-    weight: 0.3,
+    rate: 0.375,
     cost: 60,
     requires: ["normal.value"],
   }),
-  spawnWeight("uncommon", { name: "Uncommon Shoals", per: 0.1, maxLevel: 5, cost: { base: 80, growth: 1.6 }, requires: ["uncommon.unlock"] }),
+  spawnMore("uncommon", { name: "Uncommon Shoals", per: 0.3, maxLevel: 5, cost: { base: 80, growth: 1.6 }, requires: ["uncommon.unlock"] }),
   fishValue("uncommon", { name: "Bright Fins", per: 0.25, maxLevel: 6, cost: { base: 70, growth: 1.6 }, requires: ["uncommon.unlock"] }),
   {
     id: "uncommon.school",
@@ -388,11 +380,11 @@ export const TECH_NODES: readonly TechNode[] = [
   unlock("rare", {
     name: "Rare Fish",
     description: "Rare fish start spawning: slow, armoured and valuable",
-    weight: 0.2,
+    rate: 0.25,
     cost: 250,
     requires: ["uncommon.unlock"],
   }),
-  spawnWeight("rare", { name: "Rare Sightings", per: 0.08, maxLevel: 5, cost: { base: 250, growth: 1.6 }, requires: ["rare.unlock"] }),
+  spawnMore("rare", { name: "Rare Sightings", per: 0.3, maxLevel: 5, cost: { base: 250, growth: 1.6 }, requires: ["rare.unlock"] }),
   fishValue("rare", { name: "Trophy Fish", per: 0.25, maxLevel: 6, cost: { base: 300, growth: 1.6 }, requires: ["rare.unlock"] }),
   {
     id: "rare.pierce",
@@ -424,11 +416,11 @@ export const TECH_NODES: readonly TechNode[] = [
   unlock("electric", {
     name: "Electric Fish",
     description: "Electric fish start spawning. When caught, a current jumps between nearby fish",
-    weight: 0.15,
+    rate: 0.19,
     cost: 1400,
     requires: ["rare.unlock"],
   }),
-  spawnWeight("electric", { name: "Storm Season", per: 0.06, maxLevel: 5, cost: { base: 800, growth: 1.6 }, requires: ["electric.unlock"] }),
+  spawnMore("electric", { name: "Storm Season", per: 0.3, maxLevel: 5, cost: { base: 800, growth: 1.6 }, requires: ["electric.unlock"] }),
   fishValue("electric", { name: "Live Wires", per: 0.25, maxLevel: 6, cost: { base: 900, growth: 1.6 }, requires: ["electric.unlock"] }),
   {
     id: "electric.jumps",
@@ -471,11 +463,11 @@ export const TECH_NODES: readonly TechNode[] = [
   unlock("epic", {
     name: "Epic Fish",
     description: "Epic fish start spawning. When caught, they may net the fish around them",
-    weight: 0.1,
+    rate: 0.125,
     cost: 3600,
     requires: ["electric.unlock"],
   }),
-  spawnWeight("epic", { name: "Deep Lures", per: 0.05, maxLevel: 5, cost: { base: 1800, growth: 1.6 }, requires: ["epic.unlock"] }),
+  spawnMore("epic", { name: "Deep Lures", per: 0.3, maxLevel: 5, cost: { base: 1800, growth: 1.6 }, requires: ["epic.unlock"] }),
   fishValue("epic", { name: "Glowing Lure", per: 0.25, maxLevel: 6, cost: { base: 2000, growth: 1.6 }, requires: ["epic.unlock"] }),
   {
     id: "epic.chance",
@@ -506,11 +498,11 @@ export const TECH_NODES: readonly TechNode[] = [
   unlock("goober", {
     name: "Goober Fish",
     description: "Goober fish start spawning. When caught, they burst into Normal fish",
-    weight: 0.08,
+    rate: 0.1,
     cost: 7200,
     requires: ["epic.unlock"],
   }),
-  spawnWeight("goober", { name: "Goober Bloom", per: 0.04, maxLevel: 5, cost: { base: 3200, growth: 1.6 }, requires: ["goober.unlock"] }),
+  spawnMore("goober", { name: "Goober Bloom", per: 0.3, maxLevel: 5, cost: { base: 3200, growth: 1.6 }, requires: ["goober.unlock"] }),
   fishValue("goober", { name: "Squishy Treats", per: 0.25, maxLevel: 6, cost: { base: 3200, growth: 1.6 }, requires: ["goober.unlock"] }),
   {
     id: "goober.tier",
@@ -541,11 +533,11 @@ export const TECH_NODES: readonly TechNode[] = [
   unlock("monster", {
     name: "Monster Fish",
     description: "Monster fish start spawning, one at a time. Their whirlpool gathers fish; catch one to take them all",
-    weight: 0.03,
+    rate: 0.04,
     cost: 10800,
     requires: ["goober.unlock"],
   }),
-  spawnWeight("monster", { name: "Here Be Monsters", per: 0.02, maxLevel: 5, cost: { base: 5400, growth: 1.6 }, requires: ["monster.unlock"] }),
+  spawnMore("monster", { name: "Here Be Monsters", per: 0.3, maxLevel: 5, cost: { base: 5400, growth: 1.6 }, requires: ["monster.unlock"] }),
   fishValue("monster", { name: "Monster Bounty", per: 0.25, maxLevel: 6, cost: { base: 5400, growth: 1.6 }, requires: ["monster.unlock"] }),
   {
     id: "monster.pullRadius",
@@ -576,7 +568,7 @@ export const TECH_NODES: readonly TechNode[] = [
   unlock("star", {
     name: "Star Fish",
     description: "Glowing Star fish start spawning, rarely. When caught, they shoot off and bounce around the screen",
-    weight: 0.02,
+    rate: 0.025,
     cost: 16200,
     requires: ["monster.unlock"],
   }),
@@ -584,12 +576,12 @@ export const TECH_NODES: readonly TechNode[] = [
     id: "star.chance",
     ...fishBranch("star"),
     name: "Starfall",
-    description: "Star fish spawn more often: +0.015 spawn weight per level (Normal fish start at 1)",
+    description: "Star fish spawn 50% more often per level",
     maxLevel: 5,
     cost: { base: 7200, growth: 1.5 },
     requires: ["star.unlock"],
     apply(stats, level) {
-      stats.fish.star.weight += 0.015 * level;
+      stats.fish.star.rateMult += 0.5 * level;
     },
   },
   {

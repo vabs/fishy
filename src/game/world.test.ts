@@ -6,7 +6,7 @@ import { STEP, World, type Fish } from "./world";
 
 function makeWorld(overrides: Partial<Stats> = {}): World {
   // No timed spawns unless a test asks for them, so fish counts stay predictable.
-  return new World({ ...BASE_STATS, spawnSeconds: Infinity, ...overrides }, createRng(42), 800, 600);
+  return new World({ ...BASE_STATS, spawnRateMult: 0, ...overrides }, createRng(42), 800, 600);
 }
 
 /** Advances the world, calling `beforeStep` first on every step (e.g. to move the pointer). */
@@ -73,10 +73,23 @@ describe("World", () => {
     expect(world.totalCaught).toBe(1);
   });
 
-  it("spawns fish over time up to the cap", () => {
-    const world = makeWorld({ startFish: 0, spawnSeconds: 0.1, maxFish: 5 });
-    run(world, 2);
-    expect(world.fish).toHaveLength(5);
+  it("keeps spawning each type at its own rate, with no limit on fish in the water", () => {
+    const fish = { ...BASE_STATS.fish, normal: { rate: 20, rateMult: 1, valueMult: 1 } };
+    const world = makeWorld({ startFish: 0, spawnRateMult: 1, fish });
+    run(world, 5);
+    expect(world.fish.length).toBeGreaterThanOrEqual(99);
+    expect(world.fish.length).toBeLessThanOrEqual(101);
+  });
+
+  it("doesn't slow one type down when another starts spawning", () => {
+    const normalsAfter = (fish: Stats["fish"]) => {
+      const world = makeWorld({ startFish: 0, spawnRateMult: 1, fish });
+      run(world, 4);
+      return world.countOf("normal");
+    };
+    const normalOnly = { ...BASE_STATS.fish, normal: { rate: 5, rateMult: 1, valueMult: 1 } };
+    const withRare = { ...normalOnly, rare: { rate: 5, rateMult: 1, valueMult: 1 } };
+    expect(Math.abs(normalsAfter(withRare) - normalsAfter(normalOnly))).toBeLessThanOrEqual(1);
   });
 
   it("keeps every fish clear of the boat and inside the screen", () => {
@@ -167,7 +180,7 @@ describe("World round mechanics", () => {
   it("respects a type's maxOnScreen", () => {
     const world = makeWorld({
       startFish: 5,
-      fish: { ...BASE_STATS.fish, normal: { weight: 0, valueMult: 1 }, monster: { weight: 1, valueMult: 1 } },
+      fish: { ...BASE_STATS.fish, normal: { rate: 0, rateMult: 1, valueMult: 1 }, monster: { rate: 1, rateMult: 1, valueMult: 1 } },
     });
     expect(world.countOf("monster")).toBe(1);
   });

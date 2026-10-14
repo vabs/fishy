@@ -1,8 +1,10 @@
 import type { FishKind } from "./fish";
 
 export interface FishStats {
-  /** Relative chance of this type spawning. 0 means it never spawns (still locked). */
-  weight: number;
+  /** Fish of this type spawned per second, before multipliers. 0 means it never spawns (still locked). */
+  rate: number;
+  /** Multiplier on this type's spawn rate. */
+  rateMult: number;
   valueMult: number;
 }
 
@@ -69,9 +71,8 @@ export interface Stats {
   critChance: number;
   critMult: number;
 
-  /** Time between spawns. */
-  spawnSeconds: number;
-  maxFish: number;
+  /** Multiplier on every type's spawn rate. */
+  spawnRateMult: number;
   /** Fish already in the water when the round starts. */
   startFish: number;
   /** Chance, 0 to 1, that a capture spawns another fish of the same type. */
@@ -90,7 +91,7 @@ export interface Stats {
   ability: Abilities;
 }
 
-const locked: FishStats = { weight: 0, valueMult: 1 };
+const locked: FishStats = { rate: 0, rateMult: 1, valueMult: 1 };
 
 export const BASE_STATS: Stats = {
   roundSeconds: 15,
@@ -103,8 +104,7 @@ export const BASE_STATS: Stats = {
   critChance: 0,
   critMult: 2,
 
-  spawnSeconds: 0.8,
-  maxFish: 25,
+  spawnRateMult: 1,
   startFish: 10,
   twinChance: 0,
 
@@ -114,7 +114,7 @@ export const BASE_STATS: Stats = {
   comboMax: 2,
 
   fish: {
-    normal: { weight: 1, valueMult: 1 },
+    normal: { rate: 1.25, rateMult: 1, valueMult: 1 },
     uncommon: { ...locked },
     rare: { ...locked },
     electric: { ...locked },
@@ -134,6 +134,12 @@ export const BASE_STATS: Stats = {
     star: { bounces: 3, damage: 2, speed: 500, radius: 14, count: 1 },
   },
 };
+
+/** Fish of `kind` spawned per second, with every multiplier applied. */
+export function spawnRate(stats: Stats, kind: FishKind): number {
+  const fish = stats.fish[kind];
+  return fish.rate * fish.rateMult * stats.spawnRateMult;
+}
 
 /** Deep copy, so upgrades and tests can change stats without touching BASE_STATS. */
 export function cloneStats(stats: Stats): Stats {

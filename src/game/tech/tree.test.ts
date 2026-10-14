@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { FISH_KINDS } from "../fish";
-import { BASE_STATS, cloneStats, type Stats } from "../stats";
+import { BASE_STATS, cloneStats, spawnRate, type Stats } from "../stats";
 import {
   TECH_NODES,
   applyUpgrades,
@@ -58,8 +58,8 @@ describe("applyUpgrades", () => {
   it("applies every owned level", () => {
     const stats = applyUpgrades(BASE_STATS, { "net.radius": 3, "uncommon.unlock": 1 });
     expect(stats.netRadius).toBe(BASE_STATS.netRadius + 3 * 8);
-    expect(stats.fish.uncommon.weight).toBeGreaterThan(0);
-    expect(stats.fish.rare.weight).toBe(0);
+    expect(stats.fish.uncommon.rate).toBeGreaterThan(0);
+    expect(stats.fish.rare.rate).toBe(0);
   });
 
   it("ignores unknown ids and clamps levels to each node's range", () => {
@@ -80,7 +80,7 @@ describe("applyUpgrades", () => {
   it("keeps a fully upgraded game playable", () => {
     const stats = applyUpgrades(BASE_STATS, maxedTree());
     expect(stats.tickSeconds).toBeGreaterThan(0.1);
-    expect(stats.spawnSeconds).toBeGreaterThan(0.05);
+    expect(stats.spawnRateMult).toBeLessThan(10);
     for (const chance of [stats.critChance, stats.timeBonusChance, stats.twinChance, stats.ability.epic.chance]) {
       expect(chance).toBeGreaterThan(0);
       expect(chance).toBeLessThanOrEqual(1);
@@ -88,7 +88,19 @@ describe("applyUpgrades", () => {
     expect(stats.ability.goober.tier).toBe(4);
     expect(stats.ability.rare.armor).toBeGreaterThanOrEqual(0);
     expect(stats.ability.uncommon.schoolMin).toBeLessThanOrEqual(stats.ability.uncommon.schoolMax);
-    for (const kind of FISH_KINDS) expect(stats.fish[kind].weight).toBeGreaterThan(0);
+    for (const kind of FISH_KINDS) expect(stats.fish[kind].rate).toBeGreaterThan(0);
+  });
+
+  it("never lowers any fish type's spawn rate", () => {
+    for (const n of TECH_NODES) {
+      for (let level = 1; level <= n.maxLevel; level++) {
+        const stats = cloneStats(BASE_STATS);
+        n.apply(stats, level);
+        for (const kind of FISH_KINDS) {
+          expect(spawnRate(stats, kind), `${n.id} level ${level}, ${kind}`).toBeGreaterThanOrEqual(spawnRate(BASE_STATS, kind));
+        }
+      }
+    }
   });
 });
 
@@ -153,7 +165,7 @@ describe("node definitions", () => {
     }
   });
 
-  it("cover every fish type with an unlock (except Normal), spawn weight and value", () => {
+  it("cover every fish type with an unlock (except Normal), spawn rate and value", () => {
     for (const kind of FISH_KINDS) {
       if (kind !== "normal") expect(getNode(`${kind}.unlock`), kind).toBeDefined();
       expect(TECH_NODES.some((n) => n.fish === kind && n.id !== `${kind}.unlock`), kind).toBe(true);
@@ -205,7 +217,7 @@ describe("isVisible", () => {
   });
 
   it("starts with only Normal fish spawning", () => {
-    for (const kind of FISH_KINDS) expect(BASE_STATS.fish[kind].weight > 0).toBe(kind === "normal");
+    for (const kind of FISH_KINDS) expect(BASE_STATS.fish[kind].rate > 0).toBe(kind === "normal");
   });
 });
 

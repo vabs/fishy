@@ -9,11 +9,11 @@ describe("describeChanges", () => {
     after.netRadius = 48;
     after.critChance = 0.04;
     after.ability.rare.pierce = true;
-    after.fish.uncommon.weight = 0.3;
+    after.fish.uncommon.rate = 0.375;
     expect(describeChanges(BASE_STATS, after)).toEqual([
       { label: "Net radius", before: "40 px", after: "48 px" },
       { label: "Critical hit chance", before: "0%", after: "4%" },
-      { label: "Uncommon spawn weight", before: "0", after: "0.3" },
+      { label: "Uncommon fish per second", before: "0", after: "0.375" },
       { label: "Armour pierce", before: "Off", after: "On" },
     ]);
   });

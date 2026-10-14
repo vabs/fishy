@@ -13,8 +13,8 @@ function makeWorld(tune?: (stats: Stats) => void, seed = 42): World {
   const stats = cloneStats(BASE_STATS);
   stats.roundSeconds = 999;
   stats.startFish = 0;
-  stats.spawnSeconds = Infinity;
-  for (const kind of FISH_KINDS) stats.fish[kind].weight = 0;
+  stats.spawnRateMult = 0;
+  for (const kind of FISH_KINDS) stats.fish[kind].rate = 0;
   tune?.(stats);
   return new World(stats, createRng(seed), W, H);
 }
@@ -28,7 +28,7 @@ function run(world: World, seconds: number, afterStep?: () => void): void {
 }
 
 function spawnAt(world: World, kind: Fish["kind"], x: number, y: number): Fish {
-  const fish = world.spawn(kind, { at: { x, y }, ignoreCap: true });
+  const fish = world.spawn(kind, { at: { x, y } });
   if (!fish) throw new Error(`could not spawn ${kind}`);
   expect(fish.x).toBeCloseTo(x);
   expect(fish.y).toBeCloseTo(y);
@@ -100,9 +100,8 @@ describe("Monster vortex", () => {
 
   it("bunches fish up without ever letting them into the Monster's body or off screen", () => {
     const world = makeWorld((s) => {
-      s.fish.normal.weight = 1;
+      s.fish.normal.rate = 1;
       s.startFish = 40;
-      s.maxFish = 60;
       s.ability.monster.pullRadius = 220;
     });
     const boss = spawnAt(world, "monster", 500, 140);
@@ -198,10 +197,10 @@ describe("Monster capture", () => {
   it("plays out the same for the same seed", () => {
     const play = () => {
       const world = makeWorld((s) => {
-        s.fish.normal.weight = 3;
-        s.fish.monster.weight = 1;
+        s.fish.normal.rate = 1.5;
+        s.fish.monster.rate = 0.5;
         s.startFish = 25;
-        s.spawnSeconds = 0.5;
+        s.spawnRateMult = 1;
       }, 7);
       run(world, 10);
       return world.fish.map((f) => [f.kind, f.x, f.y]);
