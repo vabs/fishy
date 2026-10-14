@@ -47,6 +47,18 @@ export function batchLevel(count: number): number {
   return Math.min(1.6, 1 + 0.2 * Math.log2(count));
 }
 
+/** Catch notes in the last half second that count as a steady stream (one per gap is 12.5). */
+const STREAM_VOICES = 12;
+
+/**
+ * Level of a catch note given how many catch notes started in the last half second. A steady stream
+ * of catches is a texture rather than a series of events, so it plays up to 5 dB softer and leaves
+ * room for the music.
+ */
+export function catchStreamLevel(recentVoices: number): number {
+  return 1 - 0.45 * Math.min(1, Math.max(0, recentVoices) / STREAM_VOICES);
+}
+
 export interface ComboState {
   /** Current value multiplier from the combo (1 means no combo). */
   mult: number;

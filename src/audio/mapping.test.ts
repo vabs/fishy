@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { TECH_NODES } from "../game/tech";
-import { CHAPTERS, batchLevel, catchDegree, chapterFor, comboLevel } from "./mapping";
+import { CHAPTERS, batchLevel, catchDegree, catchStreamLevel, chapterFor, comboLevel } from "./mapping";
 
 describe("chapterFor", () => {
   it("starts in the first chapter", () => {
@@ -49,6 +49,15 @@ describe("batchLevel", () => {
     expect(batchLevel(2)).toBeCloseTo(1.2);
     expect(batchLevel(8)).toBeCloseTo(1.6);
     expect(batchLevel(500)).toBe(1.6);
+  });
+});
+
+describe("catchStreamLevel", () => {
+  it("leaves occasional catches alone and softens a steady stream", () => {
+    expect(catchStreamLevel(0)).toBe(1);
+    expect(catchStreamLevel(6)).toBeCloseTo(0.775);
+    expect(catchStreamLevel(12)).toBeCloseTo(0.55);
+    expect(catchStreamLevel(40)).toBeCloseTo(0.55);
   });
 });
 
