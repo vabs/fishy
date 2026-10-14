@@ -139,6 +139,50 @@ A rare special fish, separate from the seven types above.
 Upgrades: spawn chance, bounces, damage, speed, size (hit radius), several stars at once.
 Possible late upgrades: split on bounce, damaging trail.
 
+## Golden fish
+
+A rare golden version of any fish type, worth 10× its normal value, that tries to get away.
+
+- From round 2 on (never in round 1, while new players are still learning), golden fish arrive on
+  their own clock, about one every 17 s of round time. They aren't a share of spawns, so late-game
+  spawn volume doesn't flood the sea with them. The type is picked in proportion to spawn rates.
+- A golden fish is a fresh spawn that swims alone: a golden Uncommon brings no school.
+- Its catch pays 10× with the usual multipliers on top (type value, global value, ability bonus,
+  combo). Its type's own effect still fires: a golden Electric releases its current, a golden
+  Goober bursts (its burst fish aren't golden).
+- It swims 1.5× as fast as its type. When the edge of the net comes within 80 px of it, it darts:
+  faster still (2.7× its type), turning round if it was heading for the net and edging away from
+  it.
+- Left uncaught for 8 s, it dives and is gone, paying nothing.
+- Inside the net it's drawn in gold with a sheen. Outside, it's a silhouette like every fish, but
+  four-point glints keep popping around it, so it can be spotted anywhere by shape and motion,
+  not by colour alone.
+- The round summary gives golden catches their own "Golden fish" row, apart from their type's row.
+- Sounds: a shimmer when one appears, a bright chime when it's caught, a soft plop if it escapes.
+
+Upgrades (Economy): Gold Rush (more golden fish), Lingering Gold (longer before they dive).
+
+## Treasure chests
+
+- From round 3 on, a round has a 30% chance of one treasure chest; the Final Round always has one.
+- It appears between 20% and 60% of the way through the round, floats in from one screen edge and
+  drifts across to the opposite edge at about 45 px/s on a path well clear of the boat, bobbing
+  gently. If it reaches the far edge unopened, it's gone.
+- It floats at the surface, so it's always drawn in full colour, never as a silhouette: a wooden
+  chest with gold bands, a domed lid and a lock, a shape that reads without colour.
+- Only the net opens it. It has 10 HP; net damage and crits apply. It shows an HP bar while the net
+  reaches it and flashes when hit. Abilities (Electric, Epic, Star, Whirlpool) never touch it.
+- Opening it pays 20 × the value of the most valuable unlocked fish type, with that type's value
+  upgrades and the global value multiplier (no combo, no ability bonus), plus one extra at random:
+  3 s more round time, or 3 golden fish spilling out. Coins burst out under a big "+$" floater,
+  with a creak and a jingle.
+- The round summary has a "Treasure" row: chests opened and their money.
+
+Upgrades (Economy): Treasure Map (+15 percentage points of chest chance per level, up to 100%).
+
+Golden fish and chests draw their random numbers from a stream of their own, seeded from the
+round's, and round 1 draws none, so they never shift the rest of a round's randomness.
+
 ## Silhouette lens
 
 Late-game screens get crowded, so fish are drawn as uniform dark silhouettes. Only the part of the
@@ -196,6 +240,8 @@ so drawing thousands of fish stays cheap.
 - Fish value (all fish)
 - Combo: captures in quick succession stack a value multiplier
 - Combo window and combo cap
+- Golden fish: how often they appear, how long they stay
+- Treasure chest chance
 
 **Spawning**
 - Spawn speed of every fish type
