@@ -1,6 +1,7 @@
 import { formatMoney } from "../format";
 import { FISH, FISH_KINDS, FISH_SPECS, MAX_FISH_SIZE, type FishKind } from "./fish";
 import type { Effect } from "./fx";
+import { diveEffect, drawGlints, glintBurst } from "./golden";
 import { buildSprites, type FishSprites } from "./shapes";
 import type { Stats } from "./stats";
 import type { Fish, FxEvent, Point, World, WorldEvent } from "./world";
@@ -18,6 +19,8 @@ const COLORS = {
   hpFill: "#7ee081",
   floater: "#fff3c4",
   timeBonus: "#9ef0ff",
+  gold: "#ffd34d",
+  goldFloater: "#ffe58a",
   hull: "#8a5a32",
   hullEdge: "#5b3a1f",
   deck: "#b07a48",
@@ -28,12 +31,15 @@ const FADE_IN_SECONDS = 0.4;
 const FLOATER_SECONDS = 0.9;
 const PULSE_SECONDS = 0.25;
 const PARTICLES_PER_CAPTURE = 8;
+const PARTICLES_PER_GOLDEN = 16;
 // These budgets affect decoration only; the World always processes every capture and payout.
 const MAX_PARTICLES = 1200;
 const MAX_FLOATERS = 80;
 const MAX_PULSES = 12;
 const MAX_EFFECTS = 64;
 const MAX_HEAVY_EFFECTS = 12;
+/** Golden fish and treasure effects, which aren't any fish type's fx. */
+const MAX_BONUS_EFFECTS = 24;
 const MAX_NET_TARGETS = 24;
 const MAX_WHIRLPOOL_TARGETS = 96;
 const MERGE_SECONDS = 0.1;
@@ -89,6 +95,7 @@ export class Renderer {
   private pulses: Pulse[] = [];
   private particles: Particle[] = [];
   private effects: { effect: Effect; age: number; event: FxEvent }[] = [];
+  private bonusEffects: { effect: Effect; age: number }[] = [];
   private time = 0;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
@@ -115,6 +122,7 @@ export class Renderer {
     this.particles = [];
     this.pulses = [];
     this.effects = [];
+    this.bonusEffects = [];
   }
 
   onEvent(event: WorldEvent): void {
@@ -125,17 +133,22 @@ export class Renderer {
         }
         break;
       case "capture": {
+        // A golden catch keeps its own payout, so it never merges with the plain catches around it.
+        const floaterColor = event.golden ? COLORS.goldFloater : COLORS.floater;
         const nearby = this.floaters.find((f) =>
-          f.value !== undefined && f.age < MERGE_SECONDS && Math.hypot(f.x - event.x, f.y - event.y) <= 40,
+          f.value !== undefined && f.color === floaterColor && f.age < MERGE_SECONDS &&
+          Math.hypot(f.x - event.x, f.y - event.y) <= 40,
         );
         if (nearby) {
           nearby.value! += event.value;
           nearby.text = "";
         } else if (this.floaters.length < MAX_FLOATERS) {
-          this.floaters.push({ x: event.x, y: event.y, text: "", value: event.value, color: COLORS.floater, age: 0 });
+          this.floaters.push({ x: event.x, y: event.y, text: "", value: event.value, color: floaterColor, age: 0 });
         }
-        const color = FISH[event.kind].body;
-        const count = Math.min(PARTICLES_PER_CAPTURE, MAX_PARTICLES - this.particles.length);
+        if (event.golden) this.addBonusEffect(glintBurst(event.x, event.y, true));
+        const color = event.golden ? COLORS.gold : FISH[event.kind].body;
+        const perCapture = event.golden ? PARTICLES_PER_GOLDEN : PARTICLES_PER_CAPTURE;
+        const count = Math.min(perCapture, MAX_PARTICLES - this.particles.length);
         for (let i = 0; i < count; i++) {
           const angle = Math.random() * TAU;
           const speed = 40 + Math.random() * 60;
@@ -159,7 +172,19 @@ export class Renderer {
       case "fx":
         this.addEffect(event);
         break;
+      case "golden":
+        this.addBonusEffect(glintBurst(event.x, event.y, false));
+        break;
+      case "golden-escape": {
+        const sprites = this.sprite(event.kind);
+        this.addBonusEffect(diveEffect(event, { image: sprites.silhouette, width: sprites.width, height: sprites.height }));
+        break;
+      }
     }
+  }
+
+  private addBonusEffect(effect: Effect): void {
+    if (this.bonusEffects.length < MAX_BONUS_EFFECTS) this.bonusEffects.push({ effect, age: 0 });
   }
 
   private addEffect(event: FxEvent): void {
@@ -208,6 +233,7 @@ export class Renderer {
     const netActive = world && !world.over && pointer;
     if (netActive) this.drawLens(world, pointer, stats.netRadius);
     if (world) for (const kind of FISH_KINDS) FISH_SPECS[kind].drawWorld?.(ctx, world, this.time);
+    if (world) this.drawGoldenGlints(world);
     this.drawEffects();
     if (netActive) this.drawNet(pointer, stats.netRadius, world.tickProgress);
     if (netActive && finger) this.drawFinger(finger, pointer);
@@ -228,7 +254,7 @@ export class Renderer {
   }
 
   /** Leaves the transform set to the fish. Call resetTransform() after a batch. */
-  private drawFish(fish: Fish, variant: "full" | "silhouette" | "flash"): void {
+  private drawFish(fish: Fish, variant: "full" | "silhouette" | "flash" | "golden"): void {
     const ctx = this.ctx;
     const sprites = this.sprite(fish.kind);
     const cos = Math.cos(fish.heading);
@@ -255,12 +281,21 @@ export class Renderer {
     const reach = radius + MAX_FISH_SIZE;
     for (const fish of world.fish) {
       if (Math.hypot(fish.x - pointer.x, fish.y - pointer.y) > reach) continue;
-      this.drawFish(fish, fish.hitFlash > 0 ? "flash" : "full");
+      this.drawFish(fish, fish.hitFlash > 0 ? "flash" : fish.golden ? "golden" : "full");
     }
     ctx.restore();
 
     for (const fish of world.fish) {
       if (Math.hypot(fish.x - pointer.x, fish.y - pointer.y) <= radius) this.drawHpBar(fish);
+    }
+  }
+
+  /** Golden fish twinkle wherever they are, so they can be spotted outside the net as well as in it. */
+  private drawGoldenGlints(world: World): void {
+    const ctx = this.ctx;
+    for (const fish of world.fish) {
+      if (!fish.golden || fish.captured) continue;
+      drawGlints(ctx, fish, FISH[fish.kind].size, this.time, Math.min(1, fish.age / FADE_IN_SECONDS));
     }
   }
 
@@ -356,6 +391,8 @@ export class Renderer {
     this.particles = this.particles.filter((p) => p.age < p.life);
     for (const e of this.effects) e.age += dt;
     this.effects = this.effects.filter((e) => e.age < e.effect.life);
+    for (const e of this.bonusEffects) e.age += dt;
+    this.bonusEffects = this.bonusEffects.filter((e) => e.age < e.effect.life);
   }
 
   private drawEffects(): void {
@@ -378,7 +415,7 @@ export class Renderer {
       ctx.fill();
     }
 
-    for (const { effect, age } of this.effects) {
+    for (const { effect, age } of [...this.effects, ...this.bonusEffects]) {
       ctx.save();
       effect.draw(ctx, age / effect.life);
       ctx.restore();

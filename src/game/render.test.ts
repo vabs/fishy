@@ -53,6 +53,15 @@ describe("burst rendering", () => {
     expect(paints.flatMap((p) => p.text ? [p.text] : [])).toEqual(["+$1,000"]);
   });
 
+  it("keeps a golden catch's payout apart from the plain catches around it", () => {
+    const { renderer, paints } = canvasRecorder();
+    renderer.onEvent({ type: "capture", kind: "normal", source: "net", x: 200, y: 200, value: 1, combo: 0 });
+    renderer.onEvent({ type: "capture", kind: "normal", source: "net", x: 200, y: 200, value: 10, combo: 1, golden: true });
+    renderer.onEvent({ type: "capture", kind: "normal", source: "net", x: 200, y: 200, value: 1, combo: 2 });
+    renderer.draw(scene, 0.01);
+    expect(paints.flatMap((p) => p.text ? [p.text] : [])).toEqual(["+$2", "+$10"]);
+  });
+
   it("bounds capture particles and lets the budget recover after they expire", () => {
     const { renderer, arcs } = canvasRecorder();
     const capture = () => renderer.onEvent({ type: "capture", kind: "normal", source: "net", x: 200, y: 200, value: 1, combo: 0 });

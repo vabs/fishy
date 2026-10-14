@@ -10,7 +10,8 @@ import { degreeToHz, type Key } from "./theory";
  * note instead of a pile of them.
  */
 
-type SfxKind = "catch" | "current" | "bounce" | "launch" | "implode" | "burst" | "bonus" | "chime";
+type SfxKind =
+  | "catch" | "current" | "bounce" | "launch" | "implode" | "burst" | "bonus" | "chime" | "shimmer" | "golden" | "plop";
 
 const LIMITS: Record<SfxKind, VoiceLimit> = {
   catch: { gap: 0.04, voices: 4 },
@@ -21,6 +22,9 @@ const LIMITS: Record<SfxKind, VoiceLimit> = {
   burst: { gap: 0.08, voices: 2 },
   bonus: { gap: 0.15, voices: 1 },
   chime: { gap: 0 },
+  shimmer: { gap: 0.3, voices: 1 },
+  golden: { gap: 0.12, voices: 2 },
+  plop: { gap: 0.2, voices: 1 },
 };
 const MAX_VOICES = 8;
 /** Catches still waiting for a voice after this long are dropped: they'd sound late. */
@@ -32,7 +36,12 @@ const CURRENT_STEP = 0.045;
 const MAX_CURRENT_NOTES = 9;
 
 /** Peak levels, before the effects volume. */
-const LEVEL = { catch: 0.24, current: 0.07, bounce: 0.06, launch: 0.09, implode: 0.13, burst: 0.12, bonus: 0.07, chime: 0.11 };
+const LEVEL = {
+  catch: 0.24, current: 0.07, bounce: 0.06, launch: 0.09, implode: 0.13, burst: 0.12, bonus: 0.07, chime: 0.11,
+  shimmer: 0.045, golden: 0.1, plop: 0.13,
+};
+/** Gap between the notes of a golden shimmer, s. */
+const SHIMMER_STEP = 0.045;
 
 function pickOne(items: readonly number[]): number {
   return items[Math.floor(Math.random() * items.length)] ?? items[0] ?? 0;
@@ -163,6 +172,35 @@ export class Sfx {
     const voice = this.start("bonus", 0.3);
     if (!voice) return;
     bell(voice.ctx, voice.out, voice.time, this.hz(12), LEVEL.bonus, 0.45);
+  }
+
+  /** A golden fish appearing: a quiet glissando of high bells, rising. */
+  shimmer(): void {
+    const degrees = [10, 11, 12, 13, 14, 15];
+    const voice = this.start("shimmer", degrees.length * SHIMMER_STEP + 0.6);
+    if (!voice) return;
+    degrees.forEach((degree, i) => {
+      bell(voice.ctx, voice.out, voice.time + i * SHIMMER_STEP, this.hz(degree), LEVEL.shimmer * (1 - i * 0.08), 0.6);
+    });
+  }
+
+  /** A golden fish caught: a bright chime, a rising arpeggio that rings out, topped with a sparkle. */
+  goldenCatch(): void {
+    const degrees = [5, 7, 8, 10];
+    const voice = this.start("golden", 1.3);
+    if (!voice) return;
+    const { ctx, time, out } = voice;
+    degrees.forEach((degree, i) => bell(ctx, out, time + i * 0.055, this.hz(degree), LEVEL.golden, 1.1));
+    pluck(ctx, out, { time: time + 0.22, freq: this.hz(15), gain: LEVEL.golden * 0.7, decay: 0.5, overtone: 5.4, bright: 0.5 });
+  }
+
+  /** A golden fish getting away: a soft, low plop and a whisper of splash. */
+  plop(): void {
+    const voice = this.start("plop", 0.3);
+    if (!voice) return;
+    const { ctx, time, out } = voice;
+    pop(ctx, out, time, this.hz(pickOne([0, 2]), 3), LEVEL.plop);
+    noise(ctx, out, { time: time + 0.02, gain: LEVEL.plop * 0.25, attack: 0.005, decay: 0.12, filter: "highpass", from: 2500 });
   }
 
   /** A purchase in the tech tree: a two-note chime, or a little arpeggio for unlocking a fish. */

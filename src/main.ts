@@ -231,7 +231,7 @@ function summaryRow({ key, count: caught, earned }: SummaryRow): HTMLTableRowEle
   const name = document.createElement("td");
   const label = document.createElement("span");
   label.className = "summary-fish";
-  if (key === "golden") label.append(icon(buildSprites("normal", dpr).full), "Golden fish");
+  if (key === "golden") label.append(icon(buildSprites("normal", dpr).golden), "Golden fish");
   else label.append(icon(buildSprites(key, dpr).full), FISH[key].name);
   name.append(label);
   const count = document.createElement("td");
