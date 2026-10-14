@@ -1,0 +1,52 @@
+/* Export / Import buttons. Quieter than a panel's main button, which stays the obvious next step. */
+
+.save-controls {
+  --error: #ffa48f;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+}
+
+.save-controls-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* Two classes so this wins over `.panel button` wherever the controls are mounted. */
+.save-controls .save-controls-button {
+  padding: 7px 14px;
+  border: 1px solid var(--panel-edge);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--ink-muted);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.save-controls .save-controls-button:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+  color: var(--ink);
+  filter: none;
+}
+
+.save-controls .save-controls-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Space is kept for the message so the panel doesn't jump when it appears. */
+.save-controls .save-controls-message {
+  min-height: 1.5em;
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.save-controls .save-controls-message.is-error {
+  color: var(--error);
+}
