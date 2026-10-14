@@ -86,7 +86,9 @@ export const uncommon: FishSpec = {
 
     const s = fish.state;
     const a = anchor.state;
-    const slot = slotFor(swimArea(world), anchor, (s.slotBack ?? 0) - (a.slotBack ?? 0), (s.slotSide ?? 0) - (a.slotSide ?? 0));
+    const back = (s.slotBack ?? 0) - (a.slotBack ?? 0);
+    const side = (s.slotSide ?? 0) - (a.slotSide ?? 0);
+    const slot = slotFor(swimArea(world), anchor, back, side);
     const k = 1 - Math.exp(-FOLLOW_RATE * dt);
     fish.angle += Math.atan2(Math.sin(slot.angle - fish.angle), Math.cos(slot.angle - fish.angle)) * k;
     fish.orbit += (slot.orbit - fish.orbit) * k;

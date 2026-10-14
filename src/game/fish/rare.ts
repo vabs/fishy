@@ -52,7 +52,7 @@ export const rare: FishSpec = {
  *
  * Armour: subtracts a flat amount, but never lets less than ARMOR_FLOOR of the hit through.
  */
-export function armoredDamage(world: World, fish: Fish, amount: number, armor: number, pierce: boolean): number {
+function armoredDamage(world: World, fish: Fish, amount: number, armor: number, pierce: boolean): number {
   if (amount <= 0) return amount;
   const pierced = pierce && fish.hits === 0;
   const hit = pierced ? amount * 2 : amount;
