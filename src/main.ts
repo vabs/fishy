@@ -1,7 +1,8 @@
 import "./style.css";
-import { formatDuration, formatMoney } from "./format";
-import { FISH_KINDS, type FishKind } from "./game/fish";
+import { formatDuration, formatMoney, wholeShares } from "./format";
+import { FISH, FISH_KINDS, type FishKind } from "./game/fish";
 import { Renderer } from "./game/render";
+import { buildSprites } from "./game/shapes";
 import { createRng } from "./game/rng";
 import { BASE_STATS, type Stats } from "./game/stats";
 import { TECH_NODES, applyUpgrades, buy, canBuy, isTreeComplete } from "./game/tech";
@@ -44,9 +45,12 @@ const hub = {
 const summary = {
   root: element("#summary-panel"),
   title: element("#summary-title"),
-  fish: element("#summary-fish"),
   earned: element("#summary-earned"),
-  bank: element("#summary-bank"),
+  table: element("#summary-table"),
+  rows: element("#summary-rows"),
+  fish: element("#summary-fish"),
+  total: element("#summary-total"),
+  empty: element("#summary-empty"),
 };
 const end = {
   root: element("#end-panel"),
@@ -118,7 +122,7 @@ function showToast(message: string): void {
 function showOnly(screen: "hub" | "round" | "summary" | "end"): void {
   if (screen !== "round") roundHint.hidden = true;
   hub.root.hidden = screen !== "hub";
-  hud.root.hidden = screen !== "round" && screen !== "summary";
+  hud.root.hidden = screen !== "round";
   summary.root.hidden = screen !== "summary";
   end.root.hidden = screen !== "end";
   document.body.classList.toggle("playing", screen === "round");
@@ -166,10 +170,50 @@ function endRound(finished: World): void {
   setSave(finalRound ? { ...recorded, finalRoundDone: true } : recorded);
 
   summary.title.textContent = finalRound ? "Final Round complete" : `Round ${playingRound} complete`;
-  summary.fish.textContent = finished.totalCaught.toLocaleString("en-US");
   summary.earned.textContent = formatMoney(finished.earned);
-  summary.bank.textContent = formatMoney(save.money);
+  summary.fish.textContent = finished.totalCaught.toLocaleString("en-US");
+  summary.total.textContent = formatMoney(finished.earned);
+  const kinds = FISH_KINDS.filter((kind) => finished.caught[kind]).sort(
+    (a, b) => (finished.earnedBy[b] ?? 0) - (finished.earnedBy[a] ?? 0),
+  );
+  const shares = wholeShares(kinds.map((kind) => finished.earnedBy[kind] ?? 0), finished.earned);
+  summary.rows.replaceChildren(...kinds.map((kind, i) => summaryRow(kind, finished.caught[kind] ?? 0, shares[i] ?? 0)));
+  summary.table.hidden = kinds.length === 0;
+  summary.empty.hidden = kinds.length > 0;
   showOnly("summary");
+}
+
+function summaryRow(kind: FishKind, caught: number, earned: number): HTMLTableRowElement {
+  const row = document.createElement("tr");
+  const name = document.createElement("td");
+  const label = document.createElement("span");
+  label.className = "summary-fish";
+  label.append(fishIcon(kind), FISH[kind].name);
+  name.append(label);
+  const count = document.createElement("td");
+  count.textContent = caught.toLocaleString("en-US");
+  const money = document.createElement("td");
+  money.textContent = formatMoney(earned);
+  row.append(name, count, money);
+  return row;
+}
+
+/** A small full-colour picture of a fish type, fitted into 40 × 26 px. */
+function fishIcon(kind: FishKind): HTMLCanvasElement {
+  const dpr = window.devicePixelRatio || 1;
+  const sprite = buildSprites(kind, dpr);
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(40 * dpr);
+  canvas.height = Math.round(26 * dpr);
+  canvas.setAttribute("aria-hidden", "true");
+  const ctx = canvas.getContext("2d");
+  if (ctx) {
+    const scale = Math.min(canvas.width / sprite.full.width, canvas.height / sprite.full.height);
+    const w = sprite.full.width * scale;
+    const h = sprite.full.height * scale;
+    ctx.drawImage(sprite.full, (canvas.width - w) / 2, (canvas.height - h) / 2, w, h);
+  }
+  return canvas;
 }
 
 function showEnd(): void {

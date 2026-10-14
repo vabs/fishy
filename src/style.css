@@ -242,6 +242,83 @@ body.playing #game {
   box-shadow: 0 0 0 3px rgba(244, 162, 89, 0.35);
 }
 
+/* Round summary: the money earned is the headline, then what each fish type brought in. */
+.summary-panel {
+  width: min(440px, calc(100vw - 32px));
+}
+
+.panel .summary-earned {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  margin: 0 0 18px;
+}
+
+.summary-earned-amount {
+  color: var(--accent);
+  font-size: 46px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.summary-earned-label {
+  color: var(--ink-muted);
+  font-size: 14px;
+}
+
+.summary-table {
+  width: 100%;
+  margin: 0 0 22px;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.summary-table th,
+.summary-table td {
+  padding: 6px 4px;
+  text-align: right;
+}
+
+.summary-table th:first-child,
+.summary-table td:first-child {
+  text-align: left;
+}
+
+.summary-table thead th {
+  border-bottom: 1px solid var(--panel-edge);
+  color: var(--ink-muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.summary-table tbody td:last-child {
+  font-weight: 700;
+}
+
+.summary-table tfoot th,
+.summary-table tfoot td {
+  border-top: 1px solid var(--panel-edge);
+  font-weight: 700;
+}
+
+.summary-fish {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.summary-fish canvas {
+  flex: none;
+  width: 40px;
+  height: 26px;
+}
+
+.panel .summary-empty {
+  margin: 0 0 20px;
+}
+
 .end-panel {
   width: min(420px, calc(100vw - 32px));
 }

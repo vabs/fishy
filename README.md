@@ -25,7 +25,7 @@ upgrades between rounds, unlock stranger fish, and work your way to the Final Ro
 
 | First visit | After a round | The end |
 | --- | --- | --- |
-| ![A dialog asks for your name](docs/screenshots/name-prompt.png) | ![Round summary with fish caught, money earned and the bank balance](docs/screenshots/summary.png) | ![End screen thanking the player, with lifetime stats and a Play Again button](docs/screenshots/end.png) |
+| ![A dialog asks for your name](docs/screenshots/name-prompt.png) | ![Round summary: money earned this round, broken down by fish type](docs/screenshots/summary.png) | ![End screen thanking the player, with lifetime stats and a Play Again button](docs/screenshots/end.png) |
 
 ## Fish
 

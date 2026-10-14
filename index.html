@@ -39,16 +39,30 @@
       <div id="hub-tree" class="hub-tree"></div>
     </section>
 
-    <section id="summary-panel" class="panel" hidden>
+    <section id="summary-panel" class="panel summary-panel" hidden>
       <h2 id="summary-title"></h2>
-      <dl>
-        <dt>Fish caught</dt>
-        <dd id="summary-fish"></dd>
-        <dt>Earned</dt>
-        <dd id="summary-earned"></dd>
-        <dt>Bank</dt>
-        <dd id="summary-bank"></dd>
-      </dl>
+      <p class="summary-earned">
+        <span id="summary-earned" class="summary-earned-amount"></span>
+        <span class="summary-earned-label">earned this round</span>
+      </p>
+      <table id="summary-table" class="summary-table">
+        <thead>
+          <tr>
+            <th scope="col">Fish</th>
+            <th scope="col">Caught</th>
+            <th scope="col">Earned</th>
+          </tr>
+        </thead>
+        <tbody id="summary-rows"></tbody>
+        <tfoot>
+          <tr>
+            <th scope="row">Total</th>
+            <td id="summary-fish"></td>
+            <td id="summary-total"></td>
+          </tr>
+        </tfoot>
+      </table>
+      <p id="summary-empty" class="summary-empty" hidden>No fish this round. Keep the net over them a little longer.</p>
       <button id="continue-button" type="button">Continue</button>
     </section>
 

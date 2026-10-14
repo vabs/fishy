@@ -101,6 +101,8 @@ export class World {
   /** Money earned this round. Banked when the round ends. */
   earned = 0;
   caught: Partial<Record<FishKind, number>> = {};
+  /** Money earned this round per fish type. */
+  earnedBy: Partial<Record<FishKind, number>> = {};
   /** Captures in the current combo after the first. */
   combo = 0;
   pointer: Point | null = null;
@@ -368,6 +370,7 @@ export class World {
       const value = FISH[fish.kind].value * this.stats.fish[fish.kind].valueMult * this.stats.valueMult * this.comboMult;
       this.earned += value;
       this.caught[fish.kind] = (this.caught[fish.kind] ?? 0) + 1;
+      this.earnedBy[fish.kind] = (this.earnedBy[fish.kind] ?? 0) + value;
       this.emit({ type: "capture", kind: fish.kind, source, x: fish.x, y: fish.y, value, combo: this.combo });
 
       FISH_SPECS[fish.kind].onCapture?.(this, fish, source);

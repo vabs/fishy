@@ -167,6 +167,7 @@ describe("World round mechanics", () => {
     run(world, STEP);
     // 1 + 1.5 + 2 for three Normal fish worth 1 each.
     expect(world.earned).toBeCloseTo(4.5);
+    expect(world.earnedBy.normal).toBeCloseTo(4.5);
     expect(world.combo).toBe(2);
   });
 
