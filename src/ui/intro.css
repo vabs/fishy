@@ -78,20 +78,21 @@
   stroke: #e6f7ff;
 }
 
+/* Fish colours follow the player's palette (published by main.ts). */
 .intro-node.fish-normal.is-owned {
-  fill: #f4a259;
+  fill: var(--fish-normal, #f4a259);
 }
 
 .intro-node.fish-uncommon.is-owned {
-  fill: #7bd389;
+  fill: var(--fish-uncommon, #7bd389);
 }
 
 .intro-node.fish-rare {
-  stroke: #5b8def;
+  stroke: var(--fish-rare, #5b8def);
 }
 
 .intro-node.fish-electric {
-  stroke: #f7e04b;
+  stroke: var(--fish-electric, #f7e04b);
 }
 
 .intro-node.is-ready {
