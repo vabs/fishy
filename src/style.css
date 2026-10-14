@@ -1,0 +1,136 @@
+:root {
+  --ink: #fff7e6;
+  --ink-muted: #b9d8e4;
+  --panel: rgba(6, 30, 45, 0.88);
+  --panel-edge: rgba(255, 255, 255, 0.12);
+  --accent: #f4a259;
+  --accent-ink: #2a1505;
+  --page: #124e6b;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--page);
+  color: var(--ink);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+#game {
+  display: block;
+  position: fixed;
+  inset: 0;
+}
+
+/* The net replaces the cursor during a round. */
+body.playing #game {
+  cursor: none;
+}
+
+#hud {
+  position: fixed;
+  inset: 0 0 auto 0;
+  display: flex;
+  justify-content: space-between;
+  padding: 16px 20px;
+  pointer-events: none;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+#hud[hidden] {
+  display: none;
+}
+
+.hud-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--ink-muted);
+  font-size: 14px;
+}
+
+.hud-right {
+  align-items: flex-end;
+}
+
+.hud-big {
+  color: var(--ink);
+  font-size: 26px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.panel {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(360px, calc(100vw - 32px));
+  padding: 28px;
+  border: 1px solid var(--panel-edge);
+  border-radius: 14px;
+  background: var(--panel);
+  text-align: center;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+}
+
+.panel[hidden] {
+  display: none;
+}
+
+.panel h1,
+.panel h2 {
+  margin: 0 0 12px;
+}
+
+.panel h1 {
+  font-size: 40px;
+  letter-spacing: 0.02em;
+}
+
+.panel p {
+  margin: 0 0 20px;
+  color: var(--ink-muted);
+  line-height: 1.5;
+}
+
+.panel dl {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px 16px;
+  margin: 0 0 22px;
+  text-align: left;
+}
+
+.panel dt {
+  color: var(--ink-muted);
+}
+
+.panel dd {
+  margin: 0;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.panel button {
+  padding: 10px 22px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.panel button:hover {
+  filter: brightness(1.08);
+}

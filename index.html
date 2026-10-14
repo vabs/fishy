@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fishy</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐟</text></svg>"
+    />
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+
+    <div id="hud" hidden>
+      <div class="hud-group">
+        <span id="hud-round"></span>
+        <span id="hud-timer" class="hud-big"></span>
+      </div>
+      <div class="hud-group hud-right">
+        <span id="hud-money" class="hud-big"></span>
+        <span id="hud-earned"></span>
+      </div>
+    </div>
+
+    <section id="start-panel" class="panel">
+      <h1>Fishy</h1>
+      <p>Move your net over the fish. It catches them automatically.</p>
+      <button id="start-button" type="button">Start Round</button>
+    </section>
+
+    <section id="summary-panel" class="panel" hidden>
+      <h2 id="summary-title"></h2>
+      <dl>
+        <dt>Fish caught</dt>
+        <dd id="summary-fish"></dd>
+        <dt>Earned</dt>
+        <dd id="summary-earned"></dd>
+        <dt>Bank</dt>
+        <dd id="summary-bank"></dd>
+      </dl>
+      <button id="next-button" type="button">Next Round</button>
+    </section>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
