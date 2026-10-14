@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { FISH } from "./fish";
 import { createRng } from "./rng";
 import { BASE_STATS, type Stats } from "./stats";
 import { STEP, World, type Fish } from "./world";
@@ -36,7 +37,7 @@ describe("World", () => {
     run(world, BASE_STATS.tickSeconds, follow);
     expect(fish.captured).toBe(true);
     expect(world.fish).toHaveLength(0);
-    expect(world.earned).toBe(fish.value);
+    expect(world.earned).toBe(FISH.normal.value);
     expect(world.caught.normal).toBe(1);
   });
 
@@ -68,7 +69,7 @@ describe("World", () => {
     world.damage(fish, 99, "net");
     world.capture(fish, "net");
     run(world, STEP);
-    expect(world.earned).toBe(fish.value);
+    expect(world.earned).toBe(FISH.normal.value);
     expect(world.totalCaught).toBe(1);
   });
 
@@ -111,5 +112,56 @@ describe("World", () => {
       return { earned: world.earned, fish: world.fish.length };
     };
     expect(play()).toEqual(play());
+  });
+});
+
+describe("World round mechanics", () => {
+  it("deals critical damage when the crit roll succeeds", () => {
+    const world = makeWorld({ startFish: 1, netRadius: 10_000, critChance: 1, critMult: 3 });
+    world.pointer = { x: 400, y: 300 };
+    run(world, BASE_STATS.tickSeconds + STEP);
+    expect(world.totalCaught).toBe(1);
+  });
+
+  it("adds time when the time bonus roll succeeds", () => {
+    const world = makeWorld({ startFish: 1, timeBonusChance: 1, timeBonusSeconds: 2 });
+    const before = world.timeLeft;
+    world.capture(world.fish[0]!, "net");
+    run(world, STEP);
+    expect(world.timeLeft).toBeCloseTo(before + 2 - STEP);
+  });
+
+  it("spawns a twin of a captured fish when the twin roll succeeds", () => {
+    const world = makeWorld({ startFish: 1, twinChance: 1 });
+    const first = world.fish[0]!;
+    world.capture(first, "net");
+    run(world, STEP);
+    expect(world.fish).toHaveLength(1);
+    expect(world.fish[0]!.id).not.toBe(first.id);
+    expect(world.fish[0]!.kind).toBe(first.kind);
+  });
+
+  it("raises the value multiplier for captures inside the combo window", () => {
+    const world = makeWorld({ startFish: 3, comboWindow: 1, comboStep: 0.5, comboMax: 10 });
+    for (const fish of [...world.fish]) world.capture(fish, "net");
+    run(world, STEP);
+    // 1 + 1.5 + 2 for three Normal fish worth 1 each.
+    expect(world.earned).toBeCloseTo(4.5);
+    expect(world.combo).toBe(2);
+  });
+
+  it("spawns at a requested position", () => {
+    const world = makeWorld({ startFish: 0 });
+    const fish = world.spawn("normal", { at: { x: 600, y: 200 } })!;
+    expect(fish.x).toBeCloseTo(600);
+    expect(fish.y).toBeCloseTo(200);
+  });
+
+  it("respects a type's maxOnScreen", () => {
+    const world = makeWorld({
+      startFish: 5,
+      fish: { ...BASE_STATS.fish, normal: { weight: 0, valueMult: 1 }, monster: { weight: 1, valueMult: 1 } },
+    });
+    expect(world.countOf("monster")).toBe(1);
   });
 });

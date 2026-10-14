@@ -27,9 +27,17 @@ index.html          Page shell: canvas, HUD, panels
 src/main.ts         Boot, game loop, input, screens
 src/game/
   world.ts          The simulation for one round. No DOM, fixed 60 Hz step, seeded RNG
-  fish.ts           Fish type definitions
-  stats.ts          Everything upgrades can change, and the starting values
+  stats.ts          Everything upgrades can change (global, per fish, abilities) and base values
+  fish/             One file per fish type (FishSpec): stats, shape and behaviour hooks
+    types.ts        FishSpec: onSpawn, move, modifyDamage, onCapture, update, drawWorld, fx
+    index.ts        Registry of all types
   render.ts         Canvas renderer: background, boat, silhouettes, net lens, effects
-  shapes.ts         Fish shapes and their cached full / silhouette / hit-flash sprites
+  shapes.ts         Builds each type's cached full / silhouette / hit-flash sprites
+  fx.ts             Short-lived visual effects that fish types add
   rng.ts            Seeded random numbers
 ```
+
+## Dev tips
+
+In dev, `?fish=electric,epic` makes only those types spawn, e.g.
+http://localhost:5173/?fish=electric,epic

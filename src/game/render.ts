@@ -1,5 +1,6 @@
 import { formatMoney } from "../format";
-import { FISH, MAX_FISH_SIZE, type FishKind } from "./fish";
+import { FISH, FISH_KINDS, FISH_SPECS, MAX_FISH_SIZE, type FishKind } from "./fish";
+import type { Effect } from "./fx";
 import { buildSprites, type FishSprites } from "./shapes";
 import type { Stats } from "./stats";
 import type { Fish, Point, World, WorldEvent } from "./world";
@@ -15,6 +16,7 @@ const COLORS = {
   hpBack: "rgba(0, 0, 0, 0.45)",
   hpFill: "#7ee081",
   floater: "#fff3c4",
+  timeBonus: "#9ef0ff",
   hull: "#8a5a32",
   hullEdge: "#5b3a1f",
   deck: "#b07a48",
@@ -30,6 +32,7 @@ interface Floater {
   x: number;
   y: number;
   text: string;
+  color: string;
   age: number;
 }
 
@@ -68,6 +71,7 @@ export class Renderer {
   private floaters: Floater[] = [];
   private pulses: Pulse[] = [];
   private particles: Particle[] = [];
+  private effects: { effect: Effect; age: number }[] = [];
   private time = 0;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
@@ -95,7 +99,7 @@ export class Renderer {
         this.pulses.push({ x: event.x, y: event.y, radius: event.radius, strong: event.hits > 0, age: 0 });
         break;
       case "capture": {
-        this.floaters.push({ x: event.x, y: event.y, text: `+${formatMoney(event.value)}`, age: 0 });
+        this.floaters.push({ x: event.x, y: event.y, text: `+${formatMoney(event.value)}`, color: COLORS.floater, age: 0 });
         const color = FISH[event.kind].body;
         for (let i = 0; i < PARTICLES_PER_CAPTURE; i++) {
           const angle = Math.random() * TAU;
@@ -112,6 +116,12 @@ export class Renderer {
         }
         break;
       }
+      case "time-bonus":
+        this.floaters.push({ x: event.x, y: event.y - 18, text: `+${event.seconds}s`, color: COLORS.timeBonus, age: 0 });
+        break;
+      case "fx":
+        FISH_SPECS[event.kind].fx?.(event, (effect) => this.effects.push({ effect, age: 0 }));
+        break;
     }
   }
 
@@ -132,6 +142,7 @@ export class Renderer {
 
     const netActive = world && !world.over && pointer;
     if (netActive) this.drawLens(world, pointer, stats.netRadius);
+    if (world) for (const kind of FISH_KINDS) FISH_SPECS[kind].drawWorld?.(ctx, world, this.time);
     this.drawEffects();
     if (netActive) this.drawNet(pointer, stats.netRadius, world.tickProgress);
   }
@@ -260,6 +271,8 @@ export class Renderer {
     this.floaters = this.floaters.filter((f) => f.age < FLOATER_SECONDS);
     this.pulses = this.pulses.filter((p) => p.age < PULSE_SECONDS);
     this.particles = this.particles.filter((p) => p.age < p.life);
+    for (const e of this.effects) e.age += dt;
+    this.effects = this.effects.filter((e) => e.age < e.effect.life);
   }
 
   private drawEffects(): void {
@@ -282,11 +295,17 @@ export class Renderer {
       ctx.fill();
     }
 
+    for (const { effect, age } of this.effects) {
+      ctx.save();
+      effect.draw(ctx, age / effect.life);
+      ctx.restore();
+    }
+
     ctx.font = "bold 15px system-ui, sans-serif";
     ctx.textAlign = "center";
-    ctx.fillStyle = COLORS.floater;
     for (const f of this.floaters) {
       const t = f.age / FLOATER_SECONDS;
+      ctx.fillStyle = f.color;
       ctx.globalAlpha = 1 - t * t;
       ctx.fillText(f.text, f.x, f.y - 12 - t * 30);
     }

@@ -1,8 +1,9 @@
 import "./style.css";
 import { formatMoney } from "./format";
+import { FISH_KINDS, type FishKind } from "./game/fish";
 import { Renderer } from "./game/render";
 import { createRng } from "./game/rng";
-import { BASE_STATS } from "./game/stats";
+import { BASE_STATS, cloneStats, type Stats } from "./game/stats";
 import { STEP, World, type Point } from "./game/world";
 
 /** Longest frame the sim will catch up on, so a backgrounded tab doesn't fast-forward a round. */
@@ -32,13 +33,25 @@ const summary = {
 };
 
 const renderer = new Renderer(canvas);
-const stats = BASE_STATS;
+const stats = devStats();
 let world: World | null = null;
 let pointer: Point | null = null;
 let bank = 0;
 let round = 1;
 let accumulator = 0;
 let lastFrame = performance.now();
+
+/** Dev only: `?fish=electric,epic` makes only those types spawn, to try a type out. */
+function devStats(): Stats {
+  const stats = cloneStats(BASE_STATS);
+  if (!import.meta.env.DEV) return stats;
+  const only = new URLSearchParams(location.search).get("fish");
+  if (only) {
+    const kinds = only.split(",").filter((k): k is FishKind => k in stats.fish);
+    for (const kind of FISH_KINDS) stats.fish[kind].weight = kinds.includes(kind) ? 1 : 0;
+  }
+  return stats;
+}
 
 function resize(): void {
   const width = window.innerWidth;
