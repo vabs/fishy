@@ -5,7 +5,7 @@ import { Renderer } from "./game/render";
 import { buildSprites } from "./game/shapes";
 import { createRng } from "./game/rng";
 import { BASE_STATS, type Stats } from "./game/stats";
-import { TECH_NODES, applyUpgrades, buy, canBuy, isTreeComplete } from "./game/tech";
+import { TECH_NODES, applyUpgrades, buy, canBuy, isTreeComplete, refundRemovedLevels } from "./game/tech";
 import { STEP, World, type Point } from "./game/world";
 import { createSave, loadSave, recordRound, resetProgress, sanitizeUpgrades, writeSave, type SaveData } from "./save";
 import { promptForName } from "./ui/name-prompt";
@@ -94,7 +94,16 @@ function applyDevOverrides(stats: Stats): Stats {
 
 async function loadOrCreateSave(): Promise<SaveData> {
   const stored = loadSave();
-  if (stored) return { ...stored, upgrades: sanitizeUpgrades(stored.upgrades, TECH_NODES) };
+  if (stored) {
+    // Balance updates can shorten or remove upgrades; pay back levels the save can no longer own.
+    const { upgrades, refund } = refundRemovedLevels(stored.upgrades);
+    const loaded = { ...stored, money: stored.money + refund, upgrades: sanitizeUpgrades(upgrades, TECH_NODES) };
+    if (refund > 0) {
+      persist(loaded);
+      showToast(`The upgrade tree was rebalanced. ${formatMoney(refund)} was refunded for upgrades that were shortened or removed.`);
+    }
+    return loaded;
+  }
   const fresh = createSave(await promptForName());
   persist(fresh);
   return fresh;
