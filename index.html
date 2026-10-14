@@ -23,10 +23,18 @@
       </div>
     </div>
 
-    <section id="start-panel" class="panel">
-      <h1>Fishy</h1>
-      <p>Move your net over the fish. It catches them automatically.</p>
-      <button id="start-button" type="button">Start Round</button>
+    <section id="hub" hidden>
+      <header class="hub-bar">
+        <div class="hub-player">
+          <span id="hub-name" class="hub-name"></span>
+          <span id="hub-round" class="hub-muted"></span>
+        </div>
+        <span id="hub-money" class="hub-money"></span>
+        <p id="hub-hint" class="hub-hint hub-muted"></p>
+        <div id="hub-save" class="hub-save"></div>
+        <button id="start-button" type="button" class="primary-button">Start Round</button>
+      </header>
+      <div id="hub-tree" class="hub-tree"></div>
     </section>
 
     <section id="summary-panel" class="panel" hidden>
@@ -39,8 +47,27 @@
         <dt>Bank</dt>
         <dd id="summary-bank"></dd>
       </dl>
-      <button id="next-button" type="button">Next Round</button>
+      <button id="continue-button" type="button">Continue</button>
     </section>
+
+    <section id="end-panel" class="panel end-panel" hidden>
+      <h1>Thank you for playing!</h1>
+      <p id="end-message"></p>
+      <dl>
+        <dt>Rounds played</dt>
+        <dd id="end-rounds"></dd>
+        <dt>Fish caught</dt>
+        <dd id="end-fish"></dd>
+        <dt>Best round</dt>
+        <dd id="end-best"></dd>
+        <dt>Time at sea</dt>
+        <dd id="end-time"></dd>
+      </dl>
+      <button id="play-again-button" type="button">Play Again</button>
+      <p class="end-note">Play Again starts over from round 1. Your name is kept.</p>
+    </section>
+
+    <div id="toast" class="toast" role="status" hidden></div>
 
     <script type="module" src="/src/main.ts"></script>
   </body>

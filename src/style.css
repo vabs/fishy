@@ -1,7 +1,7 @@
 :root {
   --ink: #fff7e6;
   --ink-muted: #b9d8e4;
-  --panel: rgba(6, 30, 45, 0.88);
+  --panel: rgba(6, 30, 45, 0.95);
   --panel-edge: rgba(255, 255, 255, 0.12);
   --accent: #f4a259;
   --accent-ink: #2a1505;
@@ -77,6 +77,7 @@ body.playing #game {
   border: 1px solid var(--panel-edge);
   border-radius: 14px;
   background: var(--panel);
+  backdrop-filter: blur(8px);
   text-align: center;
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
 }
@@ -133,4 +134,118 @@ body.playing #game {
 
 .panel button:hover {
   filter: brightness(1.08);
+}
+
+/* Hub: the screen between rounds. The tech tree fills everything under the bar. */
+#hub {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--page);
+}
+
+#hub[hidden] {
+  display: none;
+}
+
+.hub-bar {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--panel-edge);
+  background: var(--panel);
+}
+
+.hub-player {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.hub-name {
+  overflow: hidden;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hub-muted {
+  color: var(--ink-muted);
+  font-size: 14px;
+}
+
+.hub-money {
+  font-size: 26px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.hub-hint {
+  flex: 1;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.hub-save {
+  margin-left: auto;
+}
+
+.hub-tree {
+  flex: 1;
+  min-height: 0;
+}
+
+.primary-button {
+  padding: 10px 22px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font: inherit;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.primary-button:hover {
+  filter: brightness(1.08);
+}
+
+.primary-button.is-final {
+  box-shadow: 0 0 0 3px rgba(244, 162, 89, 0.35);
+}
+
+.end-panel {
+  width: min(420px, calc(100vw - 32px));
+}
+
+.end-panel h1 {
+  font-size: 30px;
+}
+
+.panel .end-note {
+  margin: 14px 0 0;
+  font-size: 13px;
+}
+
+.toast {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(520px, calc(100vw - 32px));
+  padding: 10px 16px;
+  border: 1px solid var(--panel-edge);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.toast[hidden] {
+  display: none;
 }
