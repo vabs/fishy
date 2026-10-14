@@ -114,9 +114,13 @@ export function createGameAudio(): GameAudio {
         if (event.type === "capture") {
           catches++;
           combo = Math.max(combo, event.combo);
+          if (event.golden) sfx.goldenCatch();
         } else if (event.type === "time-bonus") sfx.timeBonus();
         else if (event.type === "frenzy" && event.phase === "start") sfx.frenzy();
         else if (event.type === "fx") fx(event);
+        else if (event.type === "golden") sfx.shimmer();
+        else if (event.type === "golden-escape") sfx.plop();
+        else if (event.type === "chest-open") sfx.treasure();
       }
       sfx.catches(catches, combo);
       sfx.flush();

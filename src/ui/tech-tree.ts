@@ -114,6 +114,10 @@ const ICONS: Record<string, string> = {
   "frenzy.length":
     '<path d="M-11 9 q2.75 -3.5 5.5 0 t5.5 0 t5.5 0 t5.5 0 M-11 3 q2.75 -3.5 5.5 0 t5.5 0 t5.5 0 t5.5 0"/><path d="M0 -2.5 V-11 M-3.5 -7.5 L0 -11 L3.5 -7.5"/>',
   "frenzy.value": `<path d="M-11 8.5 q2.75 -3.5 5.5 0 t5.5 0 t5.5 0 t5.5 0"/><circle cy="-3.5" r="6.5"/><text ${FILLED} y="0" text-anchor="middle" font-size="9.5" font-weight="800">$</text>`,
+  "econ.goldRush": `<path d="${fishPath(-1.5, 4, 1.05)}"/><path ${FILLED} d="${starPoints(4, 6, 1.6, 6, -6.5)}"/>`,
+  "econ.goldLinger": `<circle cx="-2" cy="2.5" r="8.5"/><path d="M-2 -2.5 V2.5 L1.5 5"/><path ${FILLED} d="${starPoints(4, 5, 1.4, 7.5, -7.5)}"/>`,
+  "econ.treasureMap":
+    '<path d="M-10 -1.5 V9 H10 V-1.5 Z M-10 -1.5 V-4 Q-10 -9.5 0 -9.5 Q10 -9.5 10 -4 V-1.5 M-5 -9 V9 M5 -9 V9"/><rect x="-2" y="-3.5" width="4" height="5" rx="1" fill="currentColor" stroke="none"/>',
   "normal.weight": '<path stroke-width="3.2" d="M-7 9 V-8 M0 9 V-2 M7 9 V3"/>',
   weight: '<path stroke-width="3.2" d="M-7 9 V3 M0 9 V-2 M7 9 V-8"/>',
   value: COIN,

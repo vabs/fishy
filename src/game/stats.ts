@@ -99,6 +99,17 @@ export interface Stats {
   frenzySpawnMult: number;
   /** Value multiplier for fish caught while the Feeding Frenzy wave runs. */
   frenzyValueMult: number;
+  /**
+   * Golden fish per second of round time, from round 2. They arrive on their own clock, not as a
+   * share of spawns, so late-game spawn volume doesn't flood the sea with them.
+   */
+  goldenRate: number;
+  /** Value multiplier for a golden fish, on top of its type's value and every other multiplier. */
+  goldenValueMult: number;
+  /** Seconds a golden fish stays before it dives away. */
+  goldenSeconds: number;
+  /** Chance, 0 to 1, that a round from round 3 on has a treasure chest. The Final Round always has one. */
+  chestChance: number;
 
   fish: Record<FishKind, FishStats>;
   ability: Abilities;
@@ -130,6 +141,10 @@ export const BASE_STATS: Stats = {
   frenzySeconds: 6,
   frenzySpawnMult: 4,
   frenzyValueMult: 1.5,
+  goldenRate: 0.06,
+  goldenValueMult: 10,
+  goldenSeconds: 8,
+  chestChance: 0.3,
 
   fish: {
     normal: { rate: 1.25, rateMult: 1, valueMult: 1 },

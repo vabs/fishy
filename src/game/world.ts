@@ -1,5 +1,7 @@
+import { CHEST, chestInNet, chestTime, chestValue, launchChest, moveChest, type Chest, type ChestReward } from "./chest";
 import { FISH, FISH_KINDS, FISH_SPECS, type FishDef, type FishKind } from "./fish";
-import { pickWeighted, range, type Rng } from "./rng";
+import { GOLDEN, goldenSwim, newGoldenState, type GoldenState } from "./golden";
+import { createRng, pickWeighted, range, type Rng } from "./rng";
 import { spawnRate, type Stats } from "./stats";
 
 const TAU = Math.PI * 2;
@@ -57,6 +59,8 @@ export interface Fish {
   captured: boolean;
   /** The type this fish's catch is credited to in the round summary, when not its own (a Goober's burst fish). */
   credit?: FishKind;
+  /** Set on a golden fish: worth far more, flees the net and dives away if not caught in time. */
+  golden?: GoldenState;
   /** Free per-fish state for the type's hooks (timers, flags). */
   state: Record<string, number>;
 }
@@ -92,9 +96,15 @@ export interface FxEvent {
 
 export type WorldEvent =
   | { type: "tick"; x: number; y: number; radius: number; hits: number; crits: number }
-  | { type: "capture"; kind: FishKind; source: CaptureSource; x: number; y: number; value: number; combo: number }
+  | { type: "capture"; kind: FishKind; source: CaptureSource; x: number; y: number; value: number; combo: number; golden?: boolean }
   | { type: "time-bonus"; x: number; y: number; seconds: number }
   | { type: "frenzy"; phase: "start" | "end" }
+  /** A golden fish appeared. */
+  | { type: "golden"; kind: FishKind; x: number; y: number }
+  /** A golden fish wasn't caught in time and dived away. It's already gone from `fish`. */
+  | { type: "golden-escape"; kind: FishKind; x: number; y: number; heading: number }
+  /** The net opened the treasure chest. `value` is the money it paid. */
+  | { type: "chest-open"; x: number; y: number; value: number; reward: ChestReward }
   | FxEvent;
 
 export interface SpawnOptions {
@@ -104,7 +114,12 @@ export interface SpawnOptions {
   credit?: FishKind;
   /** Swim this way round the boat instead of a random one. */
   dir?: 1 | -1;
+  /** Make it a golden fish. */
+  golden?: boolean;
 }
+
+/** Round summary rows that aren't a fish type. */
+export type BonusKind = "golden" | "treasure";
 
 /** Facts about the round being played that aren't upgrades. */
 export interface RoundOptions {
@@ -146,6 +161,15 @@ export class World {
   caughtBy: Partial<Record<FishKind, number>> = {};
   /** Money earned this round per summary row, credited like `caughtBy`. */
   earnedBy: Partial<Record<FishKind, number>> = {};
+  /**
+   * Golden fish caught and treasure chests opened this round. They get their own summary rows, so
+   * golden fish aren't in `caughtBy`.
+   */
+  bonusCount: Record<BonusKind, number> = { golden: 0, treasure: 0 };
+  /** Money earned this round per bonus row. */
+  bonusEarned: Record<BonusKind, number> = { golden: 0, treasure: 0 };
+  /** The treasure chest floating across the sea, if there is one right now. */
+  chest: Chest | null = null;
   /** Captures in the current combo after the first. */
   combo = 0;
   pointer: Point | null = null;
@@ -166,6 +190,12 @@ export class World {
   private nextId = 1;
   /** Whether the frenzy wave ran last step, so its start and end are announced once each. */
   private frenzyRunning = false;
+  /** Random numbers for round events (golden fish, the chest), kept apart from `rng`. See `eventRng`. */
+  private eventStream: Rng | null = null;
+  /** Progress towards the next golden fish, in fish. */
+  private goldenProgress = 0;
+  /** Round time the chest appears at; null once it has, or if this round has none. */
+  private chestAt: number | null = null;
 
   constructor(
     readonly stats: Stats,
@@ -183,6 +213,11 @@ export class World {
       this.frenzy = null;
     }
     for (let i = 0; i < stats.startFish; i++) this.spawn();
+    // Events that can't happen this round (always so in round 1) draw nothing, so those rounds
+    // replay as they always have.
+    if (this.hasGolden) this.goldenProgress = this.eventRng();
+    const chestRound = this.round.final || (this.round.round >= CHEST.fromRound && stats.chestChance > 0);
+    if (chestRound) this.chestAt = chestTime(this.round, stats, this.eventRng);
   }
 
   get width(): number {
@@ -248,6 +283,17 @@ export class World {
       shot.y = Math.max(shot.radius, Math.min(height - shot.radius, shot.y * sy));
     }
     for (const kind of FISH_KINDS) FISH_SPECS[kind].onResize?.(this, sx, sy);
+    if (this.chest) {
+      const chest = this.chest;
+      chest.x *= sx;
+      chest.y *= sy;
+      const speed = Math.hypot(chest.vx, chest.vy);
+      const scaled = Math.hypot(chest.vx * sx, chest.vy * sy);
+      if (scaled > 0) {
+        chest.vx = (chest.vx * sx * speed) / scaled;
+        chest.vy = (chest.vy * sy * speed) / scaled;
+      }
+    }
   }
 
   /** Returns everything that happened since the last call, for effects and sound. */
@@ -267,7 +313,10 @@ export class World {
     this.announceFrenzy();
     for (const kind of FISH_KINDS) FISH_SPECS[kind].update?.(this, dt);
     this.moveFish(dt);
+    this.escapeGolden();
     this.spawnFish(dt);
+    this.spawnGoldenFish(dt);
+    this.floatChest(dt);
     this.tickNet(dt);
     this.processCaptures();
     this.timeLeft = Math.max(0, this.timeLeft - dt);
@@ -329,12 +378,23 @@ export class World {
       hitFlash: 0,
       captured: false,
       ...(options.credit ? { credit: options.credit } : {}),
+      ...(options.golden ? { golden: newGoldenState(this.stats) } : {}),
       state: {},
     };
     this.place(fish);
     this.fish.push(fish);
     FISH_SPECS[k].onSpawn?.(this, fish);
+    if (fish.golden) this.emit({ type: "golden", kind: k, x: fish.x, y: fish.y });
     return fish;
+  }
+
+  /**
+   * Adds a golden fish of a type picked in proportion to spawn rates, as a fresh spawn of its own.
+   * Undefined if nothing could spawn.
+   */
+  spawnGolden(at?: Point): Fish | undefined {
+    const kind = this.pickKind(this.eventRng);
+    return kind ? this.spawn(kind, at ? { golden: true, at } : { golden: true }) : undefined;
   }
 
   damage(fish: Fish, amount: number, source: CaptureSource): void {
@@ -363,7 +423,21 @@ export class World {
     return Math.max(this.stats.tickSeconds, STEP);
   }
 
-  private pickKind(): FishKind | undefined {
+  /** Golden fish swim in every round from GOLDEN.fromRound on. */
+  private get hasGolden(): boolean {
+    return this.stats.goldenRate > 0 && (this.round.final || this.round.round >= GOLDEN.fromRound);
+  }
+
+  /**
+   * The random stream for round events, seeded from `rng` the first time it's needed. Events draw
+   * from it, not from `rng`, so they don't shift every fish's random numbers when they happen.
+   */
+  private get eventRng(): Rng {
+    this.eventStream ??= createRng(Math.floor(this.rng() * 0x1_0000_0000));
+    return this.eventStream;
+  }
+
+  private pickKind(rng: Rng = this.rng): FishKind | undefined {
     const weights: Partial<Record<FishKind, number>> = {};
     for (const kind of FISH_KINDS) {
       const max = FISH[kind].maxOnScreen;
@@ -371,7 +445,7 @@ export class World {
       // Proportions only: the global spawn multiplier is the same for every type.
       weights[kind] = this.stats.fish[kind].rate * this.stats.fish[kind].rateMult;
     }
-    return pickWeighted(this.rng, weights);
+    return pickWeighted(rng, weights);
   }
 
   /**
@@ -404,7 +478,9 @@ export class World {
       const spec = FISH_SPECS[fish.kind];
       // Path length per radian at this point on the ellipse, so speed is px/s everywhere.
       const arc = fish.orbit * Math.hypot(rx * Math.sin(fish.angle), ry * Math.cos(fish.angle));
-      fish.angle += (fish.dir * spec.def.speed * fish.speedMult * dt) / Math.max(arc, 1);
+      // A golden fish's extra speed applies to this step only; speedMult belongs to the type.
+      const boost = fish.golden ? goldenSwim(this, fish, fish.golden, dt) : 1;
+      fish.angle += (fish.dir * spec.def.speed * fish.speedMult * boost * dt) / Math.max(arc, 1);
       fish.wobblePhase += spec.def.wobbleSpeed * dt;
       spec.move?.(this, fish, dt);
       const prevX = fish.x;
@@ -413,6 +489,27 @@ export class World {
       if (fish.x !== prevX || fish.y !== prevY) fish.heading = Math.atan2(fish.y - prevY, fish.x - prevX);
       fish.age += dt;
       fish.hitFlash = Math.max(0, fish.hitFlash - dt);
+    }
+  }
+
+  /** Golden fish whose time is up dive away, paying nothing. */
+  private escapeGolden(): void {
+    const escaping = (fish: Fish) => fish.golden !== undefined && !fish.captured && fish.golden.timeLeft <= 0;
+    if (!this.fish.some(escaping)) return;
+    for (const fish of this.fish) {
+      if (escaping(fish)) this.emit({ type: "golden-escape", kind: fish.kind, x: fish.x, y: fish.y, heading: fish.heading });
+    }
+    this.fish = this.fish.filter((fish) => !escaping(fish));
+  }
+
+  /** Golden fish arrive on their own clock, not as a share of spawns. */
+  private spawnGoldenFish(dt: number): void {
+    const rate = this.stats.goldenRate;
+    if (!this.hasGolden || rate <= 0) return;
+    this.goldenProgress += rate * dt;
+    while (this.goldenProgress >= 1) {
+      this.goldenProgress -= 1;
+      this.spawnGolden();
     }
   }
 
@@ -479,7 +576,49 @@ export class World {
       this.damage(fish, this.stats.netDamage * (crit ? this.stats.critMult : 1), "net");
       hits++;
     }
+    const chest = this.chest;
+    if (chest && chestInNet(chest, point, this.stats.netRadius)) {
+      const crit = this.eventRng() < this.stats.critChance;
+      if (crit) crits++;
+      hits++;
+      chest.hp -= this.stats.netDamage * (crit ? this.stats.critMult : 1);
+      chest.hitFlash = HIT_FLASH_SECONDS;
+      if (chest.hp <= 0) this.openChest(chest);
+    }
     this.emit({ type: "tick", x: point.x, y: point.y, radius: this.stats.netRadius, hits, crits });
+  }
+
+  /** The chest appears on time, drifts across, and is gone if it reaches the far edge unopened. */
+  private floatChest(dt: number): void {
+    if (this.chestAt !== null && this.elapsed >= this.chestAt) {
+      this.chestAt = null;
+      this.chest = launchChest(this._width, this._height, this.eventRng);
+    }
+    if (this.chest && !moveChest(this.chest, dt, this._width, this._height)) this.chest = null;
+  }
+
+  /**
+   * Pays out a chest the net has broken open: a lump sum (no combo, no ability bonus), plus either
+   * extra round time or golden fish spilling out.
+   */
+  private openChest(chest: Chest): void {
+    this.chest = null;
+    const value = chestValue(this.stats);
+    this.earned += value;
+    this.bonusCount.treasure++;
+    this.bonusEarned.treasure += value;
+    const reward: ChestReward = this.eventRng() < 0.5 ? "time" : "golden";
+    this.emit({ type: "chest-open", x: chest.x, y: chest.y, value, reward });
+    if (reward === "time") {
+      this.timeLeft += CHEST.bonusSeconds;
+      // Below the chest, clear of its payout floater.
+      this.emit({ type: "time-bonus", x: chest.x, y: chest.y + CHEST.size, seconds: CHEST.bonusSeconds });
+      return;
+    }
+    for (let i = 0; i < CHEST.goldenFish; i++) {
+      const a = (i / CHEST.goldenFish) * Math.PI * 2 + this.eventRng();
+      this.spawnGolden({ x: chest.x + Math.cos(a) * 16, y: chest.y + Math.sin(a) * 16 });
+    }
   }
 
   private processCaptures(): void {
@@ -489,19 +628,28 @@ export class World {
     for (const { fish, source } of this.captureQueue.splice(0, MAX_CAPTURES_PER_STEP)) {
       this.updateCombo();
       const sourceMult = source === "net" ? 1 : this.stats.abilityValueMult;
+      const goldenMult = fish.golden ? this.stats.goldenValueMult : 1;
       const value =
         FISH[fish.kind].value * this.stats.fish[fish.kind].valueMult * this.stats.valueMult * sourceMult * frenzyMult *
-        this.comboMult;
+        this.comboMult * goldenMult;
       this.earned += value;
       if (frenzy) {
         this.frenzyCaught++;
         this.frenzyEarned += value;
       }
       this.caught[fish.kind] = (this.caught[fish.kind] ?? 0) + 1;
-      const credit = fish.credit ?? fish.kind;
-      this.caughtBy[credit] = (this.caughtBy[credit] ?? 0) + 1;
-      this.earnedBy[credit] = (this.earnedBy[credit] ?? 0) + value;
-      this.emit({ type: "capture", kind: fish.kind, source, x: fish.x, y: fish.y, value, combo: this.combo });
+      if (fish.golden) {
+        this.bonusCount.golden++;
+        this.bonusEarned.golden += value;
+      } else {
+        const credit = fish.credit ?? fish.kind;
+        this.caughtBy[credit] = (this.caughtBy[credit] ?? 0) + 1;
+        this.earnedBy[credit] = (this.earnedBy[credit] ?? 0) + value;
+      }
+      this.emit({
+        type: "capture", kind: fish.kind, source, x: fish.x, y: fish.y, value, combo: this.combo,
+        ...(fish.golden ? { golden: true } : {}),
+      });
 
       FISH_SPECS[fish.kind].onCapture?.(this, fish, source);
       if (this.rng() < this.stats.twinChance) this.spawn(fish.kind);

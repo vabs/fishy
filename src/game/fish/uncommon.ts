@@ -30,8 +30,8 @@ const anchors = new WeakMap<World, Map<number, Fish>>();
  * fish that share one direction and speed and swim in a staggered two-lane formation.
  *
  * Rules:
- * - Only natural spawns (timed spawns and the starting fish) form schools. Members, twins and
- *   Goober burst fish swim alone.
+ * - Only natural spawns (timed spawns and the starting fish) form schools. Members, twins, Goober
+ *   burst fish and golden fish swim alone.
  * - If the leader is caught, the next member in line becomes the anchor and the rest keep formation.
  */
 export const uncommon: FishSpec = {
@@ -65,7 +65,7 @@ export const uncommon: FishSpec = {
   },
 
   onSpawn(world, fish) {
-    if (formingSchool > 0 || isByProduct(world)) return;
+    if (formingSchool > 0 || fish.golden || isByProduct(world)) return;
     formSchool(world, fish);
   },
 

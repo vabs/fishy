@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { chestValue } from "../chest";
 import { FISH, type FishKind } from "../fish";
 import { createRng } from "../rng";
 import { BASE_STATS } from "../stats";
-import { STEP, World, type Point } from "../world";
+import { STEP, World, type Fish, type Point } from "../world";
 import {
   TECH_NODES,
   applyUpgrades,
@@ -41,16 +42,20 @@ const RETARGET_SECONDS = 0.6;
 const MAX_ROUND_SECONDS = 240;
 const MAX_ROUNDS = 600;
 
-/** Steers toward the fish with the most other fish around it, preferring nearby targets. */
+/**
+ * Steers toward the fish with the most other fish around it, preferring nearby targets. Golden
+ * fish count at their golden value, and a treasure chest at its payout spread over its hit points.
+ */
 function botTarget(world: World, from: Point): Point | null {
   const reach = world.stats.netRadius * 0.8;
   let best: Point | null = null;
   let bestScore = -Infinity;
   const live = world.fish.filter((f) => !f.captured);
+  const worth = (f: Fish) => (FISH[f.kind].value * (f.golden ? world.stats.goldenValueMult : 1)) / FISH[f.kind].hp;
   for (const f of live) {
     let score = 0;
     for (const g of live) {
-      if (Math.hypot(g.x - f.x, g.y - f.y) <= reach) score += FISH[g.kind].value / FISH[g.kind].hp;
+      if (Math.hypot(g.x - f.x, g.y - f.y) <= reach) score += worth(g);
     }
     score -= Math.hypot(f.x - from.x, f.y - from.y) / 800;
     if (score > bestScore) {
@@ -58,15 +63,26 @@ function botTarget(world: World, from: Point): Point | null {
       best = { x: f.x, y: f.y };
     }
   }
+  const chest = world.chest;
+  if (chest) {
+    const score = chestValue(world.stats) / world.stats.valueMult / chest.maxHp - Math.hypot(chest.x - from.x, chest.y - from.y) / 800;
+    if (score > bestScore) best = { x: chest.x, y: chest.y };
+  }
   return best;
 }
 
 function playRound(
   upgrades: Upgrades,
-  round: number,
   seed: number,
-): { earned: number; seconds: number; caught: Partial<Record<FishKind, number>>; frenzyEarned: number } {
-  // The real round number, so every fifth round brings its Feeding Frenzy wave.
+  round: number,
+): {
+  earned: number;
+  seconds: number;
+  caught: Partial<Record<FishKind, number>>;
+  frenzyEarned: number;
+  golden: number;
+  treasure: number;
+} {
   const world = new World(applyUpgrades(BASE_STATS, upgrades), createRng(seed), WIDTH, HEIGHT, { round, final: false });
   let pointer: Point = { x: WIDTH / 2, y: HEIGHT / 2 };
   let target: Point | null = null;
@@ -88,7 +104,14 @@ function playRound(
     world.update(STEP);
     world.drainEvents();
   }
-  return { earned: world.earned, seconds: world.elapsed, caught: world.caught, frenzyEarned: world.frenzyEarned };
+  return {
+    earned: world.earned,
+    seconds: world.elapsed,
+    caught: world.caught,
+    frenzyEarned: world.frenzyEarned,
+    golden: world.bonusEarned.golden,
+    treasure: world.bonusEarned.treasure,
+  };
 }
 
 /** A visible fish unlock the bot is willing to save for: no more than this many rounds of income. */
@@ -125,17 +148,22 @@ describe.runIf(import.meta.env.PACING)("pacing", () => {
     let rounds = 0;
     let earned = 0;
     let frenzyEarned = 0;
+    let golden = 0;
+    let treasure = 0;
     const lines: string[] = [];
     const milestones: string[] = [];
     const maxedAt: string[] = [];
 
     while (!isTreeComplete(upgrades) && rounds < MAX_ROUNDS) {
       rounds++;
-      const round = playRound(upgrades, rounds, 1000 + rounds);
+      // The real round number, so Feeding Frenzy waves, golden fish and chests turn up as they do in a real game.
+      const round = playRound(upgrades, 1000 + rounds, rounds);
       roundSeconds += round.seconds;
       money += round.earned;
       earned += round.earned;
       frenzyEarned += round.frenzyEarned;
+      golden += round.golden;
+      treasure += round.treasure;
       const result = shop(upgrades, money, round.earned);
       upgrades = result.upgrades;
       money = result.money;
@@ -163,11 +191,13 @@ describe.runIf(import.meta.env.PACING)("pacing", () => {
     }
 
     const total = roundSeconds + rounds * HUB_SECONDS;
+    const share = (part: number) => `$${Math.round(part).toLocaleString("en-US")} (${((part / earned) * 100).toFixed(1)}%)`;
     console.log(
       [
         `Tree cost $${totalTreeCost().toLocaleString("en-US")}, ${TECH_NODES.length} nodes`,
         ...lines,
         ...milestones,
+        `Golden fish earned ${share(golden)}, treasure chests ${share(treasure)}`,
         "Last nodes maxed:",
         ...maxedAt.slice(-15),
         `Complete: ${isTreeComplete(upgrades)} after ${rounds} rounds`,

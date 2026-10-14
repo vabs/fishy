@@ -1,12 +1,13 @@
 import "./style.css";
 import { createGameAudio } from "./audio";
-import { formatCompactMoney, formatDuration, formatMoney, wholeShares } from "./format";
+import { formatCompactMoney, formatDuration, formatMoney } from "./format";
 import { FISH, FISH_KINDS, type FishKind } from "./game/fish";
 import { fishColors, onPaletteChange, setPalette } from "./game/palette";
 import { Renderer } from "./game/render";
-import { buildSprites } from "./game/shapes";
+import { buildChestSprites, buildSprites } from "./game/shapes";
 import { createRng } from "./game/rng";
 import { BASE_STATS, type Stats } from "./game/stats";
+import { summaryRows, type SummaryRow } from "./game/summary";
 import { TECH_NODES, applyUpgrades, buy, canBuy, isTreeComplete, refundRemovedLevels } from "./game/tech";
 import { STEP, World, isFrenzyRound, type Point } from "./game/world";
 import { createViewport } from "./game/viewport";
@@ -89,8 +90,8 @@ setPalette(loadDisplaySettings().colorBlind ? "colorBlind" : "standard");
 publishFishColors();
 onPaletteChange(() => {
   publishFishColors();
-  for (const icon of summary.rows.querySelectorAll<HTMLCanvasElement>("canvas[data-fish]")) {
-    paintFishIcon(icon, icon.dataset.fish as FishKind);
+  for (const icon of summary.rows.querySelectorAll<HTMLCanvasElement>("canvas[data-icon]")) {
+    paintRowIcon(icon, icon.dataset.icon as SummaryRow["key"]);
   }
 });
 
@@ -251,22 +252,20 @@ function endRound(finished: World): void {
     : "";
   summary.fish.textContent = finished.totalCaught.toLocaleString("en-US");
   summary.total.textContent = formatMoney(finished.earned);
-  const kinds = FISH_KINDS.filter((kind) => finished.caughtBy[kind]).sort(
-    (a, b) => (finished.earnedBy[b] ?? 0) - (finished.earnedBy[a] ?? 0),
-  );
-  const shares = wholeShares(kinds.map((kind) => finished.earnedBy[kind] ?? 0), finished.earned);
-  summary.rows.replaceChildren(...kinds.map((kind, i) => summaryRow(kind, finished.caughtBy[kind] ?? 0, shares[i] ?? 0)));
-  summary.table.hidden = kinds.length === 0;
-  summary.empty.hidden = kinds.length > 0;
+  const rows = summaryRows(finished);
+  summary.rows.replaceChildren(...rows.map(summaryRow));
+  summary.table.hidden = rows.length === 0;
+  summary.empty.hidden = rows.length > 0;
   showOnly("summary");
 }
 
-function summaryRow(kind: FishKind, caught: number, earned: number): HTMLTableRowElement {
+function summaryRow({ key, count: caught, earned }: SummaryRow): HTMLTableRowElement {
   const row = document.createElement("tr");
   const name = document.createElement("td");
   const label = document.createElement("span");
   label.className = "summary-fish";
-  label.append(fishIcon(kind), FISH[kind].name);
+  const title = key === "golden" ? "Golden fish" : key === "treasure" ? "Treasure" : FISH[key].name;
+  label.append(rowIcon(key), title);
   name.append(label);
   const count = document.createElement("td");
   count.textContent = caught.toLocaleString("en-US");
@@ -276,27 +275,30 @@ function summaryRow(kind: FishKind, caught: number, earned: number): HTMLTableRo
   return row;
 }
 
-/** A small full-colour picture of a fish type, fitted into 40 × 26 px. */
-function fishIcon(kind: FishKind): HTMLCanvasElement {
+/** A small full-colour picture for a summary row (a fish, a golden fish, the chest), fitted into 40 × 26 px. */
+function rowIcon(key: SummaryRow["key"]): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
-  canvas.dataset.fish = kind;
+  canvas.dataset.icon = key;
   canvas.setAttribute("aria-hidden", "true");
-  paintFishIcon(canvas, kind);
+  paintRowIcon(canvas, key);
   return canvas;
 }
 
-/** Draws (or redraws, after a palette change) a fish icon in the active palette. */
-function paintFishIcon(canvas: HTMLCanvasElement, kind: FishKind): void {
+/** Draws (or redraws, after a palette change) a summary row's icon in the active palette. */
+function paintRowIcon(canvas: HTMLCanvasElement, key: SummaryRow["key"]): void {
   const dpr = window.devicePixelRatio || 1;
-  const sprite = buildSprites(kind, dpr);
+  const picture =
+    key === "golden" ? buildSprites("normal", dpr).golden
+    : key === "treasure" ? buildChestSprites(dpr).full
+    : buildSprites(key, dpr).full;
   canvas.width = Math.round(40 * dpr);
   canvas.height = Math.round(26 * dpr);
   const ctx = canvas.getContext("2d");
   if (ctx) {
-    const scale = Math.min(canvas.width / sprite.full.width, canvas.height / sprite.full.height);
-    const w = sprite.full.width * scale;
-    const h = sprite.full.height * scale;
-    ctx.drawImage(sprite.full, (canvas.width - w) / 2, (canvas.height - h) / 2, w, h);
+    const scale = Math.min(canvas.width / picture.width, canvas.height / picture.height);
+    const w = picture.width * scale;
+    const h = picture.height * scale;
+    ctx.drawImage(picture, (canvas.width - w) / 2, (canvas.height - h) / 2, w, h);
   }
 }
 
