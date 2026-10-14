@@ -192,6 +192,8 @@ describe("Monster capture", () => {
     expect(whirlpool).toHaveLength(3);
     const implode = events.find((e): e is FxEvent => e.type === "fx" && e.name === "implode");
     expect(implode?.points).toHaveLength(3);
+    // The Star's own capture effect fired through the normal queue.
+    expect(world.shots.filter((s) => s.kind === "star")).toHaveLength(BASE_STATS.ability.star.count);
   });
 
   it("plays out the same for the same seed", () => {
