@@ -10,7 +10,7 @@ import { degreeToHz, type Key } from "./theory";
  * note instead of a pile of them.
  */
 
-type SfxKind = "catch" | "current" | "bounce" | "launch" | "implode" | "burst" | "bonus" | "chime";
+type SfxKind = "catch" | "current" | "bounce" | "launch" | "implode" | "burst" | "bonus" | "chime" | "frenzy";
 
 const LIMITS: Record<SfxKind, VoiceLimit> = {
   catch: { gap: 0.04, voices: 4 },
@@ -21,6 +21,7 @@ const LIMITS: Record<SfxKind, VoiceLimit> = {
   burst: { gap: 0.08, voices: 2 },
   bonus: { gap: 0.15, voices: 1 },
   chime: { gap: 0 },
+  frenzy: { gap: 0 },
 };
 const MAX_VOICES = 8;
 /** Catches still waiting for a voice after this long are dropped: they'd sound late. */
@@ -30,9 +31,13 @@ const CATCH_LENGTH = 0.16;
 /** Gap between the notes of an Electric current, s: one note per jump. */
 const CURRENT_STEP = 0.045;
 const MAX_CURRENT_NOTES = 9;
+/** Gap between the notes of the Feeding Frenzy sting's run, s. */
+const FRENZY_STEP = 0.06;
 
 /** Peak levels, before the effects volume. */
-const LEVEL = { catch: 0.24, current: 0.07, bounce: 0.06, launch: 0.09, implode: 0.13, burst: 0.12, bonus: 0.07, chime: 0.11 };
+const LEVEL = {
+  catch: 0.24, current: 0.07, bounce: 0.06, launch: 0.09, implode: 0.13, burst: 0.12, bonus: 0.07, chime: 0.11, frenzy: 0.1,
+};
 
 function pickOne(items: readonly number[]): number {
   return items[Math.floor(Math.random() * items.length)] ?? items[0] ?? 0;
@@ -163,6 +168,21 @@ export class Sfx {
     const voice = this.start("bonus", 0.3);
     if (!voice) return;
     bell(voice.ctx, voice.out, voice.time, this.hz(12), LEVEL.bonus, 0.45);
+  }
+
+  /**
+   * A Feeding Frenzy wave rolling in: a rising whoosh of surf under a quick run up the scale that
+   * lands on two bells. Always plays, however busy the catches are.
+   */
+  frenzy(): void {
+    const degrees = [3, 4, 5, 6, 7, 8];
+    const voice = this.start("frenzy", 1.3, true);
+    if (!voice) return;
+    const { ctx, time, out } = voice;
+    noise(ctx, out, { time, gain: LEVEL.frenzy * 1.2, attack: 0.3, decay: 0.8, filter: "bandpass", from: 250, to: 2400, q: 0.9 });
+    run(ctx, out, { time, freqs: degrees.map((degree) => this.hz(degree)), stepSeconds: FRENZY_STEP, gain: LEVEL.frenzy });
+    const land = time + degrees.length * FRENZY_STEP;
+    for (const degree of [10, 12]) bell(ctx, out, land, this.hz(degree), LEVEL.frenzy * 0.7, 1.1);
   }
 
   /** A purchase in the tech tree: a two-note chime, or a little arpeggio for unlocking a fish. */
