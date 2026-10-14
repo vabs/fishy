@@ -3,7 +3,7 @@ import { FISH, type FishColors, type FishKind } from "./fish";
 /*
  * Fish colours. "standard" is each type's own body and fin colours (FishDef). "colorBlind" swaps in
  * colours that stay apart under protanopia, deuteranopia and tritanopia (palette.test.ts measures
- * them), so a fish's colour backs up its outline instead of being one more thing to squint at.
+ * them), so a fish's colour backs up its outline as a second cue.
  *
  * Render and UI code read the active colours here and pass them to fish art; the simulation never
  * imports this module. The player's choice is stored apart from the save (src/ui/display-settings.ts).
@@ -15,8 +15,9 @@ export type PaletteName = "standard" | "colorBlind";
  * Body and fin colours for the colour-blind palette. Each type keeps its hue family where it can,
  * but the bodies are spread over lightness as well as hue, since lightness survives every kind of
  * colour blindness: white Star, lemon Electric, pale Rare and mint Uncommon at the top, raspberry
- * Goober at the bottom. Electric (yellow) and Star (white) no longer share a colour. Searched with
- * the Okabe–Ito set as a starting point; fins keep the standard palette's step down from the body.
+ * Goober at the bottom. Electric (yellow) and Star (white) no longer share a colour. The plain
+ * Okabe–Ito set only reaches 11 in palette.test.ts with eight types, so these were found by a search
+ * within each type's hue family, scored the same way. Fins keep the standard step down from the body.
  */
 export const COLOR_BLIND_FISH: Record<FishKind, { body: string; fin: string }> = {
   normal: { body: "#da893a", fin: "#b55a00" },
