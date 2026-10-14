@@ -4,7 +4,7 @@ A round-based fish catching game for the browser. A boat sits in the middle of t
 swim around it. Your cursor carries a net that catches fish on its own; spend what you earn on
 upgrades between rounds, unlock stranger fish, and work your way to the Final Round.
 
-**Play:** https://vabs.github.io/fishy/ (desktop browsers)
+**Play:** https://fishy.vaibhavsomani.com/ (desktop browsers)
 
 ![A round in progress: a large net shows fish in colour while the rest of the sea is dark silhouettes; star fish shoot across the water and a shark-shaped whirlpool gathers fish](docs/screenshots/gameplay.png)
 
@@ -23,10 +23,9 @@ upgrades between rounds, unlock stranger fish, and work your way to the Final Ro
 
 ![The tech tree: upgrade nodes spread out from a boat in branches for the net, time, economy, spawning and each fish type](docs/screenshots/tech-tree.png)
 
-| | |
-| --- | --- |
-| ![First visit: a dialog asks for your name](docs/screenshots/name-prompt.png) | ![Round summary with fish caught, money earned and the bank balance](docs/screenshots/summary.png) |
-| ![End screen thanking the player, with lifetime stats and a Play Again button](docs/screenshots/end.png) | |
+| First visit | After a round | The end |
+| --- | --- | --- |
+| ![A dialog asks for your name](docs/screenshots/name-prompt.png) | ![Round summary with fish caught, money earned and the bank balance](docs/screenshots/summary.png) | ![End screen thanking the player, with lifetime stats and a Play Again button](docs/screenshots/end.png) |
 
 ## Fish
 
