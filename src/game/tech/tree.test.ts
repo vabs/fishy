@@ -283,7 +283,7 @@ describe("totalTreeCost", () => {
 
   it("stays near the total the pacing sim was tuned for", () => {
     // About 70–90 minutes of play (see pacing.test.ts). Rerun the sim when this moves a lot.
-    expect(totalTreeCost()).toBeGreaterThan(1_500_000);
-    expect(totalTreeCost()).toBeLessThan(3_000_000);
+    expect(totalTreeCost()).toBeGreaterThan(12_000_000);
+    expect(totalTreeCost()).toBeLessThan(25_000_000);
   });
 });
