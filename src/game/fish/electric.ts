@@ -1,8 +1,8 @@
 import type { Effect } from "../fx";
 import { range } from "../rng";
 import type { Fish, FxEvent, Point, World } from "../world";
-import { shade } from "./color";
-import type { FishDef, FishSpec } from "./types";
+import { channels, shade } from "./color";
+import type { FishColors, FishDef, FishSpec } from "./types";
 
 const TAU = Math.PI * 2;
 
@@ -100,8 +100,8 @@ export const electric: FishSpec = {
     world.emit({ type: "fx", kind: "electric", name: "current", x: fish.x, y: fish.y, points });
   },
 
-  fx(event, add) {
-    if (event.name === "current") add(currentEffect(event));
+  fx(event, add, colors) {
+    if (event.name === "current") add(currentEffect(event, colors));
   },
 };
 
@@ -150,7 +150,7 @@ function clamp(value: number, min: number, max: number): number {
 // Outline
 
 /** Long eel: thin, gently wavy body, rounded snout, one fin running along the back to a pointed tail. */
-function drawEel(ctx: CanvasRenderingContext2D, def: FishDef): void {
+function drawEel(ctx: CanvasRenderingContext2D, def: FishDef, colors: FishColors): void {
   const l = def.size;
   const tailX = -0.5 * l;
   const headX = 0.47 * l;
@@ -173,7 +173,7 @@ function drawEel(ctx: CanvasRenderingContext2D, def: FishDef): void {
   const taper = (s: number) => Math.pow(Math.min(1, (s + 0.03) / 0.2), 0.7);
   const backFin = (s: number) => 0.042 * l * smoothstep(0.72, 0.42, s) * taper(s);
   const bellyFin = (s: number) => 0.03 * l * smoothstep(0.46, 0.26, s) * taper(s);
-  ctx.fillStyle = def.fin;
+  ctx.fillStyle = colors.fin;
   ctx.beginPath();
   for (let i = 0; i <= steps; i++) {
     const s = 0.74 * (1 - i / steps);
@@ -193,9 +193,9 @@ function drawEel(ctx: CanvasRenderingContext2D, def: FishDef): void {
 
   // Body, shaded darker along the back.
   const body = ctx.createLinearGradient(0, -0.09 * l, 0, 0.09 * l);
-  body.addColorStop(0, shade(def.body, -0.22));
-  body.addColorStop(0.45, def.body);
-  body.addColorStop(1, shade(def.body, 0.35));
+  body.addColorStop(0, shade(colors.body, -0.22));
+  body.addColorStop(0.45, colors.body);
+  body.addColorStop(1, shade(colors.body, 0.35));
   ctx.fillStyle = body;
   ctx.beginPath();
   for (let i = 0; i <= steps; i++) {
@@ -213,7 +213,7 @@ function drawEel(ctx: CanvasRenderingContext2D, def: FishDef): void {
   ctx.fill();
 
   // Zigzag stripe along the flank, like a spark.
-  ctx.strokeStyle = def.fin;
+  ctx.strokeStyle = colors.fin;
   ctx.lineWidth = 0.022 * l;
   ctx.lineJoin = "round";
   ctx.beginPath();
@@ -226,7 +226,7 @@ function drawEel(ctx: CanvasRenderingContext2D, def: FishDef): void {
   ctx.stroke();
 
   // Small side fin behind the head.
-  ctx.fillStyle = def.fin;
+  ctx.fillStyle = colors.fin;
   ctx.beginPath();
   ctx.ellipse(spineX(0.8), spineY(0.8) + 0.03 * l, 0.04 * l, 0.018 * l, -0.5, 0, TAU);
   ctx.fill();
@@ -241,7 +241,7 @@ function drawEel(ctx: CanvasRenderingContext2D, def: FishDef): void {
   ctx.beginPath();
   ctx.arc(eye.x + 0.005 * l, eye.y - 0.006 * l, 0.007 * l, 0, TAU);
   ctx.fill();
-  ctx.strokeStyle = shade(def.body, -0.45);
+  ctx.strokeStyle = shade(colors.body, -0.45);
   ctx.lineWidth = 0.012 * l;
   ctx.beginPath();
   const mouth = at(0.995, 0.012 * l);
@@ -263,7 +263,24 @@ function smoothstep(from: number, to: number, x: number): number {
 /** One jagged line per jump (or per spark, for a current with nowhere to go), with its forks. */
 type Bolt = { main: Point[]; forks: Point[][] }[];
 
-function currentEffect(event: FxEvent): Effect {
+/** The lightning's colours as "r, g, b": yellows in the standard palette, the eel's own in another. */
+interface BoltTones {
+  halo: string;
+  band: string;
+  /** Flash gradient: hot centre, middle, faded edge. */
+  centre: string;
+  middle: string;
+  edge: string;
+}
+
+function currentEffect(event: FxEvent, colors: FishColors): Effect {
+  const tones: BoltTones = {
+    halo: channels(colors.tint("#ffc414")),
+    band: channels(colors.tint("#ffea5a")),
+    centre: channels(colors.tint("#ffffe6")),
+    middle: channels(colors.tint("#ffdc3c")),
+    edge: channels(colors.tint("#ffc814")),
+  };
   const points = event.points && event.points.length > 0 ? event.points : [{ x: event.x, y: event.y }];
   const jumpCount = points.length - 1;
   const perJump = Math.min(BOLT_JUMP_SECONDS, (BOLT_SECONDS * 0.4) / Math.max(jumpCount, 1));
@@ -289,15 +306,15 @@ function currentEffect(event: FxEvent): Effect {
       ctx.lineJoin = "round";
 
       // Flashes where the current starts and wherever it lands.
-      glow(ctx, points[0]!, 24 * (1 - t * 0.5), alpha);
-      for (let i = 1; i <= Math.min(shown, jumpCount); i++) glow(ctx, points[i]!, 15, alpha);
+      glow(ctx, tones, points[0]!, 24 * (1 - t * 0.5), alpha);
+      for (let i = 1; i <= Math.min(shown, jumpCount); i++) glow(ctx, tones, points[i]!, 15, alpha);
 
       const main = visible.map((b) => b.main);
       const all = [...main, ...visible.flatMap((b) => b.forks)];
       // Yellow halo and band in normal blending so they stay yellow over blue water, then a white-hot core.
       // A broad translucent band supplies the halo without a per-current shadow blur.
-      stroke(ctx, all, `rgba(255, 196, 20, ${0.5 * alpha})`, 8);
-      stroke(ctx, all, `rgba(255, 234, 90, ${0.95 * alpha})`, 3);
+      stroke(ctx, all, `rgba(${tones.halo}, ${0.5 * alpha})`, 8);
+      stroke(ctx, all, `rgba(${tones.band}, ${0.95 * alpha})`, 3);
       ctx.globalCompositeOperation = "lighter";
       stroke(ctx, main, `rgba(255, 255, 255, ${alpha})`, 1.2);
     },
@@ -314,11 +331,11 @@ function stroke(ctx: CanvasRenderingContext2D, lines: Point[][], color: string, 
   ctx.stroke();
 }
 
-function glow(ctx: CanvasRenderingContext2D, p: Point, radius: number, alpha: number): void {
+function glow(ctx: CanvasRenderingContext2D, tones: BoltTones, p: Point, radius: number, alpha: number): void {
   const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, radius);
-  g.addColorStop(0, `rgba(255, 255, 230, ${0.95 * alpha})`);
-  g.addColorStop(0.35, `rgba(255, 220, 60, ${0.6 * alpha})`);
-  g.addColorStop(1, "rgba(255, 200, 20, 0)");
+  g.addColorStop(0, `rgba(${tones.centre}, ${0.95 * alpha})`);
+  g.addColorStop(0.35, `rgba(${tones.middle}, ${0.6 * alpha})`);
+  g.addColorStop(1, `rgba(${tones.edge}, 0)`);
   ctx.fillStyle = g;
   ctx.beginPath();
   ctx.arc(p.x, p.y, radius, 0, TAU);

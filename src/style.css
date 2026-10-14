@@ -548,8 +548,12 @@ body.playing #game {
     display: grid;
   }
 
+  .hub-display,
   .hub-save {
     grid-column: 1 / -1;
+  }
+
+  .hub-save {
     margin-left: 0;
   }
 

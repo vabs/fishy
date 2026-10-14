@@ -2,6 +2,7 @@ import "./style.css";
 import { createGameAudio } from "./audio";
 import { formatCompactMoney, formatDuration, formatMoney, wholeShares } from "./format";
 import { FISH, FISH_KINDS, type FishKind } from "./game/fish";
+import { fishColors, onPaletteChange, setPalette } from "./game/palette";
 import { Renderer } from "./game/render";
 import { buildSprites } from "./game/shapes";
 import { createRng } from "./game/rng";
@@ -11,6 +12,8 @@ import { STEP, World, type Point } from "./game/world";
 import { createViewport } from "./game/viewport";
 import { createSave, loadSave, recordRound, resetProgress, sanitizeUpgrades, writeSave, type SaveData } from "./save";
 import { mountAudioControls } from "./ui/audio-controls";
+import { mountDisplayControls } from "./ui/display-controls";
+import { loadDisplaySettings } from "./ui/display-settings";
 import { showIntro } from "./ui/intro";
 import { promptForName } from "./ui/name-prompt";
 import { mountSaveControls } from "./ui/save-controls";
@@ -74,10 +77,21 @@ const toolsToggle = element<HTMLButtonElement>("#hub-tools-toggle");
 const hubTools = element("#hub-tools");
 const touchLayout = window.matchMedia("(any-pointer: coarse)");
 
+// The palette is a per-device choice, stored apart from the save. Blocked storage means standard.
+setPalette(loadDisplaySettings().colorBlind ? "colorBlind" : "standard");
+publishFishColors();
+onPaletteChange(() => {
+  publishFishColors();
+  for (const icon of summary.rows.querySelectorAll<HTMLCanvasElement>("canvas[data-fish]")) {
+    paintFishIcon(icon, icon.dataset.fish as FishKind);
+  }
+});
+
 const renderer = new Renderer(canvas);
 const audio = createGameAudio();
 mountAudioControls(element("#hud-audio"), audio, "hud");
 mountAudioControls(element("#hub-audio"), audio, "hub");
+mountDisplayControls(element("#hub-display"));
 let save: SaveData;
 let world: World | null = null;
 /** Stats of the round being played, or the base stats between rounds. */
@@ -244,12 +258,19 @@ function summaryRow(kind: FishKind, caught: number, earned: number): HTMLTableRo
 
 /** A small full-colour picture of a fish type, fitted into 40 × 26 px. */
 function fishIcon(kind: FishKind): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
+  canvas.dataset.fish = kind;
+  canvas.setAttribute("aria-hidden", "true");
+  paintFishIcon(canvas, kind);
+  return canvas;
+}
+
+/** Draws (or redraws, after a palette change) a fish icon in the active palette. */
+function paintFishIcon(canvas: HTMLCanvasElement, kind: FishKind): void {
   const dpr = window.devicePixelRatio || 1;
   const sprite = buildSprites(kind, dpr);
-  const canvas = document.createElement("canvas");
   canvas.width = Math.round(40 * dpr);
   canvas.height = Math.round(26 * dpr);
-  canvas.setAttribute("aria-hidden", "true");
   const ctx = canvas.getContext("2d");
   if (ctx) {
     const scale = Math.min(canvas.width / sprite.full.width, canvas.height / sprite.full.height);
@@ -257,7 +278,11 @@ function fishIcon(kind: FishKind): HTMLCanvasElement {
     const h = sprite.full.height * scale;
     ctx.drawImage(sprite.full, (canvas.width - w) / 2, (canvas.height - h) / 2, w, h);
   }
-  return canvas;
+}
+
+/** Fish body colours as CSS variables (--fish-normal, ...) for the tech tree and how-to-play slides. */
+function publishFishColors(): void {
+  for (const kind of FISH_KINDS) document.documentElement.style.setProperty(`--fish-${kind}`, fishColors(kind).body);
 }
 
 function showEnd(): void {

@@ -54,12 +54,15 @@ const ROOT_SIZE = 64;
 /** Keep touch nodes readable without expanding hit areas into their neighbours. */
 const TOUCH_MIN_SCALE = 48 / NODE_SIZE;
 
+/** Fish lanes take the fish's colour in the player's palette, published as --fish-<kind> by main.ts. */
 const LANE_TINTS: Record<LaneKey, string> = {
   net: "#9ad8ff",
   time: "#cdb8ff",
   spawning: "#6fe3c8",
   economy: "#ffd98a",
-  ...(Object.fromEntries(Object.entries(FISH).map(([kind, def]) => [kind, def.body])) as Record<keyof typeof FISH, string>),
+  ...(Object.fromEntries(
+    Object.entries(FISH).map(([kind, def]) => [kind, `var(--fish-${kind}, ${def.body})`]),
+  ) as Record<keyof typeof FISH, string>),
 };
 
 /** Points of a star centred on (cx, cy), first point straight up. */
@@ -258,7 +261,8 @@ export function mountTechTree(container: HTMLElement, options: { onBuy(nodeId: s
   // Lane labels sit just outside the lane's outermost visible ring.
   const labels = new Map<LaneKey, SVGTextElement>();
   for (const lane of layout.lanes) {
-    const text = svg("text", { class: "tech-label", fill: LANE_TINTS[lane.key] });
+    // A style, not the fill attribute: attributes can't read CSS variables.
+    const text = svg("text", { class: "tech-label", style: `fill: ${LANE_TINTS[lane.key]}` });
     text.textContent = lane.label;
     labelLayer.append(text);
     labels.set(lane.key, text);

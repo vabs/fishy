@@ -1,6 +1,7 @@
 import type { Effect } from "../fx";
 import type { Fish, FxEvent, World } from "../world";
-import type { FishDef, FishKind, FishSpec } from "./types";
+import { channels } from "./color";
+import type { FishColors, FishDef, FishKind, FishSpec } from "./types";
 
 const TAU = Math.PI * 2;
 
@@ -118,8 +119,8 @@ export const monster: FishSpec = {
 
   drawWorld: drawVortex,
 
-  fx(event, add) {
-    if (event.name === "implode") add(implosion(event));
+  fx(event, add, colors) {
+    if (event.name === "implode") add(implosion(event, colors));
   },
 };
 
@@ -283,8 +284,9 @@ function smoothstep(t: number): number {
 }
 
 /** A faint turning ring and spiral arms, so the vortex radius can be read. */
-function drawVortex(ctx: CanvasRenderingContext2D, world: World, time: number): void {
+function drawVortex(ctx: CanvasRenderingContext2D, world: World, time: number, colors: FishColors): void {
   const radius = world.stats.ability.monster.pullRadius;
+  const swirl = channels(colors.tint("#cdf0ff"));
   for (const fish of world.fish) {
     if (fish.kind !== "monster" || fish.captured) continue;
     const alpha = Math.min(1, fish.age / SPIN_UP_SECONDS);
@@ -294,7 +296,7 @@ function drawVortex(ctx: CanvasRenderingContext2D, world: World, time: number): 
 
     ctx.rotate(SPIN * time * 0.35);
     ctx.lineWidth = 2;
-    ctx.strokeStyle = `rgba(205, 240, 255, ${0.16 * alpha})`;
+    ctx.strokeStyle = `rgba(${swirl}, ${0.16 * alpha})`;
     for (let i = 0; i < 6; i++) {
       const a = (i * TAU) / 6;
       ctx.beginPath();
@@ -304,7 +306,7 @@ function drawVortex(ctx: CanvasRenderingContext2D, world: World, time: number): 
 
     ctx.rotate(SPIN * time * 0.25);
     ctx.lineWidth = 1.5;
-    ctx.strokeStyle = `rgba(205, 240, 255, ${0.1 * alpha})`;
+    ctx.strokeStyle = `rgba(${swirl}, ${0.1 * alpha})`;
     for (let i = 0; i < 3; i++) {
       const a0 = (i * TAU) / 3;
       ctx.beginPath();
@@ -328,8 +330,12 @@ interface Streak {
 }
 
 /** Captured fish (and some water) streak into the centre along the spiral, then a flash. */
-function implosion(event: FxEvent): Effect {
+function implosion(event: FxEvent, colors: FishColors): Effect {
   const { x, y } = event;
+  // Pale water blues in the standard palette, turned with the Monster in another; "r, g, b".
+  const ring = channels(colors.tint("#c8eeff"));
+  const water = channels(colors.tint("#aae1ff"));
+  const glowEdge = channels(colors.tint("#b4e6ff"));
   const radius = event.radius ?? 140;
   const streaks: Streak[] = (event.points ?? []).map((p) => ({
     r: Math.hypot(p.x - x, p.y - y),
@@ -353,7 +359,7 @@ function implosion(event: FxEvent): Effect {
       ctx.lineCap = "round";
 
       ctx.lineWidth = 2;
-      ctx.strokeStyle = `rgba(200, 238, 255, ${0.55 * (1 - travel)})`;
+      ctx.strokeStyle = `rgba(${ring}, ${0.55 * (1 - travel)})`;
       ctx.beginPath();
       ctx.arc(x, y, radius * (1 - travel * travel), 0, TAU);
       ctx.stroke();
@@ -369,7 +375,7 @@ function implosion(event: FxEvent): Effect {
           else ctx.lineTo(px, py);
         }
         const fade = 1 - t * 0.7;
-        ctx.strokeStyle = s.fish ? `rgba(255, 248, 220, ${0.9 * fade})` : `rgba(170, 225, 255, ${0.6 * fade})`;
+        ctx.strokeStyle = s.fish ? `rgba(255, 248, 220, ${0.9 * fade})` : `rgba(${water}, ${0.6 * fade})`;
         ctx.lineWidth = (s.fish ? 4 : 2) * (1 - travel * 0.5);
         ctx.stroke();
         if (s.fish && travel < 1) {
@@ -386,7 +392,7 @@ function implosion(event: FxEvent): Effect {
         const r = 12 + 36 * f;
         const glow = ctx.createRadialGradient(x, y, 0, x, y, r);
         glow.addColorStop(0, `rgba(255, 255, 255, ${0.8 * (1 - f)})`);
-        glow.addColorStop(1, "rgba(180, 230, 255, 0)");
+        glow.addColorStop(1, `rgba(${glowEdge}, 0)`);
         ctx.fillStyle = glow;
         ctx.beginPath();
         ctx.arc(x, y, r, 0, TAU);
@@ -397,11 +403,11 @@ function implosion(event: FxEvent): Effect {
 }
 
 /** Huge shark: pointed snout, tall swept dorsal fin, crescent tail. Faces +x. */
-function drawShark(ctx: CanvasRenderingContext2D, def: FishDef): void {
+function drawShark(ctx: CanvasRenderingContext2D, def: FishDef, colors: FishColors): void {
   const l = def.size;
   const p = (x: number, y: number): [number, number] => [x * l, y * l];
 
-  ctx.fillStyle = def.fin;
+  ctx.fillStyle = colors.fin;
   // Crescent tail
   ctx.beginPath();
   ctx.moveTo(...p(-0.31, -0.035));
@@ -445,13 +451,13 @@ function drawShark(ctx: CanvasRenderingContext2D, def: FishDef): void {
   body.bezierCurveTo(...p(-0.24, 0.07), ...p(-0.1, 0.115), ...p(0.06, 0.112));
   body.bezierCurveTo(...p(0.26, 0.11), ...p(0.43, 0.07), ...p(0.53, 0.01));
   body.closePath();
-  ctx.fillStyle = def.body;
+  ctx.fillStyle = colors.body;
   ctx.fill(body);
 
   // Pale belly
   ctx.save();
   ctx.clip(body);
-  ctx.fillStyle = "#dfe6ee";
+  ctx.fillStyle = colors.tint("#dfe6ee");
   ctx.beginPath();
   ctx.ellipse(...p(0.08, 0.11), 0.46 * l, 0.07 * l, 0, 0, TAU);
   ctx.fill();

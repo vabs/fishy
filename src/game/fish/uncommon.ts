@@ -1,6 +1,6 @@
 import { range } from "../rng";
 import type { Fish, World } from "../world";
-import type { FishDef, FishSpec } from "./types";
+import type { FishColors, FishDef, FishSpec } from "./types";
 
 const TAU = Math.PI * 2;
 
@@ -177,11 +177,11 @@ function slotFor(area: SwimArea, anchor: Fish, back: number, side: number): { an
 }
 
 /** Angelfish: tall diamond body, long dorsal and anal fins sweeping back, small fan tail. */
-function drawAngelfish(ctx: CanvasRenderingContext2D, def: FishDef): void {
+function drawAngelfish(ctx: CanvasRenderingContext2D, def: FishDef, colors: FishColors): void {
   const l = def.size;
   const p = (x: number, y: number): [number, number] => [x * l, y * l];
 
-  ctx.fillStyle = def.fin;
+  ctx.fillStyle = colors.fin;
   // Dorsal fin: rises from the top of the body and trails far back.
   ctx.beginPath();
   ctx.moveTo(...p(0.06, -0.26));
@@ -204,7 +204,7 @@ function drawAngelfish(ctx: CanvasRenderingContext2D, def: FishDef): void {
   ctx.closePath();
   ctx.fill();
   // Thin pelvic streamers.
-  ctx.strokeStyle = def.fin;
+  ctx.strokeStyle = colors.fin;
   ctx.lineWidth = 0.035 * l;
   ctx.lineCap = "round";
   ctx.beginPath();
@@ -213,7 +213,7 @@ function drawAngelfish(ctx: CanvasRenderingContext2D, def: FishDef): void {
   ctx.stroke();
 
   // Body: a tall diamond with rounded corners.
-  ctx.fillStyle = def.body;
+  ctx.fillStyle = colors.body;
   ctx.beginPath();
   bodyPath(ctx, l);
   ctx.fill();
@@ -223,7 +223,7 @@ function drawAngelfish(ctx: CanvasRenderingContext2D, def: FishDef): void {
   ctx.beginPath();
   bodyPath(ctx, l);
   ctx.clip();
-  ctx.fillStyle = def.fin;
+  ctx.fillStyle = colors.fin;
   for (const x of [0.13, -0.05]) {
     ctx.beginPath();
     ctx.ellipse(x * l, 0, 0.035 * l, 0.4 * l, 0, 0, TAU);

@@ -1,4 +1,4 @@
-import type { FishDef, FishSpec } from "./types";
+import type { FishColors, FishDef, FishSpec } from "./types";
 
 const TAU = Math.PI * 2;
 
@@ -19,10 +19,10 @@ export const normal: FishSpec = {
 };
 
 /** Oval body, forked tail, small back fin. */
-function drawNormal(ctx: CanvasRenderingContext2D, def: FishDef): void {
+function drawNormal(ctx: CanvasRenderingContext2D, def: FishDef, colors: FishColors): void {
   const l = def.size;
 
-  ctx.fillStyle = def.fin;
+  ctx.fillStyle = colors.fin;
   // Forked tail
   ctx.beginPath();
   ctx.moveTo(-0.26 * l, 0);
@@ -38,13 +38,13 @@ function drawNormal(ctx: CanvasRenderingContext2D, def: FishDef): void {
   ctx.closePath();
   ctx.fill();
 
-  ctx.fillStyle = def.body;
+  ctx.fillStyle = colors.body;
   ctx.beginPath();
   ctx.ellipse(0.06 * l, 0, 0.36 * l, 0.2 * l, 0, 0, TAU);
   ctx.fill();
 
   // Side fin
-  ctx.fillStyle = def.fin;
+  ctx.fillStyle = colors.fin;
   ctx.beginPath();
   ctx.ellipse(0.08 * l, 0.06 * l, 0.08 * l, 0.035 * l, -0.5, 0, TAU);
   ctx.fill();

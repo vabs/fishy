@@ -8,7 +8,7 @@ import { star } from "./star";
 import type { FishDef, FishKind, FishSpec } from "./types";
 import { uncommon } from "./uncommon";
 
-export type { DrawShape, FishDef, FishKind, FishSpec } from "./types";
+export type { DrawShape, FishColors, FishDef, FishKind, FishSpec } from "./types";
 
 export const FISH_SPECS: Record<FishKind, FishSpec> = {
   normal,
