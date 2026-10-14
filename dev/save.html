@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fishy: save dev harness</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐟</text></svg>"
+    />
+    <style>
+      /* Dev only: a stand-in hub so the save UI can be tried without the game. */
+      .dev-tools {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 8px;
+        margin-bottom: 18px;
+      }
+      #save-controls {
+        padding-top: 14px;
+        border-top: 1px solid var(--panel-edge);
+      }
+      #dump {
+        position: fixed;
+        top: 16px;
+        left: 16px;
+        max-width: 300px;
+        max-height: calc(100vh - 32px);
+        margin: 0;
+        overflow: auto;
+        color: var(--ink-muted);
+        font-size: 11px;
+      }
+    </style>
+  </head>
+  <body>
+    <pre id="dump"></pre>
+    <section class="panel" id="hub" hidden>
+      <h2 id="hub-name"></h2>
+      <dl>
+        <dt>Round</dt>
+        <dd id="hub-round"></dd>
+        <dt>Money</dt>
+        <dd id="hub-money"></dd>
+        <dt>Upgrades</dt>
+        <dd id="hub-upgrades"></dd>
+      </dl>
+      <div class="dev-tools">
+        <button id="play-round" type="button">Play round</button>
+        <button id="buy-upgrade" type="button">Buy upgrade</button>
+        <button id="new-save" type="button">New save</button>
+      </div>
+      <div id="save-controls"></div>
+    </section>
+    <script type="module" src="./save.ts"></script>
+  </body>
+</html>
