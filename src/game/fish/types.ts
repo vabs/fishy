@@ -16,14 +16,29 @@ export interface FishDef {
   wobble: number;
   /** How fast it drifts in and out, radians/s. */
   wobbleSpeed: number;
+  /** Body and fin colours in the standard palette. Art draws with the FishColors it is given instead. */
   body: string;
   fin: string;
   /** Most of this type allowed in the water at once. Unlimited when missing. */
   maxOnScreen?: number;
 }
 
+/**
+ * The colours a fish type is drawn in under the player's palette (see src/game/palette.ts). Art and
+ * effects are handed these rather than reading the palette, so the simulation never depends on it.
+ */
+export interface FishColors {
+  body: string;
+  fin: string;
+  /**
+   * Another of this type's standard colours ("#rrggbb": a belly, a glow, a trail) in the active
+   * palette. Unchanged in the standard palette; otherwise turned the way the body colour was.
+   */
+  tint(color: string): string;
+}
+
 /** Draws a fish centred on the origin, facing +x, `def.size` px long. Must fit inside the spec's box. */
-export type DrawShape = (ctx: CanvasRenderingContext2D, def: FishDef) => void;
+export type DrawShape = (ctx: CanvasRenderingContext2D, def: FishDef, colors: FishColors) => void;
 
 /**
  * Everything that makes a fish type what it is. Hooks are optional; a type with none just orbits.
@@ -49,7 +64,7 @@ export interface FishSpec {
   onResize?(world: World, scaleX: number, scaleY: number): void;
 
   /** Draws world-level visuals for this type above the fish, e.g. a vortex or projectiles. */
-  drawWorld?(ctx: CanvasRenderingContext2D, world: World, time: number): void;
+  drawWorld?(ctx: CanvasRenderingContext2D, world: World, time: number, colors: FishColors): void;
   /** Turns this type's fx events into short-lived visual effects. */
-  fx?(event: FxEvent, add: (effect: Effect) => void): void;
+  fx?(event: FxEvent, add: (effect: Effect) => void, colors: FishColors): void;
 }

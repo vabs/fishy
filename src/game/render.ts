@@ -1,6 +1,7 @@
 import { formatMoney } from "../format";
 import { FISH, FISH_KINDS, FISH_SPECS, MAX_FISH_SIZE, type FishKind } from "./fish";
 import type { Effect } from "./fx";
+import { fishColors, getPalette, type PaletteName } from "./palette";
 import { buildSprites, type FishSprites } from "./shapes";
 import type { Stats } from "./stats";
 import type { Fish, FxEvent, Point, World, WorldEvent } from "./world";
@@ -85,6 +86,8 @@ export class Renderer {
   private offsetY = 0;
   private background: HTMLCanvasElement | null = null;
   private readonly sprites = new Map<FishKind, FishSprites>();
+  /** Palette the cached sprites were drawn in. */
+  private palette: PaletteName = getPalette();
   private floaters: Floater[] = [];
   private pulses: Pulse[] = [];
   private particles: Particle[] = [];
@@ -134,7 +137,7 @@ export class Renderer {
         } else if (this.floaters.length < MAX_FLOATERS) {
           this.floaters.push({ x: event.x, y: event.y, text: "", value: event.value, color: COLORS.floater, age: 0 });
         }
-        const color = FISH[event.kind].body;
+        const color = fishColors(event.kind).body;
         const count = Math.min(PARTICLES_PER_CAPTURE, MAX_PARTICLES - this.particles.length);
         for (let i = 0; i < count; i++) {
           const angle = Math.random() * TAU;
@@ -187,12 +190,16 @@ export class Renderer {
     const visual = { ...event, points: (event.points ?? []).slice(0, limit) };
     FISH_SPECS[event.kind].fx?.(visual, (effect) => {
       if (this.effects.length < MAX_EFFECTS) this.effects.push({ effect, age: 0, event: visual });
-    });
+    }, fishColors(event.kind));
   }
 
   draw({ world, pointer, stats, finger }: Scene, dt: number): void {
     this.time += dt;
     this.advanceEffects(dt);
+    if (this.palette !== getPalette()) {
+      this.palette = getPalette();
+      this.sprites.clear();
+    }
 
     const ctx = this.ctx;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -207,7 +214,7 @@ export class Renderer {
 
     const netActive = world && !world.over && pointer;
     if (netActive) this.drawLens(world, pointer, stats.netRadius);
-    if (world) for (const kind of FISH_KINDS) FISH_SPECS[kind].drawWorld?.(ctx, world, this.time);
+    if (world) for (const kind of FISH_KINDS) FISH_SPECS[kind].drawWorld?.(ctx, world, this.time, fishColors(kind));
     this.drawEffects();
     if (netActive) this.drawNet(pointer, stats.netRadius, world.tickProgress);
     if (netActive && finger) this.drawFinger(finger, pointer);

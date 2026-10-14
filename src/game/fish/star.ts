@@ -2,7 +2,8 @@ import type { Effect } from "../fx";
 import { FishGrid } from "../fish-grid";
 import { range } from "../rng";
 import type { FxEvent, Shot, World } from "../world";
-import type { FishDef, FishSpec } from "./types";
+import { channels } from "./color";
+import type { FishColors, FishDef, FishSpec } from "./types";
 import { MAX_FISH_SIZE } from "./index";
 
 const TAU = Math.PI * 2;
@@ -63,10 +64,10 @@ export const star: FishSpec = {
   update: moveShots,
   drawWorld,
 
-  fx(event, add) {
-    if (event.name === "launch") add(burst(event, 0.35, 1));
-    else if (event.name === "bounce") add(burst(event, 0.25, 0.55));
-    else if (event.name === "fade") add(fade(event));
+  fx(event, add, colors) {
+    if (event.name === "launch") add(burst(event, 0.35, 1, toneOf(colors)));
+    else if (event.name === "bounce") add(burst(event, 0.25, 0.55, toneOf(colors)));
+    else if (event.name === "fade") add(fade(event, toneOf(colors)));
   },
 };
 
@@ -206,23 +207,64 @@ function starPath(ctx: CanvasRenderingContext2D, outer: number, inner: number, r
 }
 
 /** Five-point star, one point forward. */
-function drawStarFish(ctx: CanvasRenderingContext2D, def: FishDef): void {
+function drawStarFish(ctx: CanvasRenderingContext2D, def: FishDef, colors: FishColors): void {
   const outer = def.size * 0.46;
   const fill = ctx.createRadialGradient(0, 0, 0, 0, 0, outer);
-  fill.addColorStop(0, "#fffbe6");
-  fill.addColorStop(0.5, def.body);
-  fill.addColorStop(1, def.fin);
+  fill.addColorStop(0, colors.tint("#fffbe6"));
+  fill.addColorStop(0.5, colors.body);
+  fill.addColorStop(1, colors.fin);
   starPath(ctx, outer, outer * 0.48);
   ctx.fillStyle = fill;
   ctx.fill();
   ctx.lineJoin = "round";
   ctx.lineWidth = def.size * 0.04;
-  ctx.strokeStyle = def.fin;
+  ctx.strokeStyle = colors.fin;
   ctx.stroke();
 }
 
+/**
+ * The glow, trail and shot colours: golds in the standard palette, the Star's own colour in another.
+ * Colours used with a changing alpha are "r, g, b".
+ */
+interface StarTones {
+  /** Around a live Star. */
+  halo: string;
+  /** Around a shot, and a spent one. */
+  shine: string;
+  /** Where every glow fades out. */
+  edge: string;
+  trail: string;
+  /** Launch and bounce flashes and sparks. */
+  flash: string;
+  spark: string;
+  /** A shot's face and outline, as colours. */
+  face: string;
+  rim: string;
+}
+
+const tones = new WeakMap<FishColors, StarTones>();
+
+function toneOf(colors: FishColors): StarTones {
+  let tone = tones.get(colors);
+  if (!tone) {
+    tone = {
+      halo: channels(colors.tint("#ffd666")),
+      shine: channels(colors.tint("#ffe28c")),
+      edge: channels(colors.tint("#ffc850")),
+      trail: channels(colors.tint("#ffc446")),
+      flash: channels(colors.tint("#ffecaa")),
+      spark: channels(colors.tint("#ffdc78")),
+      face: colors.tint("#fff6cc"),
+      rim: colors.tint("#ffb703"),
+    };
+    tones.set(colors, tone);
+  }
+  return tone;
+}
+
 /** Glow around live Stars, and the shots: trail, glow, spinning star. Drawn above the fish. */
-function drawWorld(ctx: CanvasRenderingContext2D, world: World, time: number): void {
+function drawWorld(ctx: CanvasRenderingContext2D, world: World, time: number, colors: FishColors): void {
+  const tone = toneOf(colors);
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
   for (const fish of world.fish) {
@@ -230,11 +272,11 @@ function drawWorld(ctx: CanvasRenderingContext2D, world: World, time: number): v
     const pulse = 0.75 + 0.25 * Math.sin(time * 5 + fish.id);
     const r = star.def.size * 1.3;
     const alpha = 0.32 * pulse * Math.min(1, fish.age / 0.4);
-    glow(ctx, fish.x, fish.y, r, `rgba(255, 214, 102, ${alpha})`);
+    glow(ctx, tone, fish.x, fish.y, r, `rgba(${tone.halo}, ${alpha})`);
   }
 
   for (const shot of world.shots) {
-    if (shot.kind === "star") glow(ctx, shot.x, shot.y, shot.radius * 2.6, "rgba(255, 226, 140, 0.7)");
+    if (shot.kind === "star") glow(ctx, tone, shot.x, shot.y, shot.radius * 2.6, `rgba(${tone.shine}, 0.7)`);
   }
   ctx.restore();
 
@@ -248,7 +290,7 @@ function drawWorld(ctx: CanvasRenderingContext2D, world: World, time: number): v
       const x = fold(shot.x - shot.vx * back, left, right);
       const y = fold(shot.y - shot.vy * back, top, bottom);
       const f = 1 - k / (TRAIL_DOTS + 1);
-      ctx.fillStyle = `rgba(255, 196, 70, ${0.6 * f})`;
+      ctx.fillStyle = `rgba(${tone.trail}, ${0.6 * f})`;
       ctx.beginPath();
       ctx.arc(x, y, shot.radius * (0.25 + 0.5 * f), 0, TAU);
       ctx.fill();
@@ -260,20 +302,20 @@ function drawWorld(ctx: CanvasRenderingContext2D, world: World, time: number): v
     ctx.save();
     ctx.translate(shot.x, shot.y);
     starPath(ctx, shot.radius * 1.05, shot.radius * 0.5, shot.age * SHOT_SPIN);
-    ctx.fillStyle = "#fff6cc";
+    ctx.fillStyle = tone.face;
     ctx.fill();
     ctx.lineJoin = "round";
     ctx.lineWidth = 2;
-    ctx.strokeStyle = "#ffb703";
+    ctx.strokeStyle = tone.rim;
     ctx.stroke();
     ctx.restore();
   }
 }
 
-function glow(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, color: string): void {
+function glow(ctx: CanvasRenderingContext2D, tone: StarTones, x: number, y: number, r: number, color: string): void {
   const g = ctx.createRadialGradient(x, y, 0, x, y, r);
   g.addColorStop(0, color);
-  g.addColorStop(1, "rgba(255, 200, 80, 0)");
+  g.addColorStop(1, `rgba(${tone.edge}, 0)`);
   ctx.fillStyle = g;
   ctx.beginPath();
   ctx.arc(x, y, r, 0, TAU);
@@ -281,7 +323,7 @@ function glow(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, co
 }
 
 /** A flash with sparks, for launches and wall hits. */
-function burst(event: FxEvent, life: number, scale: number): Effect {
+function burst(event: FxEvent, life: number, scale: number, tone: StarTones): Effect {
   const { x, y } = event;
   const sparks = Array.from({ length: Math.round(10 * scale) }, () => ({
     a: Math.random() * TAU,
@@ -291,8 +333,8 @@ function burst(event: FxEvent, life: number, scale: number): Effect {
     life,
     draw(ctx, t) {
       ctx.globalCompositeOperation = "lighter";
-      glow(ctx, x, y, (14 + 22 * t) * scale, `rgba(255, 236, 170, ${0.8 * (1 - t)})`);
-      ctx.strokeStyle = `rgba(255, 220, 120, ${1 - t})`;
+      glow(ctx, tone, x, y, (14 + 22 * t) * scale, `rgba(${tone.flash}, ${0.8 * (1 - t)})`);
+      ctx.strokeStyle = `rgba(${tone.spark}, ${1 - t})`;
       ctx.lineWidth = 2;
       ctx.lineCap = "round";
       for (const s of sparks) {
@@ -308,7 +350,7 @@ function burst(event: FxEvent, life: number, scale: number): Effect {
 }
 
 /** A spent shot shrinks and fades where it last hit the edge. */
-function fade(event: FxEvent): Effect {
+function fade(event: FxEvent, tone: StarTones): Effect {
   const { x, y } = event;
   const radius = event.radius ?? 14;
   const spin = Math.random() * TAU;
@@ -316,12 +358,12 @@ function fade(event: FxEvent): Effect {
     life: 0.45,
     draw(ctx, t) {
       ctx.globalCompositeOperation = "lighter";
-      glow(ctx, x, y, radius * (2.6 + t), `rgba(255, 226, 140, ${0.6 * (1 - t)})`);
+      glow(ctx, tone, x, y, radius * (2.6 + t), `rgba(${tone.shine}, ${0.6 * (1 - t)})`);
       ctx.globalCompositeOperation = "source-over";
       ctx.globalAlpha = 1 - t;
       ctx.translate(x, y);
       starPath(ctx, radius * 1.05 * (1 - 0.6 * t), radius * 0.5 * (1 - 0.6 * t), spin + t * 3);
-      ctx.fillStyle = "#fff6cc";
+      ctx.fillStyle = tone.face;
       ctx.fill();
     },
   };

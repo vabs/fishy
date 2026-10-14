@@ -1,7 +1,7 @@
 import type { Effect } from "../fx";
 import type { Fish, FxEvent, Point } from "../world";
-import { shade } from "./color";
-import type { FishDef, FishSpec } from "./types";
+import { channels, shade } from "./color";
+import type { FishColors, FishDef, FishSpec } from "./types";
 
 const TAU = Math.PI * 2;
 
@@ -144,8 +144,8 @@ export const epic: FishSpec = {
     world.emit({ type: "fx", kind: "epic", name: "net", x: fish.x, y: fish.y, radius: range, points: caught });
   },
 
-  fx(event, add) {
-    if (event.name === "net") add(netEffect(event));
+  fx(event, add, colors) {
+    if (event.name === "net") add(netEffect(event, colors));
   },
 };
 
@@ -171,12 +171,12 @@ function clamp(value: number, min: number, max: number): number {
 // Outline
 
 /** Anglerfish: big head with a gaping, toothy mouth, small tail, and a lure dangling in front. */
-function drawAnglerfish(ctx: CanvasRenderingContext2D, def: FishDef): void {
+function drawAnglerfish(ctx: CanvasRenderingContext2D, def: FishDef, colors: FishColors): void {
   const l = def.size;
   ctx.lineJoin = "round";
 
   // Tail fan.
-  ctx.fillStyle = def.fin;
+  ctx.fillStyle = colors.fin;
   ctx.beginPath();
   ctx.moveTo(-0.27 * l, -0.05 * l);
   ctx.lineTo(-0.5 * l, -0.2 * l);
@@ -195,7 +195,7 @@ function drawAnglerfish(ctx: CanvasRenderingContext2D, def: FishDef): void {
 
   // Lure: a stalk arching forward from the forehead to a glowing bulb in front of the mouth.
   const bulb = { x: 0.55 * l, y: -0.18 * l };
-  ctx.strokeStyle = def.fin;
+  ctx.strokeStyle = colors.fin;
   ctx.lineWidth = 0.05 * l;
   ctx.lineCap = "round";
   ctx.beginPath();
@@ -205,9 +205,9 @@ function drawAnglerfish(ctx: CanvasRenderingContext2D, def: FishDef): void {
 
   // Body: tall rounded head tapering to the tail, with the mouth cut in as a wide wedge.
   const body = ctx.createLinearGradient(0, -0.32 * l, 0, 0.3 * l);
-  body.addColorStop(0, shade(def.body, -0.15));
-  body.addColorStop(0.55, def.body);
-  body.addColorStop(1, shade(def.body, 0.3));
+  body.addColorStop(0, shade(colors.body, -0.15));
+  body.addColorStop(0.55, colors.body);
+  body.addColorStop(1, shade(colors.body, 0.3));
   ctx.fillStyle = body;
   ctx.beginPath();
   ctx.moveTo(-0.3 * l, -0.055 * l);
@@ -243,7 +243,7 @@ function drawAnglerfish(ctx: CanvasRenderingContext2D, def: FishDef): void {
   teeth({ x: 0.25 * l, y: 0.03 * l }, { x: 0.46 * l, y: 0.068 * l }, 3, -1);
 
   // Side fin.
-  ctx.fillStyle = def.fin;
+  ctx.fillStyle = colors.fin;
   ctx.beginPath();
   ctx.ellipse(-0.03 * l, 0.11 * l, 0.08 * l, 0.04 * l, 0.5, 0, TAU);
   ctx.fill();
@@ -273,7 +273,12 @@ function drawAnglerfish(ctx: CanvasRenderingContext2D, def: FishDef): void {
 // ---------------------------------------------------------------------------------------------
 // Cast-net effect (render only, so Math.random is fine here)
 
-function netEffect(event: FxEvent): Effect {
+function netEffect(event: FxEvent, colors: FishColors): Effect {
+  // Lavender in the standard palette, the Epic's own colour in another; "r, g, b" for rgba().
+  const flashEdge = channels(colors.tint("#c8a0ff"));
+  const mesh = channels(colors.tint("#e2ceff"));
+  const rim = channels(colors.tint("#f4eaff"));
+  const rimGlow = channels(colors.body);
   const centre = { x: event.x, y: event.y };
   const radius = event.radius ?? 90;
   const targets = event.points ?? [];
@@ -305,14 +310,14 @@ function netEffect(event: FxEvent): Effect {
       // Flash where the Epic was caught.
       const flash = ctx.createRadialGradient(centre.x, centre.y, 0, centre.x, centre.y, 28);
       flash.addColorStop(0, `rgba(255, 255, 255, ${0.8 * (1 - cast)})`);
-      flash.addColorStop(1, "rgba(200, 160, 255, 0)");
+      flash.addColorStop(1, `rgba(${flashEdge}, 0)`);
       ctx.fillStyle = flash;
       ctx.beginPath();
       ctx.arc(centre.x, centre.y, 28, 0, TAU);
       ctx.fill();
 
       // Mesh: spokes and inner rings.
-      ctx.strokeStyle = `rgba(226, 206, 255, ${0.7 * alpha})`;
+      ctx.strokeStyle = `rgba(${mesh}, ${0.7 * alpha})`;
       ctx.lineWidth = 1;
       ctx.beginPath();
       for (let i = 0; i < spokes; i++) {
@@ -327,9 +332,9 @@ function netEffect(event: FxEvent): Effect {
       ctx.stroke();
 
       // Rim, glowing, with sinker weights at each spoke.
-      ctx.strokeStyle = `rgba(244, 234, 255, ${alpha})`;
+      ctx.strokeStyle = `rgba(${rim}, ${alpha})`;
       ctx.lineWidth = 2.2;
-      ctx.shadowColor = "rgba(176, 124, 242, 0.95)";
+      ctx.shadowColor = `rgba(${rimGlow}, 0.95)`;
       ctx.shadowBlur = 10;
       ctx.beginPath();
       ring(ctx, r);
@@ -337,7 +342,7 @@ function netEffect(event: FxEvent): Effect {
       // The glow belongs to the rim, not fourteen separate dots and every captured fish.
       ctx.shadowBlur = 0;
       ctx.shadowColor = "transparent";
-      ctx.fillStyle = `rgba(244, 234, 255, ${alpha})`;
+      ctx.fillStyle = `rgba(${rim}, ${alpha})`;
       ctx.beginPath();
       for (let i = 0; i < spokes; i++) {
         const p = at(spin + (i * TAU) / spokes, r);

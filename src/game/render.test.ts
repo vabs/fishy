@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FISH_SPECS } from "./fish";
+import { fishColors } from "./palette";
 import { Renderer } from "./render";
 import { BASE_STATS } from "./stats";
 import { createViewport } from "./viewport";
@@ -93,7 +94,7 @@ describe("burst rendering", () => {
 
   it("uses blur for only one Epic rim paint", () => {
     const { ctx, paints } = canvasRecorder();
-    FISH_SPECS.epic.fx!(net(), (effect) => effect.draw(ctx, 0.6));
+    FISH_SPECS.epic.fx!(net(), (effect) => effect.draw(ctx, 0.6), fishColors("epic"));
     expect(paints.filter((p) => p.blur > 0)).toHaveLength(1);
   });
 
@@ -116,7 +117,7 @@ describe("burst rendering", () => {
 
   it("draws Electric lightning without expensive shadow paints", () => {
     const { ctx, paints } = canvasRecorder();
-    FISH_SPECS.electric.fx!({ type: "fx", kind: "electric", name: "current", x: 200, y: 200, points: [{ x: 200, y: 200 }, { x: 250, y: 200 }] }, (effect) => effect.draw(ctx, 0.6));
+    FISH_SPECS.electric.fx!({ type: "fx", kind: "electric", name: "current", x: 200, y: 200, points: [{ x: 200, y: 200 }, { x: 250, y: 200 }] }, (effect) => effect.draw(ctx, 0.6), fishColors("electric"));
     expect(paints.filter((p) => p.blur > 0)).toHaveLength(0);
   });
 });

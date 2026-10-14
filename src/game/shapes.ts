@@ -1,4 +1,5 @@
-import { FISH_SPECS, type FishKind } from "./fish";
+import { FISH_SPECS, type FishColors, type FishKind } from "./fish";
+import { fishColors } from "./palette";
 
 /** Colour of every fish outside the net. Types are told apart by outline alone. */
 const SILHOUETTE = "#071c2b";
@@ -17,10 +18,11 @@ export interface FishSprites {
 }
 
 /**
- * Renders a fish once at device resolution, then derives the silhouette and hit-flash versions
- * from it. Later, sprites can replace the shape functions and keep the rest.
+ * Renders a fish once at device resolution, in the active palette unless `colors` says otherwise,
+ * then derives the silhouette and hit-flash versions from it. Rebuild after a palette change. Later,
+ * sprites can replace the shape functions and keep the rest.
  */
-export function buildSprites(kind: FishKind, dpr: number): FishSprites {
+export function buildSprites(kind: FishKind, dpr: number, colors: FishColors = fishColors(kind)): FishSprites {
   const spec = FISH_SPECS[kind];
   const box = spec.box ?? DEFAULT_BOX;
   const width = spec.def.size * box.width;
@@ -31,7 +33,7 @@ export function buildSprites(kind: FishKind, dpr: number): FishSprites {
   const ctx = context(full);
   ctx.scale(dpr, dpr);
   ctx.translate(width / 2, height / 2);
-  spec.shape(ctx, spec.def);
+  spec.shape(ctx, spec.def, colors);
   return { full, silhouette: tint(full, SILHOUETTE), flash: tint(full, FLASH), width, height };
 }
 

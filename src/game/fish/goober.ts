@@ -1,7 +1,7 @@
 import type { Effect } from "../fx";
 import { range } from "../rng";
 import type { FxEvent } from "../world";
-import type { FishDef, FishKind, FishSpec } from "./types";
+import type { FishColors, FishDef, FishKind, FishSpec } from "./types";
 
 const TAU = Math.PI * 2;
 
@@ -96,20 +96,20 @@ export const goober: FishSpec = {
     world.emit({ type: "fx", kind: "goober", name: "burst", x: fish.x, y: fish.y, radius: spread + goober.def.size / 2 });
   },
 
-  fx(event, add) {
-    if (event.name === "burst") add(burst(event));
+  fx(event, add, colors) {
+    if (event.name === "burst") add(burst(event, colors));
   },
 };
 
 /** A pop: a ring rushing out, droplets flung away, and a quick flash in the middle. */
-function burst(event: FxEvent): Effect {
+function burst(event: FxEvent, colors: FishColors): Effect {
   const reach = event.radius ?? 30;
   const drops = Array.from({ length: 12 }, () => ({
     angle: Math.random() * TAU,
     dist: reach * (0.7 + Math.random() * 0.6),
     size: 1.5 + Math.random() * 2,
   }));
-  const { body, fin } = goober.def;
+  const { body, fin } = colors;
   return {
     life: BURST_FX_SECONDS,
     draw(ctx, t) {
@@ -145,13 +145,13 @@ function burst(event: FxEvent): Effect {
 }
 
 /** Round puffer: a ball covered in short spines, a little fan tail, a big eye and a pouty mouth. */
-function drawPuffer(ctx: CanvasRenderingContext2D, def: FishDef): void {
+function drawPuffer(ctx: CanvasRenderingContext2D, def: FishDef, colors: FishColors): void {
   const l = def.size;
   const p = (x: number, y: number): [number, number] => [x * l, y * l];
   const cx = 0.04;
   const radius = 0.29;
 
-  ctx.fillStyle = def.fin;
+  ctx.fillStyle = colors.fin;
   // Little fan tail.
   ctx.beginPath();
   ctx.moveTo(...p(-0.22, 0));
@@ -176,7 +176,7 @@ function drawPuffer(ctx: CanvasRenderingContext2D, def: FishDef): void {
   }
 
   // Body
-  ctx.fillStyle = def.body;
+  ctx.fillStyle = colors.body;
   ctx.beginPath();
   ctx.arc(...p(cx, 0), radius * l, 0, TAU);
   ctx.fill();
@@ -186,11 +186,11 @@ function drawPuffer(ctx: CanvasRenderingContext2D, def: FishDef): void {
   ctx.beginPath();
   ctx.arc(...p(cx, 0), radius * l, 0, TAU);
   ctx.clip();
-  ctx.fillStyle = "#ffd0dc";
+  ctx.fillStyle = colors.tint("#ffd0dc");
   ctx.beginPath();
   ctx.ellipse(...p(cx + 0.02, 0.2), 0.3 * l, 0.17 * l, 0, 0, TAU);
   ctx.fill();
-  ctx.fillStyle = def.fin;
+  ctx.fillStyle = colors.fin;
   ctx.globalAlpha = 0.5;
   for (const [x, y] of [
     [-0.12, -0.12],
@@ -205,13 +205,13 @@ function drawPuffer(ctx: CanvasRenderingContext2D, def: FishDef): void {
   ctx.restore();
 
   // Side fin
-  ctx.fillStyle = def.fin;
+  ctx.fillStyle = colors.fin;
   ctx.beginPath();
   ctx.ellipse(...p(-0.02, 0.04), 0.07 * l, 0.04 * l, 0.5, 0, TAU);
   ctx.fill();
 
   // Mouth
-  ctx.strokeStyle = def.fin;
+  ctx.strokeStyle = colors.fin;
   ctx.lineWidth = 0.03 * l;
   ctx.beginPath();
   ctx.arc(...p(0.31, 0.05), 0.03 * l, 0, TAU);

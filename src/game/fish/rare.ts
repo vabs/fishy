@@ -1,6 +1,6 @@
 import type { Effect } from "../fx";
 import type { Fish, FxEvent, World } from "../world";
-import type { FishDef, FishSpec } from "./types";
+import type { FishColors, FishDef, FishSpec } from "./types";
 
 const TAU = Math.PI * 2;
 
@@ -117,11 +117,11 @@ function pierceBurst(event: FxEvent): Effect {
 }
 
 /** Bulky, deep body, a row of spines along the back, a square-cut tail. */
-function drawRare(ctx: CanvasRenderingContext2D, def: FishDef): void {
+function drawRare(ctx: CanvasRenderingContext2D, def: FishDef, colors: FishColors): void {
   const l = def.size;
   const p = (x: number, y: number): [number, number] => [x * l, y * l];
 
-  ctx.fillStyle = def.fin;
+  ctx.fillStyle = colors.fin;
   // Spiked back fin: tall spines joined by a lower membrane.
   ctx.beginPath();
   ctx.moveTo(...p(-0.26, -0.12));
@@ -157,7 +157,7 @@ function drawRare(ctx: CanvasRenderingContext2D, def: FishDef): void {
   ctx.fill();
 
   // Body: deep and heavy at the front, tapering to the tail.
-  ctx.fillStyle = def.body;
+  ctx.fillStyle = colors.body;
   ctx.beginPath();
   bodyPath(ctx, l);
   ctx.fill();
@@ -167,7 +167,7 @@ function drawRare(ctx: CanvasRenderingContext2D, def: FishDef): void {
   ctx.beginPath();
   bodyPath(ctx, l);
   ctx.clip();
-  ctx.fillStyle = def.fin;
+  ctx.fillStyle = colors.fin;
   ctx.globalAlpha = 0.45;
   ctx.beginPath();
   ctx.ellipse(...p(0, -0.24), 0.42 * l, 0.12 * l, 0, 0, TAU);
@@ -186,14 +186,14 @@ function drawRare(ctx: CanvasRenderingContext2D, def: FishDef): void {
   ctx.restore();
 
   // Gill cover, bulging towards the tail.
-  ctx.strokeStyle = def.fin;
+  ctx.strokeStyle = colors.fin;
   ctx.lineWidth = 0.025 * l;
   ctx.beginPath();
   ctx.arc(...p(0.34, 0.01), 0.18 * l, Math.PI - 0.85, Math.PI + 0.85);
   ctx.stroke();
 
   // Side fin, just behind the gill.
-  ctx.fillStyle = def.fin;
+  ctx.fillStyle = colors.fin;
   ctx.beginPath();
   ctx.moveTo(...p(0.13, 0.04));
   ctx.quadraticCurveTo(...p(0.02, 0.0), ...p(-0.05, 0.1));
