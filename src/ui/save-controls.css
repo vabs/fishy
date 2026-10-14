@@ -50,3 +50,13 @@
 .save-controls .save-controls-message.is-error {
   color: var(--error);
 }
+
+@media (max-width: 760px), (any-pointer: coarse) {
+  .save-controls .save-controls-button {
+    min-height: 48px;
+  }
+
+  .save-controls-buttons {
+    flex-wrap: wrap;
+  }
+}

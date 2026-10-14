@@ -85,6 +85,22 @@ export const monster: FishSpec = {
 
   update: pullFish,
 
+  onResize(world, sx, sy) {
+    for (const fish of world.fish) {
+      const state = fish.state;
+      if (state[HELD] === 1) {
+        state[OFF_X] = (state[OFF_X] ?? 0) * sx;
+        state[OFF_Y] = (state[OFF_Y] ?? 0) * sy;
+        delete state[OWN_X];
+        delete state[OWN_Y];
+      }
+      if (fish.kind === "monster") {
+        delete state.lastX;
+        delete state.lastY;
+      }
+    }
+  },
+
   onCapture(world, fish) {
     const radius = world.stats.ability.monster.pullRadius;
     const caught = world.fishNear(fish, radius);

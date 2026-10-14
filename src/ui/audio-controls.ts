@@ -75,12 +75,14 @@ export function mountAudioControls(container: HTMLElement, audio: GameAudio, var
         setOpen(false, true);
       }
     });
-    // Close when the player clicks or tabs anywhere else.
+    // In the mobile tools menu this panel participates in layout. Closing it on the
+    // pointerdown of Export/Help would move those buttons before the finger lifts.
+    const withinControls = (target: Node): boolean => (root.closest(".hub-tools") ?? root).contains(target);
     document.addEventListener("pointerdown", (event) => {
-      if (!panel.hidden && !root.contains(event.target as Node)) setOpen(false);
+      if (!panel.hidden && !withinControls(event.target as Node)) setOpen(false);
     });
     root.addEventListener("focusout", (event) => {
-      if (!panel.hidden && event.relatedTarget instanceof Node && !root.contains(event.relatedTarget)) setOpen(false);
+      if (!panel.hidden && event.relatedTarget instanceof Node && !withinControls(event.relatedTarget)) setOpen(false);
     });
   }
 

@@ -15,6 +15,12 @@ const TICK_SECONDS = 0.5;
 const RESPAWN_SECONDS = 1.2;
 const FLOATER_SECONDS = 0.8;
 
+const hasTouchInput = (): boolean =>
+  window.matchMedia("(any-pointer: coarse)").matches || navigator.maxTouchPoints > 0;
+
+/** Small tutorial canvases do not need a phone's full backing resolution. */
+const demoDpr = (): number => Math.min(window.devicePixelRatio || 1, hasTouchInput() ? 2 : Infinity);
+
 interface DemoFish {
   kind: FishKind;
   x: number;
@@ -38,7 +44,8 @@ interface Floater {
 export function startNetDemo(canvas: HTMLCanvasElement): () => void {
   const ctx = canvas.getContext("2d");
   if (!ctx) return () => {};
-  const dpr = window.devicePixelRatio || 1;
+  const dpr = demoDpr();
+  const touch = hasTouchInput();
   canvas.width = Math.round(WIDTH * dpr);
   canvas.height = Math.round(HEIGHT * dpr);
 
@@ -164,16 +171,20 @@ export function startNetDemo(canvas: HTMLCanvasElement): () => void {
     c.beginPath();
     c.arc(p.x, p.y, NET_RADIUS + 5, -Math.PI / 2, -Math.PI / 2 + (tickTimer / TICK_SECONDS) * TAU);
     c.stroke();
-    // A mouse pointer at the centre: the net follows it.
+    // Show the touch contact below the net so the lesson matches the playing controls.
     c.fillStyle = "#ffffff";
     c.strokeStyle = "#0b2a3d";
     c.lineWidth = 1;
     c.beginPath();
-    c.moveTo(p.x, p.y);
-    c.lineTo(p.x, p.y + 13);
-    c.lineTo(p.x + 3.5, p.y + 9.5);
-    c.lineTo(p.x + 8.5, p.y + 9.5);
-    c.closePath();
+    if (touch) {
+      c.arc(p.x, p.y + NET_RADIUS + 12, 7, 0, TAU);
+    } else {
+      c.moveTo(p.x, p.y);
+      c.lineTo(p.x, p.y + 13);
+      c.lineTo(p.x + 3.5, p.y + 9.5);
+      c.lineTo(p.x + 8.5, p.y + 9.5);
+      c.closePath();
+    }
     c.fill();
     c.stroke();
 
@@ -217,7 +228,7 @@ const PARADE: FishKind[] = ["normal", "uncommon", "rare", "electric", "epic", "g
 export function startParadeDemo(canvas: HTMLCanvasElement): () => void {
   const ctx = canvas.getContext("2d");
   if (!ctx) return () => {};
-  const dpr = window.devicePixelRatio || 1;
+  const dpr = demoDpr();
   canvas.width = Math.round(WIDTH * dpr);
   canvas.height = Math.round(HEIGHT * dpr);
   const sprites = PARADE.map((kind) => buildSprites(kind, dpr));

@@ -1,4 +1,10 @@
 :root {
+  --app-height: 100dvh;
+  --viewport-top: 0px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
   --ink: #fff7e6;
   --ink-muted: #b9d8e4;
   --panel: rgba(6, 30, 45, 0.95);
@@ -27,6 +33,7 @@ body {
   display: block;
   position: fixed;
   inset: 0;
+  touch-action: none;
 }
 
 /* The net replaces the cursor during a round. */
@@ -36,10 +43,10 @@ body.playing #game {
 
 #hud {
   position: fixed;
-  inset: 0 0 auto 0;
+  inset: var(--viewport-top) 0 auto 0;
   display: flex;
   justify-content: space-between;
-  padding: 16px 20px;
+  padding: calc(16px + var(--safe-top)) calc(20px + var(--safe-right)) 16px calc(20px + var(--safe-left));
   pointer-events: none;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
 }
@@ -67,12 +74,35 @@ body.playing #game {
   font-variant-numeric: tabular-nums;
 }
 
+.hud-controls {
+  position: absolute;
+  top: calc(14px + var(--safe-top));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+#pause-button {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(6, 30, 45, 0.75);
+  pointer-events: auto;
+}
+
 .panel {
   position: fixed;
-  top: 50%;
+  top: calc(var(--viewport-top) + var(--safe-top) + (var(--app-height) - var(--safe-top) - var(--safe-bottom)) / 2);
   left: 50%;
   transform: translate(-50%, -50%);
   width: min(360px, calc(100vw - 32px));
+  max-width: calc(100vw - var(--safe-left) - var(--safe-right) - 24px);
+  max-height: calc(var(--app-height) - var(--safe-top) - var(--safe-bottom) - 24px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 28px;
   border: 1px solid var(--panel-edge);
   border-radius: 14px;
@@ -139,7 +169,8 @@ body.playing #game {
 /* Hub: the screen between rounds. The tech tree fills everything under the bar. */
 #hub {
   position: fixed;
-  inset: 0;
+  inset: var(--viewport-top) 0 auto 0;
+  height: var(--app-height);
   display: flex;
   flex-direction: column;
   background: var(--page);
@@ -150,10 +181,11 @@ body.playing #game {
 }
 
 .hub-bar {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 20px;
-  padding: 12px 20px;
+  padding: calc(12px + var(--safe-top)) calc(20px + var(--safe-right)) 12px calc(20px + var(--safe-left));
   border-bottom: 1px solid var(--panel-edge);
   background: var(--panel);
 }
@@ -191,6 +223,16 @@ body.playing #game {
 
 .hub-save {
   margin-left: auto;
+}
+
+.hub-tools {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.hub-tools-toggle {
+  display: none;
 }
 
 /* In the bar the export/import message hangs below the buttons instead of taking a row, so the
@@ -247,6 +289,7 @@ body.playing #game {
 .hub-tree {
   flex: 1;
   min-height: 0;
+  padding: 0 var(--safe-right) var(--safe-bottom) var(--safe-left);
 }
 
 .primary-button {
@@ -362,10 +405,11 @@ body.playing #game {
 /* First-round tip, shown until the first catch. */
 .round-hint {
   position: fixed;
-  bottom: 28px;
+  top: calc(var(--viewport-top) + var(--app-height) - var(--safe-bottom) - 28px);
   left: 50%;
   margin: 0;
-  transform: translateX(-50%);
+  transform: translate(-50%, -100%);
+  width: min(640px, calc(100vw - var(--safe-left) - var(--safe-right) - 32px));
   color: var(--ink);
   font-size: 18px;
   font-weight: 600;
@@ -380,9 +424,10 @@ body.playing #game {
 
 .toast {
   position: fixed;
-  bottom: 20px;
+  top: calc(var(--viewport-top) + var(--app-height) - var(--safe-bottom) - 20px);
   left: 50%;
-  transform: translateX(-50%);
+  transform: translate(-50%, -100%);
+  z-index: 40;
   max-width: min(520px, calc(100vw - 32px));
   padding: 10px 16px;
   border: 1px solid var(--panel-edge);
@@ -395,4 +440,169 @@ body.playing #game {
 
 .toast[hidden] {
   display: none;
+}
+
+.pause-panel {
+  z-index: 30;
+}
+
+@media (max-width: 760px), (any-pointer: coarse) {
+  #hud {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: start;
+    gap: 6px;
+    padding: calc(8px + var(--safe-top)) calc(10px + var(--safe-right)) 8px calc(10px + var(--safe-left));
+  }
+
+  .hud-group {
+    min-width: 0;
+    font-size: 12px;
+  }
+
+  .hud-big {
+    font-size: 20px;
+  }
+
+  .hud-controls {
+    position: static;
+    transform: none;
+    gap: 4px;
+  }
+
+  #pause-button,
+  .icon-button,
+  .hub-bar .primary-button,
+  .hub-save .save-controls .save-controls-button {
+    min-width: 48px;
+    height: 48px;
+  }
+
+  .hub-bar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto 48px;
+    column-gap: 8px;
+    row-gap: 4px;
+    padding: calc(8px + var(--safe-top)) calc(10px + var(--safe-right)) 8px calc(10px + var(--safe-left));
+  }
+
+  .hub-player {
+    grid-column: 1;
+    grid-row: 1;
+    font-size: 14px;
+  }
+
+  .hub-muted {
+    font-size: 12px;
+  }
+
+  .hub-money {
+    grid-column: 1;
+    grid-row: 2;
+    font-size: 22px;
+  }
+
+  .hub-hint {
+    grid-column: 2 / 4;
+    grid-row: 2;
+    text-align: right;
+    font-size: 11px;
+  }
+
+  #start-button {
+    grid-column: 2;
+    grid-row: 1;
+    padding-inline: 14px;
+    font-size: 14px;
+  }
+
+  .hub-tools-toggle {
+    display: inline-grid;
+    grid-column: 3;
+    grid-row: 1;
+    width: 48px;
+    font-size: 26px;
+  }
+
+  .hub-tools {
+    display: none;
+    position: absolute;
+    top: calc(100% + 6px);
+    right: calc(10px + var(--safe-right));
+    z-index: 25;
+    grid-template-columns: 48px minmax(0, 1fr);
+    align-items: start;
+    gap: 10px;
+    width: min(300px, calc(100vw - var(--safe-left) - var(--safe-right) - 20px));
+    max-height: calc(var(--app-height) - var(--safe-top) - var(--safe-bottom) - 116px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 12px;
+    border: 1px solid var(--panel-edge);
+    border-radius: 12px;
+    background: linear-gradient(var(--panel), var(--panel)), var(--page);
+    box-shadow: 0 14px 36px rgba(0, 0, 0, 0.4);
+  }
+
+  .hub-tools.is-open {
+    display: grid;
+  }
+
+  .hub-save {
+    grid-column: 1 / -1;
+    margin-left: 0;
+  }
+
+  .hub-save .save-controls .save-controls-message {
+    position: static;
+    white-space: normal;
+    text-shadow: none;
+  }
+
+  .panel {
+    padding: 20px;
+  }
+
+  .panel button,
+  .primary-button {
+    min-height: 48px;
+  }
+
+  .summary-earned-amount {
+    font-size: 38px;
+  }
+
+  .summary-fish {
+    gap: 4px;
+  }
+
+  .summary-table th,
+  .summary-table td {
+    font-size: 13px;
+    padding: 6px 2px;
+  }
+
+  .round-hint {
+    font-size: 15px;
+  }
+}
+
+@media (max-height: 500px) {
+  .panel {
+    padding: 16px 20px;
+  }
+
+  .panel h1,
+  .end-panel h1 {
+    font-size: 26px;
+  }
+
+  .panel p,
+  .panel dl {
+    margin-bottom: 12px;
+  }
+
+  .hub-hint {
+    display: none;
+  }
 }

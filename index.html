@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Fishy</title>
     <link
       rel="icon"
@@ -17,7 +17,10 @@
         <span id="hud-round"></span>
         <span id="hud-timer" class="hud-big"></span>
       </div>
-      <div id="hud-audio" class="hud-audio"></div>
+      <div class="hud-controls">
+        <div id="hud-audio" class="hud-audio"></div>
+        <button id="pause-button" type="button" class="icon-button" aria-label="Pause round" title="Pause round">Ⅱ</button>
+      </div>
       <div class="hud-group hud-right">
         <span id="hud-money" class="hud-big"></span>
         <span id="hud-earned"></span>
@@ -34,12 +37,21 @@
         </div>
         <span id="hub-money" class="hub-money"></span>
         <p id="hub-hint" class="hub-hint hub-muted"></p>
-        <button id="help-button" type="button" class="icon-button" aria-label="How to play" title="How to play">?</button>
-        <div id="hub-audio" class="hub-audio"></div>
-        <div id="hub-save" class="hub-save"></div>
+        <button id="hub-tools-toggle" type="button" class="icon-button hub-tools-toggle" aria-label="Game tools" aria-expanded="false" aria-controls="hub-tools" title="Game tools">⋯</button>
+        <div id="hub-tools" class="hub-tools">
+          <button id="help-button" type="button" class="icon-button" aria-label="How to play" title="How to play">?</button>
+          <div id="hub-audio" class="hub-audio"></div>
+          <div id="hub-save" class="hub-save"></div>
+        </div>
         <button id="start-button" type="button" class="primary-button">Start Round</button>
       </header>
       <div id="hub-tree" class="hub-tree"></div>
+    </section>
+
+    <section id="pause-panel" class="panel pause-panel" hidden role="dialog" aria-modal="true" aria-labelledby="pause-title" aria-describedby="pause-message">
+      <h2 id="pause-title">Round paused</h2>
+      <p id="pause-message">Take your time. Resume when you’re ready.</p>
+      <button id="resume-button" type="button">Resume round</button>
     </section>
 
     <section id="summary-panel" class="panel summary-panel" hidden>

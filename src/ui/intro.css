@@ -125,21 +125,31 @@
 .intro-dots {
   display: flex;
   justify-content: center;
-  gap: 8px;
-  margin: 16px 0 18px;
+  gap: 4px;
+  margin: 8px 0 10px;
 }
 
 .intro-dot {
-  width: 9px;
-  height: 9px;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
   padding: 0;
   border: 0;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.25);
+  border-radius: 8px;
+  background: transparent;
   cursor: pointer;
 }
 
-.intro-dot[aria-current="step"] {
+.intro-dot::before {
+  content: "";
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.intro-dot[aria-current="step"]::before {
   background: var(--accent);
 }
 
@@ -162,4 +172,59 @@
 
 .dialog .dialog-button.is-finish {
   padding-inline: 28px;
+}
+
+@media (max-width: 760px), (any-pointer: coarse) {
+  .dialog.intro {
+    padding: 18px 18px 16px;
+  }
+
+  .intro-dot {
+    width: 48px;
+    height: 48px;
+  }
+
+  .intro-actions {
+    gap: 8px;
+  }
+
+  .intro-actions .dialog-button {
+    padding-inline: 12px;
+    font-size: 14px;
+  }
+
+  .intro-actions .dialog-button.is-finish {
+    padding-inline: 16px;
+  }
+
+  .dialog .intro-slide p {
+    min-height: 0;
+    font-size: 14px;
+  }
+}
+
+@media (max-height: 500px) {
+  .dialog.intro {
+    padding: 14px 18px;
+  }
+
+  .intro-demo,
+  .intro-tree {
+    max-height: 115px;
+    object-fit: contain;
+  }
+
+  .intro-slide h2 {
+    margin: 10px 0 8px;
+    font-size: 20px;
+  }
+
+  .dialog .intro-slide p {
+    min-height: 0;
+    font-size: 14px;
+  }
+
+  .intro-dots {
+    margin: 2px 0;
+  }
 }

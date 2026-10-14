@@ -153,9 +153,20 @@ export class World {
   }
 
   resize(width: number, height: number): void {
+    const sx = width / this._width;
+    const sy = height / this._height;
     this._width = width;
     this._height = height;
-    for (const fish of this.fish) this.place(fish);
+    for (const fish of this.fish) {
+      fish.offsetX *= sx;
+      fish.offsetY *= sy;
+      this.place(fish);
+    }
+    for (const shot of this.shots) {
+      shot.x = Math.max(shot.radius, Math.min(width - shot.radius, shot.x * sx));
+      shot.y = Math.max(shot.radius, Math.min(height - shot.radius, shot.y * sy));
+    }
+    for (const kind of FISH_KINDS) FISH_SPECS[kind].onResize?.(this, sx, sy);
   }
 
   /** Returns everything that happened since the last call, for effects and sound. */

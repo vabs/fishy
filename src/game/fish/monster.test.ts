@@ -57,6 +57,28 @@ const dist = (a: Fish, b: Fish) => Math.hypot(a.x - b.x, a.y - b.y);
 const offset = (f: Fish) => Math.hypot(f.offsetX, f.offsetY);
 
 describe("Monster vortex", () => {
+  it("releases resized vortex offsets completely and resets movement history", () => {
+    const world = makeWorld();
+    const boss = spunUpMonster(world);
+    const fish = still(spawnBy(world, "normal", boss, 115, 0));
+    run(world, 2);
+    expect(fish.state.whirl).toBe(1);
+    const ox = fish.state.whirlOx!;
+    const oy = fish.state.whirlOy!;
+    world.resize(W / 2, H * 2);
+    expect(fish.state.whirlOx).toBeCloseTo(ox / 2);
+    expect(fish.state.whirlOy).toBeCloseTo(oy * 2);
+    expect(fish.state.whirlPx).toBeUndefined();
+    expect(fish.state.whirlPy).toBeUndefined();
+    expect(boss.state.lastX).toBeUndefined();
+    expect(boss.state.lastY).toBeUndefined();
+    world.fish.splice(world.fish.indexOf(boss), 1);
+    run(world, 20);
+    expect(fish.state.whirl).toBeUndefined();
+    expect(fish.offsetX).toBeCloseTo(0);
+    expect(fish.offsetY).toBeCloseTo(0);
+  });
+
   it("pulls nearby fish in and around it, and leaves far fish and Stars alone", () => {
     const world = makeWorld();
     const boss = spunUpMonster(world);

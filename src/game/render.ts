@@ -4,6 +4,7 @@ import type { Effect } from "./fx";
 import { buildSprites, type FishSprites } from "./shapes";
 import type { Stats } from "./stats";
 import type { Fish, FxEvent, Point, World, WorldEvent } from "./world";
+import type { GameViewport } from "./viewport";
 
 const TAU = Math.PI * 2;
 
@@ -69,6 +70,8 @@ export interface Scene {
   world: World | null;
   pointer: Point | null;
   stats: Stats;
+  /** Touch contact, in world coordinates; decoration only, never a second net. */
+  finger?: Point | null;
 }
 
 /** Draws the world. Reads game state, never changes it. */
@@ -77,6 +80,9 @@ export class Renderer {
   private width = 0;
   private height = 0;
   private dpr = 1;
+  private viewScale = 1;
+  private offsetX = 0;
+  private offsetY = 0;
   private background: HTMLCanvasElement | null = null;
   private readonly sprites = new Map<FishKind, FishSprites>();
   private floaters: Floater[] = [];
@@ -91,10 +97,13 @@ export class Renderer {
     this.ctx = ctx;
   }
 
-  resize(width: number, height: number, dpr: number): void {
-    this.width = width;
-    this.height = height;
+  resize(width: number, height: number, dpr: number, view?: GameViewport): void {
+    this.width = view?.worldWidth ?? width;
+    this.height = view?.worldHeight ?? height;
     this.dpr = dpr;
+    this.viewScale = view?.scale ?? 1;
+    this.offsetX = view?.x ?? 0;
+    this.offsetY = view?.y ?? 0;
     this.canvas.width = Math.round(width * dpr);
     this.canvas.height = Math.round(height * dpr);
     this.canvas.style.width = `${width}px`;
@@ -102,6 +111,10 @@ export class Renderer {
     this.background = this.paintBackground();
     // Sprites are rendered at device resolution, which may have changed.
     this.sprites.clear();
+    this.floaters = [];
+    this.particles = [];
+    this.pulses = [];
+    this.effects = [];
   }
 
   onEvent(event: WorldEvent): void {
@@ -177,7 +190,7 @@ export class Renderer {
     });
   }
 
-  draw({ world, pointer, stats }: Scene, dt: number): void {
+  draw({ world, pointer, stats, finger }: Scene, dt: number): void {
     this.time += dt;
     this.advanceEffects(dt);
 
@@ -197,16 +210,18 @@ export class Renderer {
     if (world) for (const kind of FISH_KINDS) FISH_SPECS[kind].drawWorld?.(ctx, world, this.time);
     this.drawEffects();
     if (netActive) this.drawNet(pointer, stats.netRadius, world.tickProgress);
+    if (netActive && finger) this.drawFinger(finger, pointer);
   }
 
   private resetTransform(): void {
-    this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    const scale = this.dpr * this.viewScale;
+    this.ctx.setTransform(scale, 0, 0, scale, this.offsetX * this.dpr, this.offsetY * this.dpr);
   }
 
   private sprite(kind: FishKind): FishSprites {
     let sprites = this.sprites.get(kind);
     if (!sprites) {
-      sprites = buildSprites(kind, this.dpr);
+      sprites = buildSprites(kind, this.dpr * this.viewScale);
       this.sprites.set(kind, sprites);
     }
     return sprites;
@@ -220,8 +235,9 @@ export class Renderer {
     const sin = Math.sin(fish.heading);
     // Mirror fish swimming left so they stay belly-down.
     const flip = cos < 0 ? -1 : 1;
-    const d = this.dpr;
-    ctx.setTransform(d * cos, d * sin, -d * sin * flip, d * cos * flip, d * fish.x, d * fish.y);
+    const d = this.dpr * this.viewScale;
+    ctx.setTransform(d * cos, d * sin, -d * sin * flip, d * cos * flip,
+      d * fish.x + this.offsetX * this.dpr, d * fish.y + this.offsetY * this.dpr);
     ctx.globalAlpha = Math.min(1, fish.age / FADE_IN_SECONDS);
     ctx.drawImage(sprites[variant], -sprites.width / 2, -sprites.height / 2, sprites.width, sprites.height);
     ctx.globalAlpha = 1;
@@ -262,14 +278,14 @@ export class Renderer {
 
   private drawNet(pointer: Point, radius: number, charge: number): void {
     const ctx = this.ctx;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 2 / this.viewScale;
     ctx.strokeStyle = COLORS.net;
     ctx.beginPath();
     ctx.arc(pointer.x, pointer.y, radius, 0, TAU);
     ctx.stroke();
 
     // Charge arc: fills clockwise until the next tick.
-    ctx.lineWidth = 3;
+    ctx.lineWidth = 3 / this.viewScale;
     ctx.strokeStyle = COLORS.netCharge;
     ctx.beginPath();
     ctx.arc(pointer.x, pointer.y, radius + 5, -Math.PI / 2, -Math.PI / 2 + charge * TAU);
@@ -277,8 +293,23 @@ export class Renderer {
 
     ctx.fillStyle = COLORS.net;
     ctx.beginPath();
-    ctx.arc(pointer.x, pointer.y, 2, 0, TAU);
+    ctx.arc(pointer.x, pointer.y, 2 / this.viewScale, 0, TAU);
     ctx.fill();
+  }
+
+  private drawFinger(finger: Point, net: Point): void {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.25)";
+    ctx.lineWidth = 1 / this.viewScale;
+    ctx.beginPath();
+    ctx.moveTo(net.x, net.y);
+    ctx.lineTo(finger.x, finger.y);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(finger.x, finger.y, 10 / this.viewScale, 0, TAU);
+    ctx.stroke();
+    ctx.restore();
   }
 
   private drawBoat(): void {
@@ -353,7 +384,7 @@ export class Renderer {
       ctx.restore();
     }
 
-    ctx.font = "bold 15px system-ui, sans-serif";
+    ctx.font = `bold ${15 / this.viewScale}px system-ui, sans-serif`;
     ctx.textAlign = "center";
     for (const f of this.floaters) {
       const t = f.age / FLOATER_SECONDS;

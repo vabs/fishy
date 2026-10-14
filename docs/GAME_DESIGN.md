@@ -1,7 +1,7 @@
 # Fishy: game design
 
-Single-player browser game, desktop only. A round-based incremental game about catching fish: a boat
-sits in the centre, fish swim around it, and the player's cursor carries a net that damages every
+Single-player browser game for desktop, phones and tablets. A round-based incremental game about catching fish: a boat
+sits in the centre, fish swim around it, and the player guides a net that damages every
 fish inside it on a timer. Money from each round buys upgrades in a tech tree. Once the whole tree
 is maxed, the player plays a Final Round and the game ends.
 
@@ -11,7 +11,7 @@ describes mechanics.
 ## Core loop
 
 1. A round starts with a time limit. Fish are already in the water and more keep spawning.
-2. The net (a circle around the cursor) auto-ticks. Each tick damages every fish inside it.
+2. The net auto-ticks while active. Each tick damages every fish inside it.
 3. A fish at 0 HP is captured. Its on-capture effect fires, if it has one.
 4. When the timer reaches 0 the round ends. Fish still swimming are lost.
 5. The value of every fish caught that round is banked as money.
@@ -19,8 +19,24 @@ describes mechanics.
 
 ## Input
 
-Pointer only. The net follows the cursor and ticks automatically; mouse clicks do nothing. The net
-only ticks while the cursor is over the play area.
+With a mouse, the net follows the cursor and ticks automatically; mouse clicks do nothing. It
+only ticks while the cursor is over the play area. On touch screens, holding and dragging guides
+the net above the finger to keep fish visible; lifting the finger deactivates it. An extra finger
+does not create another net.
+
+The tech tree supports dragging to pan, mouse-wheel or two-finger pinch zoom, and tapping an
+upgrade to inspect it before using Buy. Compact screens put help, sound and save controls under
+the ⋯ button while keeping money and Start Round visible. Portrait and landscape are both
+supported, with controls kept clear of screen cutouts and the home indicator.
+
+A round can be paused with the HUD pause button. Switching tabs/apps or rotating the device also
+pauses it. Time and simulation stay frozen until Resume round; the HUD stays visible. Dialogs
+scroll within the visible screen, including when the name-entry keyboard is open.
+
+The arena keeps the area of a 1280 × 800 reference field as its aspect ratio changes. The net,
+abilities and fish speeds use those logical coordinates, so a smaller display does not increase
+the share of the sea covered by an upgrade. On touch displays the canvas pixel density is capped
+at 2 to limit rendering work.
 
 ## Capturing
 

@@ -1,10 +1,10 @@
 # Fishy
 
 A round-based fish catching game for the browser. A boat sits in the middle of the sea and fish
-swim around it. Your cursor carries a net that catches fish on its own; spend what you earn on
+swim around it. Guide a net that catches fish on its own; spend what you earn on
 upgrades between rounds, unlock stranger fish, and work your way to the Final Round.
 
-**Play:** https://fishy.vaibhavsomani.com/ (desktop browsers)
+**Play:** https://fishy.vaibhavsomani.com/ (desktop and mobile browsers)
 
 ![A round in progress: a large net shows fish in colour while the rest of the sea is dark silhouettes; star fish shoot across the water and a shark-shaped whirlpool gathers fish](docs/screenshots/gameplay.png)
 
@@ -12,18 +12,24 @@ upgrades between rounds, unlock stranger fish, and work your way to the Final Ro
 
 - **Move the mouse.** The circle around the cursor is your net. Every half second it hits every
   fish inside it. Clicking does nothing.
+- **On a phone or tablet, hold and drag.** The net floats above your finger so you can see the
+  fish. Lift your finger to deactivate it. Portrait and landscape both work; rotating during a
+  round pauses it so you can settle into the new view.
 - **Catch fish.** A fish whose health reaches zero is caught and pays out.
 - **Beat the clock.** Each round lasts 15 seconds. Whatever you caught is banked when the timer
   runs out; fish still swimming are lost.
 - **Look through the net.** Outside the net every fish is a dark silhouette, told apart by its
   outline. Inside the net you see it in full colour, with its health bar.
 - **Upgrade.** Between rounds, spend money in the tech tree: a bigger net, harder hits, faster
-  ticks, longer rounds, new fish and their abilities.
+  ticks, longer rounds, new fish and their abilities. Drag to pan; use the mouse wheel or pinch
+  to zoom. On touch screens, tap an upgrade to inspect it, then tap **Buy**.
+- **Pause.** Use the pause button during a round, then **Resume round** when ready. The round
+  also pauses when you leave the tab or app, so you won't lose time in the background.
 - **Finish.** Max out the whole tree to unlock the Final Round.
 - **New here?** First-time players get a three-slide walkthrough before round 1. The **?** button
   in the hub shows it again.
 - **Sound.** Press **M**, or the speaker button, to mute. In the hub, the button next to it sets
-  the music and effects volume.
+  the music and effects volume. On smaller screens, open **⋯** for help, sound, and save tools.
 
 ![The tech tree: upgrade nodes spread out from a boat in branches for the net, time, economy, spawning and each fish type](docs/screenshots/tech-tree.png)
 
@@ -67,6 +73,7 @@ npm run typecheck
 npm run build         # static site in dist/
 npm run preview       # serve the build locally
 npm run e2e           # play through the whole game flow in Chrome (needs Google Chrome)
+npm run e2e:mobile    # Chrome touch/phone layout and pause regression checks
 npm run screenshots   # regenerate docs/screenshots (needs Google Chrome)
 ```
 
@@ -88,9 +95,10 @@ src/game/
   world.ts          The simulation for one round. No DOM, fixed 60 Hz step, seeded RNG
   stats.ts          Everything upgrades can change (global, per fish, abilities) and base values
   fish/             One file per fish type (FishSpec): stats, shape and behaviour hooks
-    types.ts        FishSpec: onSpawn, move, modifyDamage, onCapture, update, drawWorld, fx
+    types.ts        FishSpec: onSpawn, move, modifyDamage, onCapture, update, onResize, drawWorld, fx
     index.ts        Registry of all types
   render.ts         Canvas renderer: background, boat, silhouettes, net lens, effects
+  viewport.ts       Normalized arena and projection into the visible screen
   shapes.ts         Builds each type's cached full / silhouette / hit-flash sprites
   fx.ts             Short-lived visual effects that fish types add
   rng.ts            Seeded random numbers

@@ -42,6 +42,13 @@ const TREE = `
 /** Shows the slides. Resolves when the player finishes or skips. */
 export function showIntro({ playerName, mode }: IntroOptions): Promise<void> {
   const id = `intro-${++shown}`;
+  const touch = window.matchMedia("(any-pointer: coarse)").matches || navigator.maxTouchPoints > 0;
+  const netInstructions = touch
+    ? "Hold and drag to guide your net. It floats above your finger; lift to deactivate it. With a mouse, just move — no clicking needed."
+    : "The circle follows your mouse. Clicking does nothing.";
+  const treeInstructions = touch
+    ? "Drag to pan and pinch to zoom. Tap an upgrade to inspect it, then tap Buy."
+    : "Drag to pan and scroll to zoom. Click an upgrade to buy it.";
   const finish = mode === "first" ? "Let's play" : "Back to the game";
   const dialog = document.createElement("dialog");
   dialog.className = "dialog intro";
@@ -52,8 +59,8 @@ export function showIntro({ playerName, mode }: IntroOptions): Promise<void> {
         <section class="intro-slide" aria-roledescription="slide" aria-label="1 of 3">
           <canvas class="intro-demo" aria-hidden="true"></canvas>
           <h2 id="${id}-title-0">Your net does the catching</h2>
-          <p>The circle follows your mouse. Every half second it hits <strong>every fish inside it</strong>, so
-            just keep it over the fish. Clicking does nothing. Fish are dark shapes until they swim into
+          <p>${netInstructions} Every half second it hits <strong>every fish inside it</strong>, so
+            keep it over the fish. Fish are dark shapes until they swim into
             your net. Each round lasts 15 seconds.</p>
         </section>
         <section class="intro-slide" aria-roledescription="slide" aria-label="2 of 3">
@@ -61,7 +68,7 @@ export function showIntro({ playerName, mode }: IntroOptions): Promise<void> {
           <h2 id="${id}-title-1">Spend it on upgrades</h2>
           <p>Between rounds, your money buys upgrades: a bigger net, harder hits, longer rounds, and
             <strong>new fish worth more</strong>, some with chain reactions like lightning, star shots and a
-            whirlpool. Buy everything to unlock the Final Round.</p>
+            whirlpool. ${treeInstructions} Buy everything to unlock the Final Round.</p>
         </section>
         <section class="intro-slide" aria-roledescription="slide" aria-label="3 of 3">
           <canvas class="intro-demo intro-parade" aria-hidden="true"></canvas>

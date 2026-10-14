@@ -39,10 +39,6 @@
 
 /* In a round: a small round button floating at the top centre, clear of the timer and money. */
 .hud-audio {
-  position: absolute;
-  top: 14px;
-  left: 50%;
-  transform: translateX(-50%);
   pointer-events: auto;
 }
 
@@ -116,4 +112,45 @@
   margin: 2px 0 0;
   color: var(--ink-muted);
   font-size: 12px;
+}
+
+@media (max-width: 760px), (any-pointer: coarse) {
+  .audio-controls .audio-button,
+  .audio-controls.is-hud .audio-button {
+    width: 48px;
+    height: 48px;
+  }
+
+  .audio-slider input {
+    min-height: 48px;
+    touch-action: pan-y;
+  }
+
+  .hub-tools .audio-controls {
+    flex-wrap: wrap;
+  }
+
+  .hub-tools .audio-panel {
+    position: static;
+    width: 100%;
+    padding: 10px 0 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .hub-tools .audio-slider {
+    grid-template-columns: 1fr auto;
+    gap: 4px 8px;
+  }
+
+  .hub-tools .audio-slider input {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .hub-tools .audio-slider output {
+    grid-column: 2;
+    grid-row: 1;
+  }
 }

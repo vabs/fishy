@@ -45,6 +45,8 @@ export interface FishSpec {
   onCapture?(world: World, fish: Fish, source: CaptureSource): void;
   /** Runs once per step whether or not any fish of this type exist, e.g. to move projectiles. */
   update?(world: World, dt: number): void;
+  /** Rebase type-specific displacement and movement history after the arena changes size. */
+  onResize?(world: World, scaleX: number, scaleY: number): void;
 
   /** Draws world-level visuals for this type above the fish, e.g. a vortex or projectiles. */
   drawWorld?(ctx: CanvasRenderingContext2D, world: World, time: number): void;

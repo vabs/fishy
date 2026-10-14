@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { wholeShares } from "./format";
+import { formatCompactMoney, wholeShares } from "./format";
+
+describe("compact money", () => {
+  it("keeps small balances exact and makes large balances fit a phone HUD", () => {
+    expect(formatCompactMoney(9999.9)).toBe("$9,999");
+    expect(formatCompactMoney(12500)).toBe("$12.5K");
+    expect(formatCompactMoney(1250000)).toBe("$1.3M");
+    expect(formatCompactMoney(100000000)).toBe("$100M");
+  });
+});
 
 describe("wholeShares", () => {
   it("adds up to the floored total, giving leftover dollars to the largest remainders", () => {

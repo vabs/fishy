@@ -464,3 +464,141 @@
     transition: none !important;
   }
 }
+
+/* Touch selection is persistent; hover styling should not stick after a tap. */
+.tech.is-touch .tech-node:hover {
+  transform: none;
+}
+
+.tech-node.is-selected {
+  outline: 3px solid var(--ink, #fff7e6);
+  outline-offset: 9px;
+}
+
+/* A body-level sheet stays in screen space and owns its own vertical scrolling. */
+.tech-sheet {
+  --tech-ready: var(--accent, #f4a259);
+  --tech-short: #f2a79c;
+  position: fixed;
+  z-index: 30;
+  top: calc(var(--viewport-top, 0px) + var(--app-height, 100dvh));
+  left: 50%;
+  width: min(480px, 100%);
+  max-height: calc(var(--app-height, 100dvh) - 12px - env(safe-area-inset-top, 0px));
+  box-sizing: border-box;
+  transform: translate(-50%, -100%);
+  padding: 20px max(18px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(18px, env(safe-area-inset-left, 0px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  border: 1px solid var(--panel-edge, rgba(255, 255, 255, 0.12));
+  border-top: 3px solid var(--tint);
+  border-radius: 18px 18px 0 0;
+  background: var(--panel, #061e2d);
+  box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.45);
+  color: var(--ink, #fff7e6);
+  font-family: inherit;
+  font-size: 15px;
+}
+
+.tech-sheet[hidden] {
+  display: none;
+}
+
+.tech-sheet-content {
+  padding-right: 44px;
+}
+
+.tech-sheet .tech-tip-head {
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+
+.tech-sheet .tech-tip-name {
+  font-size: 21px;
+}
+
+.tech-sheet .tech-tip-desc {
+  margin-bottom: 14px;
+  line-height: 1.5;
+}
+
+.tech-sheet .tech-tip-stats {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 10px;
+  padding: 12px;
+}
+
+.tech-sheet .tech-tip-stats dd {
+  white-space: normal;
+}
+
+.tech-sheet .tech-tip-cost {
+  font-size: 14px;
+}
+
+.tech-sheet-close {
+  position: absolute;
+  top: 8px;
+  right: max(8px, env(safe-area-inset-right, 0px));
+  width: 48px;
+  height: 48px;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  font: inherit;
+  font-size: 28px;
+  cursor: pointer;
+}
+
+.tech-sheet-buy {
+  display: block;
+  width: 100%;
+  min-height: 48px;
+  margin-top: 18px;
+  padding: 12px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--accent, #f4a259);
+  color: var(--accent-ink, #2a1505);
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.tech-sheet-buy:disabled {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--ink-muted, #b9d8e4);
+  cursor: default;
+}
+
+.tech-sheet button:focus-visible {
+  outline: 3px solid var(--ink, #fff7e6);
+  outline-offset: 3px;
+}
+
+.tech.is-touch .tech-control {
+  width: 48px;
+  height: 48px;
+}
+
+@media (max-width: 700px), (any-pointer: coarse) {
+  .tech-control {
+    width: 48px;
+    height: 48px;
+  }
+
+  .tech-controls {
+    right: max(12px, env(safe-area-inset-right, 0px));
+    bottom: max(12px, env(safe-area-inset-bottom, 0px));
+    gap: 8px;
+  }
+
+  .tech-hint {
+    left: max(12px, env(safe-area-inset-left, 0px));
+    right: 12px;
+    bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+    font-size: 11px;
+  }
+}

@@ -25,6 +25,28 @@ function followWith(world: World, fish: Fish): () => void {
 }
 
 describe("World", () => {
+  it("keeps projectiles inside the arena when its orientation changes", () => {
+    const world = makeWorld({ startFish: 1 });
+    world.shots.push({
+      kind: "star", x: 780, y: 580, vx: 100, vy: 50, radius: 14,
+      damage: 2, bouncesLeft: 3, age: 1, cooldowns: new Map([[17, 0.2]]),
+    });
+    world.fish[0]!.offsetX = 72;
+    world.fish[0]!.offsetY = 24;
+    world.resize(600, 800);
+    const shot = world.shots[0]!;
+    expect(shot.x).toBeCloseTo(585);
+    expect(shot.y).toBeCloseTo(580 * 4 / 3);
+    expect(shot.x).toBeLessThanOrEqual(600 - shot.radius);
+    expect(shot.y).toBeLessThanOrEqual(800 - shot.radius);
+    expect(shot.cooldowns.get(17)).toBe(0.2);
+    expect(Math.hypot(shot.vx, shot.vy)).toBeCloseTo(Math.hypot(100, 50));
+    expect(world.fish[0]!.offsetX).toBe(54);
+    expect(world.fish[0]!.offsetY).toBe(32);
+    expect(world.elapsed).toBe(0);
+    expect(world.earned).toBe(0);
+  });
+
   it("damages a fish in the net on each tick and captures it at 0 hp", () => {
     const world = makeWorld({ startFish: 1 });
     const fish = world.fish[0]!;

@@ -2,12 +2,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { FISH_SPECS } from "./fish";
 import { Renderer } from "./render";
 import { BASE_STATS } from "./stats";
+import { createViewport } from "./viewport";
 import type { FxEvent } from "./world";
 
 /** Records canvas submissions; browser benchmarks cover the actual raster cost. */
 function canvasRecorder() {
   const paints: { blur: number; text?: string }[] = [];
   const arcs: number[] = [];
+  const transforms: number[][] = [];
+  const translations: number[][] = [];
   const noop = () => {};
   const target = {
     shadowBlur: 0,
@@ -15,11 +18,13 @@ function canvasRecorder() {
     fill() { paints.push({ blur: this.shadowBlur }); },
     fillText(text: string) { paints.push({ blur: this.shadowBlur, text }); },
     arc(_x: number, _y: number, radius: number) { arcs.push(radius); },
+    setTransform(...values: number[]) { transforms.push(values); },
+    translate(...values: number[]) { translations.push(values); },
     createRadialGradient: () => ({ addColorStop: noop }),
   };
   const ctx = new Proxy(target, { get: (object, key) => Reflect.get(object, key) ?? noop }) as unknown as CanvasRenderingContext2D;
-  const canvas = { getContext: () => ctx } as unknown as HTMLCanvasElement;
-  return { ctx, paints, arcs, renderer: new Renderer(canvas) };
+  const canvas = { getContext: () => ctx, style: {} } as unknown as HTMLCanvasElement;
+  return { canvas, ctx, paints, arcs, transforms, translations, renderer: new Renderer(canvas) };
 }
 
 const scene = { world: null, pointer: null, stats: BASE_STATS };
@@ -27,7 +32,18 @@ const net = (x = 200): FxEvent => ({
   type: "fx", kind: "epic", name: "net", x, y: 200, radius: 180, points: [{ x: x + 30, y: 200 }],
 });
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
+describe("viewport rendering", () => {
+  it("draws logical world positions below the HUD at the correct screen scale", () => {
+    const { canvas, renderer, transforms, translations } = canvasRecorder();
+    vi.stubGlobal("document", { createElement: () => canvas });
+    renderer.resize(640, 480, 2, createViewport(640, 480, 80));
+    renderer.draw(scene, 0);
+    expect(transforms).toContainEqual([1, 0, 0, 1, 0, 160]);
+    expect(translations).toContainEqual([640, 400]);
+  });
+});
 
 describe("burst rendering", () => {
   it("combines nearby capture payouts without losing their value", () => {

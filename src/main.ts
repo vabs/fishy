@@ -1,6 +1,6 @@
 import "./style.css";
 import { createGameAudio } from "./audio";
-import { formatDuration, formatMoney, wholeShares } from "./format";
+import { formatCompactMoney, formatDuration, formatMoney, wholeShares } from "./format";
 import { FISH, FISH_KINDS, type FishKind } from "./game/fish";
 import { Renderer } from "./game/render";
 import { buildSprites } from "./game/shapes";
@@ -8,12 +8,14 @@ import { createRng } from "./game/rng";
 import { BASE_STATS, type Stats } from "./game/stats";
 import { TECH_NODES, applyUpgrades, buy, canBuy, isTreeComplete, refundRemovedLevels } from "./game/tech";
 import { STEP, World, type Point } from "./game/world";
+import { createViewport } from "./game/viewport";
 import { createSave, loadSave, recordRound, resetProgress, sanitizeUpgrades, writeSave, type SaveData } from "./save";
 import { mountAudioControls } from "./ui/audio-controls";
 import { showIntro } from "./ui/intro";
 import { promptForName } from "./ui/name-prompt";
 import { mountSaveControls } from "./ui/save-controls";
 import { mountTechTree } from "./ui/tech-tree";
+import { mountNetInput } from "./ui/net-input";
 
 /** Longest frame the sim will catch up on, so a backgrounded tab doesn't fast-forward a round. */
 const MAX_FRAME_SECONDS = 0.25;
@@ -65,6 +67,12 @@ const end = {
 };
 const toast = element("#toast");
 const roundHint = element("#round-hint");
+const pausePanel = element("#pause-panel");
+const pauseMessage = element("#pause-message");
+const resumeButton = element<HTMLButtonElement>("#resume-button");
+const toolsToggle = element<HTMLButtonElement>("#hub-tools-toggle");
+const hubTools = element("#hub-tools");
+const touchLayout = window.matchMedia("(any-pointer: coarse)");
 
 const renderer = new Renderer(canvas);
 const audio = createGameAudio();
@@ -75,6 +83,10 @@ let world: World | null = null;
 /** Stats of the round being played, or the base stats between rounds. */
 let stats: Stats = BASE_STATS;
 let pointer: Point | null = null;
+let finger: Point | null = null;
+let viewport = createViewport(window.innerWidth, window.innerHeight);
+let landscape = window.innerWidth > window.innerHeight;
+let paused = false;
 /** Round number shown while playing; the save has already moved on once the round ends. */
 let playingRound = 1;
 let finalRound = false;
@@ -136,6 +148,10 @@ function showToast(message: string): void {
 }
 
 function showOnly(screen: "hub" | "round" | "summary" | "end"): void {
+  netInput.clear();
+  tree.dismiss();
+  paused = false;
+  pausePanel.hidden = true;
   if (screen !== "round") roundHint.hidden = true;
   hub.root.hidden = screen !== "hub";
   hud.root.hidden = screen !== "round";
@@ -156,7 +172,7 @@ function renderHub(): void {
   const complete = isTreeComplete(save.upgrades);
   hub.name.textContent = save.playerName;
   hub.round.textContent = complete ? "Final Round next" : `Round ${save.round} next`;
-  hub.money.textContent = formatMoney(save.money);
+  setMoney(hub.money, save.money);
   hub.hint.textContent = hint(complete);
   hub.start.textContent = complete ? "Final Round" : "Start Round";
   hub.start.classList.toggle("is-final", complete);
@@ -165,7 +181,9 @@ function renderHub(): void {
 
 function hint(complete: boolean): string {
   if (complete) return "Every upgrade is yours. One last round to go.";
-  if (TECH_NODES.some((node) => canBuy(node, save.upgrades, save.money))) return "Click a glowing upgrade to buy it.";
+  if (TECH_NODES.some((node) => canBuy(node, save.upgrades, save.money))) {
+    return touchLayout.matches ? "Tap a glowing upgrade, then Buy." : "Click a glowing upgrade to buy it.";
+  }
   return "Catch more fish to afford the next upgrade.";
 }
 
@@ -173,9 +191,15 @@ function startRound(): void {
   finalRound = isTreeComplete(save.upgrades);
   playingRound = save.round;
   stats = applyDevOverrides(applyUpgrades(BASE_STATS, save.upgrades));
-  world = new World(stats, createRng(Date.now()), window.innerWidth, window.innerHeight);
-  accumulator = 0;
+  setToolsOpen(false);
   showOnly("round");
+  resize();
+  world = new World(stats, createRng(Date.now()), viewport.worldWidth, viewport.worldHeight);
+  accumulator = 0;
+  lastFrame = performance.now();
+  roundHint.textContent = touchLayout.matches
+    ? "Hold and drag to fish. Your net floats above your finger."
+    : "Move your net over the fish. It catches them on its own.";
 }
 
 function endRound(finished: World): void {
@@ -260,13 +284,57 @@ function nothingToBuy(): boolean {
 
 function resize(): void {
   const width = window.innerWidth;
-  const height = window.innerHeight;
-  renderer.resize(width, height, window.devicePixelRatio || 1);
-  world?.resize(width, height);
+  const height = window.visualViewport?.height ?? window.innerHeight;
+  const nextLandscape = window.innerWidth > window.innerHeight;
+  if (world && touchLayout.matches && nextLandscape !== landscape) pauseRound("Screen rotated. Resume when you're ready.");
+  landscape = nextLandscape;
+  document.documentElement.style.setProperty("--app-height", `${height}px`);
+  document.documentElement.style.setProperty("--viewport-top", `${window.visualViewport?.offsetTop ?? 0}px`);
+  const top = document.body.classList.contains("playing") ? hud.root.getBoundingClientRect().height : 0;
+  const safeBottom = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--safe-bottom")) || 0;
+  // The contact strip lets a finger reach below the sea while the net stays above it.
+  const bottom = safeBottom + (touchLayout.matches && document.body.classList.contains("playing") ? 56 : 0);
+  viewport = createViewport(width, height, top, bottom);
+  netInput.clear();
+  const density = touchLayout.matches ? Math.min(window.devicePixelRatio || 1, 2) : window.devicePixelRatio || 1;
+  renderer.resize(width, height, density, viewport);
+  world?.resize(viewport.worldWidth, viewport.worldHeight);
+}
+
+function setToolsOpen(open: boolean): void {
+  hubTools.classList.toggle("is-open", open);
+  toolsToggle.setAttribute("aria-expanded", String(open));
+}
+
+function pauseRound(message = "Your round is paused."): void {
+  if (!world || world.over || paused) return;
+  paused = true;
+  netInput.clear();
+  world.pointer = null;
+  accumulator = 0;
+  pauseMessage.textContent = message;
+  pausePanel.hidden = false;
+  audio.screen("hub", { final: finalRound, upgrades: save.upgrades });
+  resumeButton.focus({ preventScroll: true });
+}
+
+function resumeRound(): void {
+  if (!world || world.over || document.hidden) return;
+  paused = false;
+  pausePanel.hidden = true;
+  accumulator = 0;
+  lastFrame = performance.now();
+  audio.screen("round", { final: finalRound, upgrades: save.upgrades });
 }
 
 function setText(el: HTMLElement, text: string): void {
   if (el.textContent !== text) el.textContent = text;
+}
+
+function setMoney(el: HTMLElement, amount: number): void {
+  const full = formatMoney(amount);
+  setText(el, touchLayout.matches ? formatCompactMoney(amount) : full);
+  if (el.title !== full) el.title = full;
 }
 
 function updateHud(): void {
@@ -274,9 +342,10 @@ function updateHud(): void {
   const playing = !world.over;
   setText(hud.round, finalRound ? "Final Round" : `Round ${playingRound}`);
   setText(hud.timer, `${world.timeLeft.toFixed(1)}s`);
-  setText(hud.money, formatMoney(playing ? save.money + world.earned : save.money));
+  setMoney(hud.money, playing ? save.money + world.earned : save.money);
   const combo = world.combo > 0 ? ` · combo ×${world.comboMult.toFixed(1)}` : "";
-  setText(hud.earned, playing ? `+${formatMoney(world.earned)} this round${combo}` : "");
+  const earnings = touchLayout.matches ? formatCompactMoney(world.earned) : formatMoney(world.earned);
+  setText(hud.earned, playing ? `+${earnings} this round${combo}` : "");
   const showHint = playing && playingRound === 1 && world.totalCaught === 0 && world.elapsed < HINT_SECONDS;
   if (roundHint.hidden === showHint) roundHint.hidden = !showHint;
 }
@@ -285,7 +354,7 @@ function frame(now: number): void {
   const dt = Math.min((now - lastFrame) / 1000, MAX_FRAME_SECONDS);
   lastFrame = now;
 
-  if (world && !world.over) {
+  if (world && !world.over && !paused) {
     accumulator += dt;
     while (accumulator >= STEP) {
       world.pointer = pointer;
@@ -303,18 +372,38 @@ function frame(now: number): void {
     audio.frame(events, world);
   }
 
-  renderer.draw({ world, pointer, stats }, dt);
+  renderer.draw({ world, pointer, stats, finger }, paused ? 0 : dt);
   updateHud();
   requestAnimationFrame(frame);
 }
 
-canvas.addEventListener("pointermove", (event) => {
-  pointer = { x: event.clientX, y: event.clientY };
-});
-canvas.addEventListener("pointerleave", () => {
-  pointer = null;
+const netInput = mountNetInput(canvas, {
+  getViewport: () => viewport,
+  enabled: () => Boolean(world && !world.over && !paused),
+  onChange(next, contact) { pointer = next; finger = contact; },
 });
 window.addEventListener("resize", resize);
+window.visualViewport?.addEventListener("resize", resize);
+window.visualViewport?.addEventListener("scroll", resize);
+touchLayout.addEventListener("change", resize);
+window.addEventListener("orientationchange", () => pauseRound("Screen rotated. Resume when you're ready."));
+window.addEventListener("blur", () => pauseRound());
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) pauseRound("Your round paused while you were away.");
+});
+element("#pause-button").addEventListener("click", () => pauseRound());
+resumeButton.addEventListener("click", resumeRound);
+toolsToggle.addEventListener("click", () => setToolsOpen(!hubTools.classList.contains("is-open")));
+document.addEventListener("pointerdown", (event) => {
+  if (!hubTools.contains(event.target as Node) && !toolsToggle.contains(event.target as Node)) setToolsOpen(false);
+});
+window.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && world && !world.over) {
+    event.preventDefault();
+    if (paused) resumeRound();
+    else pauseRound();
+  }
+});
 
 resize();
 requestAnimationFrame(frame);
@@ -342,6 +431,7 @@ mountSaveControls(hub.save, {
 });
 hub.start.addEventListener("click", startRound);
 element("#help-button").addEventListener("click", () => {
+  setToolsOpen(false);
   void showIntro({ playerName: save.playerName, mode: "replay" });
 });
 element("#continue-button").addEventListener("click", showHome);

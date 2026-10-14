@@ -2,6 +2,15 @@ export function formatMoney(amount: number): string {
   return `$${Math.floor(amount).toLocaleString("en-US")}`;
 }
 
+const compactMoney = new Intl.NumberFormat("en-US", {
+  style: "currency", currency: "USD", notation: "compact", maximumFractionDigits: 1,
+});
+
+/** Keep balances readable in the narrow columns around a phone's sound/pause controls. */
+export function formatCompactMoney(amount: number): string {
+  return amount < 10_000 ? formatMoney(amount) : compactMoney.format(Math.floor(amount));
+}
+
 /**
  * Whole-dollar shares of `total` for each of `parts`, rounded so they add up to floor(total) exactly
  * (largest remainders get the leftover dollars). Keeps a breakdown consistent with its total.
