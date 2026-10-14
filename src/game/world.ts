@@ -112,6 +112,8 @@ export class World {
   private tickTimer = 0;
   private spawnTimer = 0;
   private lastCaptureAt = -Infinity;
+  /** Seconds time bonuses have added this round. Capped at roundSeconds so chains can't stretch a round forever. */
+  private bonusTime = 0;
   private nextId = 1;
 
   constructor(
@@ -362,9 +364,12 @@ export class World {
 
       FISH_SPECS[fish.kind].onCapture?.(this, fish, source);
       if (this.rng() < this.stats.twinChance) this.spawn(fish.kind);
-      if (this.rng() < this.stats.timeBonusChance) {
-        this.timeLeft += this.stats.timeBonusSeconds;
-        this.emit({ type: "time-bonus", x: fish.x, y: fish.y, seconds: this.stats.timeBonusSeconds });
+      const bonusRoom = this.stats.roundSeconds - this.bonusTime;
+      if (bonusRoom > 0 && this.rng() < this.stats.timeBonusChance) {
+        const seconds = Math.min(this.stats.timeBonusSeconds, bonusRoom);
+        this.bonusTime += seconds;
+        this.timeLeft += seconds;
+        this.emit({ type: "time-bonus", x: fish.x, y: fish.y, seconds });
       }
     }
     this.fish = this.fish.filter((fish) => !fish.captured);

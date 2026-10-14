@@ -131,6 +131,13 @@ describe("World round mechanics", () => {
     expect(world.timeLeft).toBeCloseTo(before + 2 - STEP);
   });
 
+  it("caps bonus time at one extra round length", () => {
+    const world = makeWorld({ startFish: 20, roundSeconds: 2, timeBonusChance: 1, timeBonusSeconds: 0.75 });
+    for (const fish of [...world.fish]) world.capture(fish, "net");
+    run(world, STEP);
+    expect(world.timeLeft).toBeCloseTo(2 + 2 - STEP);
+  });
+
   it("spawns a twin of a captured fish when the twin roll succeeds", () => {
     const world = makeWorld({ startFish: 1, twinChance: 1 });
     const first = world.fish[0]!;
