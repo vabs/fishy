@@ -1,6 +1,7 @@
 // Smoke test of the whole game flow in a real browser: npm run e2e
-// First visit -> name -> straight into round 1 -> summary -> hub -> buy an upgrade -> reload keeps
-// progress -> Final Round -> end screen -> mute -> Play Again. Needs Google Chrome installed.
+// First visit -> name -> straight into round 1 -> summary -> hub -> buy an upgrade -> colour-blind
+// palette -> reload keeps progress -> Final Round -> end screen -> mute -> Play Again. Needs Google
+// Chrome installed.
 import assert from "node:assert/strict";
 import { chaseFish, launchChrome, newPage, startDevServer } from "./lib/browser.mjs";
 
@@ -55,11 +56,24 @@ try {
   await intro.waitFor({ state: "detached" });
   assert.ok(await page.locator("#hub").isVisible());
 
-  step("a reload keeps the save and skips the name prompt");
+  step("the colour-blind palette switch recolours the fish at once");
+  const paletteSwitch = page.locator("#hub-display .display-toggle");
+  const starColour = () => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--fish-star").trim());
+  assert.equal(await paletteSwitch.getAttribute("aria-pressed"), "false");
+  const standardStar = await starColour();
+  await paletteSwitch.click();
+  assert.equal(await paletteSwitch.getAttribute("aria-pressed"), "true");
+  assert.notEqual(await starColour(), standardStar, "the tech tree's fish colours didn't change");
+  const displaySettings = await page.evaluate(() => localStorage.getItem("fishy.display"));
+  assert.equal(JSON.parse(displaySettings).colorBlind, true);
+
+  step("a reload keeps the save and the palette, and skips the name prompt");
   await page.reload();
   await page.waitForSelector("#hub:not([hidden])");
   assert.equal(await text(page, "#hub-name"), NAME);
   assert.equal(money(await text(page, "#hub-money")), afterBuy);
+  assert.equal(await paletteSwitch.getAttribute("aria-pressed"), "true");
+  assert.notEqual(await starColour(), standardStar);
 
   step("a maxed tree offers the Final Round");
   const { TECH_NODES } = await dev.load("/src/game/tech/index.ts");
@@ -90,7 +104,7 @@ try {
   const audioSettings = await page.evaluate(() => localStorage.getItem("fishy.audio"));
   assert.equal(JSON.parse(audioSettings).muted, true);
 
-  step("Play Again starts over in round 1, keeps the name and leaves the sound settings alone");
+  step("Play Again starts over in round 1, keeps the name and leaves the sound and display settings alone");
   await page.click("#play-again-button");
   await page.waitForSelector("#hud:not([hidden])");
   await page.waitForFunction(() => document.querySelector("#hud-round")?.textContent === "Round 1");
@@ -100,6 +114,8 @@ try {
   assert.deepEqual(fresh.upgrades, {});
   assert.equal(await page.evaluate(() => localStorage.getItem("fishy.audio")), audioSettings);
   assert.equal(await page.locator('#hud-audio [data-action="mute"]').getAttribute("aria-pressed"), "true");
+  assert.equal(await page.evaluate(() => localStorage.getItem("fishy.display")), displaySettings);
+  assert.equal(await paletteSwitch.getAttribute("aria-pressed"), "true");
 
   assert.deepEqual(page.errors, [], "page errors");
   console.log("\nall good");
