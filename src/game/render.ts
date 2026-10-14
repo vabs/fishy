@@ -3,7 +3,7 @@ import { FISH, FISH_KINDS, FISH_SPECS, MAX_FISH_SIZE, type FishKind } from "./fi
 import type { Effect } from "./fx";
 import { buildSprites, type FishSprites } from "./shapes";
 import type { Stats } from "./stats";
-import type { Fish, Point, World, WorldEvent } from "./world";
+import type { Fish, FxEvent, Point, World, WorldEvent } from "./world";
 
 const TAU = Math.PI * 2;
 
@@ -27,11 +27,22 @@ const FADE_IN_SECONDS = 0.4;
 const FLOATER_SECONDS = 0.9;
 const PULSE_SECONDS = 0.25;
 const PARTICLES_PER_CAPTURE = 8;
+// These budgets affect decoration only; the World always processes every capture and payout.
+const MAX_PARTICLES = 1200;
+const MAX_FLOATERS = 80;
+const MAX_PULSES = 12;
+const MAX_EFFECTS = 64;
+const MAX_HEAVY_EFFECTS = 12;
+const MAX_NET_TARGETS = 24;
+const MAX_WHIRLPOOL_TARGETS = 96;
+const MERGE_SECONDS = 0.1;
 
 interface Floater {
   x: number;
   y: number;
   text: string;
+  /** Capture payouts are formatted once after nearby captures have been combined. */
+  value?: number;
   color: string;
   age: number;
 }
@@ -71,7 +82,7 @@ export class Renderer {
   private floaters: Floater[] = [];
   private pulses: Pulse[] = [];
   private particles: Particle[] = [];
-  private effects: { effect: Effect; age: number }[] = [];
+  private effects: { effect: Effect; age: number; event: FxEvent }[] = [];
   private time = 0;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
@@ -96,12 +107,23 @@ export class Renderer {
   onEvent(event: WorldEvent): void {
     switch (event.type) {
       case "tick":
-        this.pulses.push({ x: event.x, y: event.y, radius: event.radius, strong: event.hits > 0, age: 0 });
+        if (this.pulses.length < MAX_PULSES) {
+          this.pulses.push({ x: event.x, y: event.y, radius: event.radius, strong: event.hits > 0, age: 0 });
+        }
         break;
       case "capture": {
-        this.floaters.push({ x: event.x, y: event.y, text: `+${formatMoney(event.value)}`, color: COLORS.floater, age: 0 });
+        const nearby = this.floaters.find((f) =>
+          f.value !== undefined && f.age < MERGE_SECONDS && Math.hypot(f.x - event.x, f.y - event.y) <= 40,
+        );
+        if (nearby) {
+          nearby.value! += event.value;
+          nearby.text = "";
+        } else if (this.floaters.length < MAX_FLOATERS) {
+          this.floaters.push({ x: event.x, y: event.y, text: "", value: event.value, color: COLORS.floater, age: 0 });
+        }
         const color = FISH[event.kind].body;
-        for (let i = 0; i < PARTICLES_PER_CAPTURE; i++) {
+        const count = Math.min(PARTICLES_PER_CAPTURE, MAX_PARTICLES - this.particles.length);
+        for (let i = 0; i < count; i++) {
           const angle = Math.random() * TAU;
           const speed = 40 + Math.random() * 60;
           this.particles.push({
@@ -117,12 +139,42 @@ export class Renderer {
         break;
       }
       case "time-bonus":
-        this.floaters.push({ x: event.x, y: event.y - 18, text: `+${event.seconds}s`, color: COLORS.timeBonus, age: 0 });
+        if (this.floaters.length < MAX_FLOATERS) {
+          this.floaters.push({ x: event.x, y: event.y - 18, text: `+${event.seconds}s`, color: COLORS.timeBonus, age: 0 });
+        }
         break;
       case "fx":
-        FISH_SPECS[event.kind].fx?.(event, (effect) => this.effects.push({ effect, age: 0 }));
+        this.addEffect(event);
         break;
     }
+  }
+
+  private addEffect(event: FxEvent): void {
+    if (event.kind === "epic" && event.name === "net") {
+      const nearby = this.effects.find((e) =>
+        e.event.kind === "epic" && e.event.name === "net" && e.age < MERGE_SECONDS &&
+        Math.hypot(e.event.x - event.x, e.event.y - event.y) <= (e.event.radius ?? 90) * 0.35,
+      );
+      if (nearby) {
+        const points = nearby.event.points!;
+        for (const point of event.points ?? []) {
+          if (points.length >= MAX_NET_TARGETS) break;
+          points.push(point);
+        }
+        return;
+      }
+    }
+    if (this.effects.length >= MAX_EFFECTS) return;
+    if ((event.kind === "epic" || event.kind === "electric") &&
+        this.effects.filter((e) => e.event.kind === event.kind).length >= MAX_HEAVY_EFFECTS) return;
+
+    // Keep event data owned by the sim intact. The Epic effect reads this mutable target list
+    // so nearby captures can share artwork; the number of rendered tethers stays bounded.
+    const limit = event.kind === "epic" ? MAX_NET_TARGETS : MAX_WHIRLPOOL_TARGETS;
+    const visual = { ...event, points: (event.points ?? []).slice(0, limit) };
+    FISH_SPECS[event.kind].fx?.(visual, (effect) => {
+      if (this.effects.length < MAX_EFFECTS) this.effects.push({ effect, age: 0, event: visual });
+    });
   }
 
   draw({ world, pointer, stats }: Scene, dt: number): void {
@@ -307,6 +359,7 @@ export class Renderer {
       const t = f.age / FLOATER_SECONDS;
       ctx.fillStyle = f.color;
       ctx.globalAlpha = 1 - t * t;
+      if (!f.text && f.value !== undefined) f.text = `+${formatMoney(f.value)}`;
       ctx.fillText(f.text, f.x, f.y - 12 - t * 30);
     }
     ctx.globalAlpha = 1;

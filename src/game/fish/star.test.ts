@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { STEP, World, type Fish, type FxEvent, type Shot, type WorldEvent } from "../world";
 import { createRng } from "../rng";
 import { BASE_STATS, cloneStats, type Stats } from "../stats";
 import { FISH_KINDS } from "./index";
+import { star } from "./star";
 
 const W = 1000;
 const H = 700;
@@ -93,6 +94,42 @@ describe("Star fish", () => {
 });
 
 describe("Star shots", () => {
+  it("checks local collision candidates instead of scanning distant fish for every shot", () => {
+    const world = makeWorld();
+    const near = target(world, 300, 200);
+    for (let i = 0; i < 1000; i++) target(world, 800, 500);
+    addShot(world, 300, 200, 0, 0);
+    const definitions = vi.spyOn(world, "defOf");
+    star.update!(world, STEP);
+    expect(near.hits).toBe(1);
+    expect(definitions.mock.calls.length).toBeLessThan(30);
+    definitions.mockRestore();
+  });
+
+  it("preserves capture order when a fast shot crosses several grid cells", () => {
+    const world = makeWorld((s) => { s.ability.star.damage = 10; });
+    const right = spawnAt(world, "rare", 650, 200);
+    const left = spawnAt(world, "normal", 250, 200);
+    right.hp = left.hp = 1;
+    addShot(world, 100, 200, 36_000, 0);
+    const captures = run(world, STEP).filter((e) => e.type === "capture");
+    expect(captures.map((e) => e.kind)).toEqual(["rare", "normal"]);
+  });
+
+  it("rebuilds collision candidates for moved and newly spawned fish", () => {
+    const world = makeWorld();
+    const fish = target(world, 800, 500);
+    addShot(world, 300, 200, 0, 0);
+    star.update!(world, STEP);
+    expect(fish.hits).toBe(0);
+    fish.x = 300;
+    fish.y = 200;
+    const spawned = target(world, 300, 200);
+    star.update!(world, STEP);
+    expect(fish.hits).toBe(1);
+    expect(spawned.hits).toBe(1);
+  });
+
   it("launches `count` projectiles from the capture point in different directions", () => {
     const world = makeWorld((s) => {
       s.ability.star.count = 3;

@@ -334,29 +334,32 @@ function netEffect(event: FxEvent): Effect {
       ctx.beginPath();
       ring(ctx, r);
       ctx.stroke();
+      // The glow belongs to the rim, not fourteen separate dots and every captured fish.
+      ctx.shadowBlur = 0;
+      ctx.shadowColor = "transparent";
       ctx.fillStyle = `rgba(244, 234, 255, ${alpha})`;
+      ctx.beginPath();
       for (let i = 0; i < spokes; i++) {
         const p = at(spin + (i * TAU) / spokes, r);
-        ctx.beginPath();
+        ctx.moveTo(p.x + 2, p.y);
         ctx.arc(p.x, p.y, 2, 0, TAU);
-        ctx.fill();
       }
+      ctx.fill();
 
       // Each captured fish gets a tether from the centre and a snare closing round it,
       // once the net has opened far enough to reach it.
       ctx.lineWidth = 1.6;
       ctx.strokeStyle = `rgba(255, 255, 255, ${0.9 * alpha})`;
+      ctx.beginPath();
       for (const p of targets) {
         if (Math.hypot(p.x - centre.x, p.y - centre.y) > r + 2) continue;
-        ctx.beginPath();
         ctx.moveTo(centre.x, centre.y);
         ctx.lineTo(p.x, p.y);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, 13 - 6 * t, 0, TAU);
-        ctx.stroke();
+        const snare = 13 - 6 * t;
+        ctx.moveTo(p.x + snare, p.y);
+        ctx.arc(p.x, p.y, snare, 0, TAU);
       }
-      ctx.shadowBlur = 0;
+      ctx.stroke();
     },
   };
 }

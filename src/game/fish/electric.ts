@@ -295,25 +295,23 @@ function currentEffect(event: FxEvent): Effect {
       const main = visible.map((b) => b.main);
       const all = [...main, ...visible.flatMap((b) => b.forks)];
       // Yellow halo and band in normal blending so they stay yellow over blue water, then a white-hot core.
-      stroke(ctx, all, `rgba(255, 196, 20, ${0.5 * alpha})`, 8, 18);
-      stroke(ctx, all, `rgba(255, 234, 90, ${0.95 * alpha})`, 3, 0);
+      // A broad translucent band supplies the halo without a per-current shadow blur.
+      stroke(ctx, all, `rgba(255, 196, 20, ${0.5 * alpha})`, 8);
+      stroke(ctx, all, `rgba(255, 234, 90, ${0.95 * alpha})`, 3);
       ctx.globalCompositeOperation = "lighter";
-      stroke(ctx, main, `rgba(255, 255, 255, ${alpha})`, 1.2, 0);
+      stroke(ctx, main, `rgba(255, 255, 255, ${alpha})`, 1.2);
     },
   };
 }
 
-function stroke(ctx: CanvasRenderingContext2D, lines: Point[][], color: string, width: number, blur: number): void {
+function stroke(ctx: CanvasRenderingContext2D, lines: Point[][], color: string, width: number): void {
   ctx.strokeStyle = color;
   ctx.lineWidth = width;
-  ctx.shadowColor = blur > 0 ? "rgba(255, 205, 0, 0.95)" : "transparent";
-  ctx.shadowBlur = blur;
   ctx.beginPath();
   for (const line of lines) {
     line.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
   }
   ctx.stroke();
-  ctx.shadowBlur = 0;
 }
 
 function glow(ctx: CanvasRenderingContext2D, p: Point, radius: number, alpha: number): void {

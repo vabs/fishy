@@ -1,7 +1,9 @@
 import type { Effect } from "../fx";
+import { FishGrid } from "../fish-grid";
 import { range } from "../rng";
 import type { FxEvent, Shot, World } from "../world";
 import type { FishDef, FishSpec } from "./types";
+import { MAX_FISH_SIZE } from "./index";
 
 const TAU = Math.PI * 2;
 
@@ -95,15 +97,18 @@ function launch(world: World, x: number, y: number): void {
 
 /** Moves every Star shot, bounces it off the screen edges and damages the fish it passes. */
 function moveShots(world: World, dt: number): void {
+  if (!world.shots.some((shot) => shot.kind === "star")) return;
+  // Shot updates precede fish movement and spawning, so one snapshot serves every shot this step.
+  const grid = new FishGrid(world.fish);
   let kept = 0;
   for (const shot of world.shots) {
-    if (shot.kind !== "star" || stepShot(world, shot, dt)) world.shots[kept++] = shot;
+    if (shot.kind !== "star" || stepShot(world, shot, dt, grid)) world.shots[kept++] = shot;
   }
   world.shots.length = kept;
 }
 
 /** Returns false once the shot is gone. */
-function stepShot(world: World, shot: Shot, dt: number): boolean {
+function stepShot(world: World, shot: Shot, dt: number, grid: FishGrid): boolean {
   shot.age += dt;
   for (const [id, left] of shot.cooldowns) {
     if (left - dt <= EPSILON) shot.cooldowns.delete(id);
@@ -142,14 +147,19 @@ function stepShot(world: World, shot: Shot, dt: number): boolean {
     shot.y = clamp(shot.y, top, bottom);
   }
 
-  hitFish(world, shot, fromX, fromY);
+  hitFish(world, shot, fromX, fromY, grid);
   if (gone) world.emit({ type: "fx", kind: "star", name: "fade", x: shot.x, y: shot.y, radius: shot.radius });
   return !gone;
 }
 
 /** Damages every live fish within reach of the shot's path this step, once per cooldown. */
-function hitFish(world: World, shot: Shot, fromX: number, fromY: number): void {
-  for (const fish of world.fish) {
+function hitFish(world: World, shot: Shot, fromX: number, fromY: number, grid: FishGrid): void {
+  const margin = shot.radius + MAX_FISH_SIZE * 0.4;
+  const candidates = grid.query(
+    Math.min(fromX, shot.x) - margin, Math.min(fromY, shot.y) - margin,
+    Math.max(fromX, shot.x) + margin, Math.max(fromY, shot.y) + margin,
+  );
+  for (const fish of candidates) {
     if (fish.captured || shot.cooldowns.has(fish.id)) continue;
     const reach = shot.radius + world.defOf(fish.kind).size * 0.4;
     if (segmentDistance(fish.x, fish.y, fromX, fromY, shot.x, shot.y) > reach) continue;
