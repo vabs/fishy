@@ -29,7 +29,8 @@ upgrades between rounds, unlock stranger fish, and work your way to the Final Ro
 - **New here?** First-time players get a three-slide walkthrough before round 1. The **?** button
   in the hub shows it again.
 - **Sound.** Press **M**, or the speaker button, to mute. In the hub, the button next to it sets
-  the music and effects volume. On smaller screens, open **⋯** for help, sound, and save tools.
+  the music and effects volume. On smaller screens, open **⋯** for help, sound, display and save
+  tools.
 
 ![The tech tree: upgrade nodes spread out from a boat in branches for the net, time, economy, spawning and each fish type](docs/screenshots/tech-tree.png)
 
@@ -53,11 +54,29 @@ upgrades between rounds, unlock stranger fish, and work your way to the Final Ro
 A fish caught by any of these effects counts as caught by you, so its own ability fires too and
 chains can run through the whole sea.
 
+## Surprises
+
+| What | When | What it does |
+| --- | --- | --- |
+| Golden fish | From round 2, about one every 17 seconds | A gold copy of any fish, worth 10×. It sparkles even as a silhouette, flees your net, and dives away after 8 seconds. |
+| Treasure chest | Some rounds from round 3; always in the Final Round | Floats across the sea. Break it open with your net for a big payout, plus extra time or a spill of golden fish. |
+| Feeding Frenzy | Every fifth round, and the Final Round | A wave of fish sweeps across the sea. For a few seconds fish spawn much faster and every catch pays 1.5×. The hub warns you before the round. |
+
+Upgrades in the tree make each of them come more often, last longer or pay more.
+
+## Accessibility
+
+- **Colour-blind palette.** The eye button in the hub switches every fish type to colours that
+  stay distinct under protanopia, deuteranopia and tritanopia. Fish shapes differ too, and golden
+  fish, chests and the Feeding Frenzy are marked by shape, motion and text, not colour alone.
+- **Reduced motion.** The how-to-play slides show still pictures when your system asks for less
+  motion.
+
 ## Saving
 
 Progress is saved in your browser. Export your save to a file to move it to another browser or
-computer, and import it there. Sound settings are kept apart from the save: Play Again and
-importing a save leave them as they are.
+computer, and import it there. Sound and display settings are kept apart from the save: Play
+Again and importing a save leave them as they are.
 
 Full design: [docs/GAME_DESIGN.md](docs/GAME_DESIGN.md).
 
