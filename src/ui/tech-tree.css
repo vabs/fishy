@@ -1,0 +1,461 @@
+/* Tech tree screen. Uses the colour tokens from style.css, with fallbacks so it also stands alone. */
+
+.tech {
+  --tech-water: #0d4561;
+  --tech-water-deep: #051c2a;
+  --tech-node: #0b3146;
+  --tech-node-deep: #061f2e;
+  --tech-edge: rgba(185, 216, 228, 0.2);
+  --tech-edge-owned: rgba(185, 216, 228, 0.62);
+  --tech-ready: var(--accent, #f4a259);
+  --tech-ready-glow: rgba(244, 162, 89, 0.55);
+  --tech-short: #f2a79c;
+  --tech-pill: rgba(3, 18, 28, 0.88);
+
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(158, 240, 255, 0.08), transparent 38%),
+    radial-gradient(ellipse at 50% 50%, var(--tech-water) 0%, #093248 45%, var(--tech-water-deep) 100%);
+  color: var(--ink, #fff7e6);
+  font-family: inherit;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  outline: none;
+}
+
+.tech.is-panning {
+  cursor: grabbing;
+}
+
+.tech-world {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+.tech.is-animating .tech-world {
+  transition: transform 0.38s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.tech-svg {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: visible;
+}
+
+.tech-rings circle {
+  fill: none;
+  stroke: rgba(210, 245, 255, 0.07);
+  stroke-width: 1.5;
+  stroke-dasharray: 2 9;
+}
+
+.tech-edges line {
+  stroke: var(--tech-edge);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-dasharray: 5 7;
+  transition: stroke 0.3s;
+}
+
+.tech-edges line.is-owned {
+  stroke: var(--tech-edge-owned);
+  stroke-dasharray: none;
+}
+
+.tech-svg .is-hidden {
+  display: none;
+}
+
+.tech-label {
+  font-size: clamp(12px, calc(12px / var(--zoom, 1)), 22px);
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  dominant-baseline: middle;
+  opacity: 0.75;
+}
+
+/* Boat in the centre, under the root node. Same colours as the boat in a round. */
+.tech-boat-hull {
+  fill: #8a5a32;
+  stroke: #5b3a1f;
+  stroke-width: 4;
+}
+
+.tech-boat-deck {
+  fill: #b07a48;
+}
+
+.tech-boat-bench {
+  fill: #6e4526;
+}
+
+.tech-boat-bob {
+  animation: tech-bob 4s ease-in-out infinite;
+}
+
+/* Nodes */
+
+.tech-nodes {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+
+.tech-node {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: var(--size);
+  height: var(--size);
+  margin: calc(var(--size) / -2) 0 0 calc(var(--size) / -2);
+  padding: 0;
+  border: 2px solid color-mix(in srgb, var(--tint) 45%, transparent);
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 30%, var(--tech-node), var(--tech-node-deep));
+  color: var(--tint);
+  font: inherit;
+  cursor: pointer;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+  transition:
+    transform 0.15s,
+    border-color 0.25s,
+    background 0.25s;
+}
+
+.tech-node[hidden] {
+  display: none;
+}
+
+.tech-node:hover {
+  transform: scale(1.08);
+}
+
+.tech-node:focus-visible {
+  outline: 3px solid var(--ink, #fff7e6);
+  outline-offset: 9px;
+}
+
+.tech-icon {
+  width: 48%;
+  height: 48%;
+  overflow: visible;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: opacity 0.25s;
+}
+
+.tech-pips {
+  position: absolute;
+  inset: -10px;
+  width: calc(100% + 20px);
+  height: calc(100% + 20px);
+  overflow: visible;
+  pointer-events: none;
+}
+
+.tech-pips path {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.13);
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  transition: stroke 0.25s;
+}
+
+.tech-pips path.is-on {
+  stroke: var(--tint);
+}
+
+.tech-cost {
+  position: absolute;
+  top: calc(100% + 12px);
+  left: 50%;
+  padding: 1px 0.6em;
+  border-radius: 999px;
+  background: var(--tech-pill);
+  color: var(--ink-muted, #b9d8e4);
+  font-size: clamp(9px, calc(11px / var(--zoom, 1)), 18px);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.tech-node.is-owned {
+  background: radial-gradient(
+    circle at 50% 30%,
+    color-mix(in srgb, var(--tint) 28%, var(--tech-node)),
+    var(--tech-node-deep)
+  );
+}
+
+/* Affordable: orange ring that breathes, orange price. */
+.tech-node.is-ready {
+  border-color: var(--tech-ready);
+}
+
+.tech-node.is-ready::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  box-shadow: 0 0 14px var(--tech-ready-glow);
+  animation: tech-glow 1.8s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.tech-node.is-ready .tech-cost {
+  background: var(--tech-ready);
+  color: var(--accent-ink, #2a1505);
+}
+
+/* Not affordable yet: faded icon and border, pinkish price. */
+.tech-node.is-short {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.tech-node.is-short .tech-icon {
+  opacity: 0.42;
+}
+
+.tech-node.is-short .tech-cost {
+  color: var(--tech-short);
+}
+
+/* Maxed: filled with the lane colour. */
+.tech-node.is-maxed {
+  border-color: var(--tint);
+  background: radial-gradient(circle at 50% 30%, color-mix(in srgb, var(--tint) 85%, white), var(--tint));
+  color: #06202e;
+  box-shadow:
+    0 6px 16px rgba(0, 0, 0, 0.4),
+    0 0 18px color-mix(in srgb, var(--tint) 35%, transparent);
+}
+
+.tech-node.is-maxed .tech-cost {
+  color: var(--tint);
+  font-size: clamp(8px, calc(10px / var(--zoom, 1)), 16px);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.tech-node.is-root {
+  border-width: 3px;
+}
+
+.tech-node.is-new {
+  animation: tech-pop 0.5s cubic-bezier(0.2, 1.5, 0.4, 1) both;
+}
+
+.tech-node.is-denied {
+  animation: tech-deny 0.32s ease-in-out;
+}
+
+/* Tooltip, in screen space so it never scales. */
+
+.tech-tip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 2;
+  width: 260px;
+  padding: 12px 14px 12px;
+  border: 1px solid var(--panel-edge, rgba(255, 255, 255, 0.12));
+  border-top: 3px solid var(--tint);
+  border-radius: 10px;
+  background: var(--panel, rgba(6, 30, 45, 0.92));
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.45);
+  font-size: 13px;
+  pointer-events: none;
+  backdrop-filter: blur(6px);
+}
+
+.tech-tip[hidden] {
+  display: none;
+}
+
+.tech-tip-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--ink-muted, #b9d8e4);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.tech-tip-lane {
+  color: var(--tint);
+  font-weight: 700;
+}
+
+.tech-tip-name {
+  margin: 6px 0 4px;
+  font-size: 17px;
+}
+
+.tech-tip-desc {
+  margin: 0 0 10px;
+  color: var(--ink-muted, #b9d8e4);
+  line-height: 1.4;
+}
+
+.tech-tip-stats {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 12px;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.tech-tip-stats dt {
+  color: var(--ink-muted, #b9d8e4);
+}
+
+.tech-tip-stats dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.tech-tip-before {
+  color: var(--ink-muted, #b9d8e4);
+}
+
+.tech-tip-cost {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--ink-muted, #b9d8e4);
+  font-size: 12px;
+}
+
+.tech-tip-cost strong {
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tech-tip-cost.is-ready strong {
+  color: var(--tech-ready);
+}
+
+.tech-tip-cost.is-short strong {
+  color: var(--tech-short);
+}
+
+.tech-tip-cost.is-maxed {
+  color: var(--tint);
+  font-weight: 700;
+}
+
+/* Controls */
+
+.tech-controls {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 1;
+  display: flex;
+  gap: 6px;
+}
+
+.tech-control {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--panel-edge, rgba(255, 255, 255, 0.12));
+  border-radius: 8px;
+  background: var(--panel, rgba(6, 30, 45, 0.88));
+  color: var(--ink, #fff7e6);
+  font: inherit;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.tech-control:hover {
+  background: rgba(18, 78, 107, 0.95);
+}
+
+.tech-control:focus-visible {
+  outline: 2px solid var(--ink, #fff7e6);
+  outline-offset: 2px;
+}
+
+.tech-control svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.tech-hint {
+  position: absolute;
+  left: 16px;
+  bottom: 22px;
+  color: var(--ink-muted, #b9d8e4);
+  font-size: 12px;
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+@keyframes tech-glow {
+  50% {
+    box-shadow: 0 0 24px var(--tech-ready-glow);
+    opacity: 0.6;
+  }
+}
+
+@keyframes tech-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+}
+
+@keyframes tech-deny {
+  20%,
+  60% {
+    transform: translateX(-4px);
+  }
+  40%,
+  80% {
+    transform: translateX(4px);
+  }
+}
+
+@keyframes tech-bob {
+  50% {
+    transform: rotate(2.5deg) translateY(2px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tech *,
+  .tech *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
