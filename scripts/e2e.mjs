@@ -1,6 +1,6 @@
 // Smoke test of the whole game flow in a real browser: npm run e2e
 // First visit -> name -> straight into round 1 -> summary -> hub -> buy an upgrade -> reload keeps
-// progress -> Final Round -> end screen -> Play Again. Needs Google Chrome installed.
+// progress -> Final Round -> end screen -> mute -> Play Again. Needs Google Chrome installed.
 import assert from "node:assert/strict";
 import { chaseFish, launchChrome, newPage, startDevServer } from "./lib/browser.mjs";
 
@@ -68,7 +68,12 @@ try {
   await page.reload();
   await page.waitForSelector("#end-panel:not([hidden])");
 
-  step("Play Again starts over in round 1 and keeps the name");
+  step("M mutes the sound");
+  await page.keyboard.press("m");
+  const audioSettings = await page.evaluate(() => localStorage.getItem("fishy.audio"));
+  assert.equal(JSON.parse(audioSettings).muted, true);
+
+  step("Play Again starts over in round 1, keeps the name and leaves the sound settings alone");
   await page.click("#play-again-button");
   await page.waitForSelector("#hud:not([hidden])");
   await page.waitForFunction(() => document.querySelector("#hud-round")?.textContent === "Round 1");
@@ -76,6 +81,8 @@ try {
   assert.equal(fresh.playerName, NAME);
   assert.equal(fresh.money, 0);
   assert.deepEqual(fresh.upgrades, {});
+  assert.equal(await page.evaluate(() => localStorage.getItem("fishy.audio")), audioSettings);
+  assert.equal(await page.locator('#hud-audio [data-action="mute"]').getAttribute("aria-pressed"), "true");
 
   assert.deepEqual(page.errors, [], "page errors");
   console.log("\nall good");
