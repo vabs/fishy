@@ -6,7 +6,7 @@ upgrades between rounds, unlock stranger fish, and work your way to the Final Ro
 
 **Play:** https://vabs.github.io/fishy/ (desktop browsers)
 
-![A round in progress: two fish inside the net are drawn in colour with health bars, the rest of the sea shows dark fish silhouettes](docs/screenshots/gameplay.png)
+![A round in progress: a large net shows fish in colour while the rest of the sea is dark silhouettes; star fish shoot across the water and a shark-shaped whirlpool gathers fish](docs/screenshots/gameplay.png)
 
 ## How to play
 
@@ -21,7 +21,12 @@ upgrades between rounds, unlock stranger fish, and work your way to the Final Ro
   ticks, longer rounds, new fish and their abilities.
 - **Finish.** Max out the whole tree to unlock the Final Round.
 
-![Round summary showing fish caught, money earned and the bank balance](docs/screenshots/summary.png)
+![The tech tree: upgrade nodes spread out from a boat in branches for the net, time, economy, spawning and each fish type](docs/screenshots/tech-tree.png)
+
+| | |
+| --- | --- |
+| ![First visit: a dialog asks for your name](docs/screenshots/name-prompt.png) | ![Round summary with fish caught, money earned and the bank balance](docs/screenshots/summary.png) |
+| ![End screen thanking the player, with lifetime stats and a Play Again button](docs/screenshots/end.png) | |
 
 ## Fish
 
@@ -44,10 +49,6 @@ chains can run through the whole sea.
 Progress is saved in your browser. Export your save to a file to move it to another browser or
 computer, and import it there.
 
-## Status
-
-Work in progress. Playable now: rounds, the net, Normal fish and the silhouette lens. Being built:
-the tech tree, saves, the other fish types and the Final Round.
 Full design: [docs/GAME_DESIGN.md](docs/GAME_DESIGN.md).
 
 ## Development
@@ -61,17 +62,24 @@ npm test              # vitest
 npm run typecheck
 npm run build         # static site in dist/
 npm run preview       # serve the build locally
-npm run screenshots   # regenerate docs/screenshots (needs Google Chrome installed)
+npm run e2e           # play through the whole game flow in Chrome (needs Google Chrome)
+npm run screenshots   # regenerate docs/screenshots (needs Google Chrome)
 ```
+
+Tech tree pacing: `PACING=1 npx vitest run src/game/tech/pacing.test.ts --silent=false` plays a
+whole game with a bot and reports how long the tree takes to finish.
 
 In dev, `?fish=electric,epic` makes only those types spawn, which is handy for trying one out:
 http://localhost:5173/?fish=electric,epic
 
+Dev-only pages for working on one screen at a time: `/dev/tech-tree.html` (`?budget=N`,
+`?money=N`, `?fresh`) and `/dev/save.html`.
+
 ### Structure
 
 ```
-index.html          Page shell: canvas, HUD, panels
-src/main.ts         Boot, game loop, input, screens
+index.html          Page shell: canvas, HUD, hub, panels
+src/main.ts         Boot, game loop, input, screens (hub, round, summary, end)
 src/game/
   world.ts          The simulation for one round. No DOM, fixed 60 Hz step, seeded RNG
   stats.ts          Everything upgrades can change (global, per fish, abilities) and base values
@@ -82,7 +90,12 @@ src/game/
   shapes.ts         Builds each type's cached full / silhouette / hit-flash sprites
   fx.ts             Short-lived visual effects that fish types add
   rng.ts            Seeded random numbers
+  tech/             Tech tree: node definitions, applyUpgrades, costs, layout, pacing sim
+src/save/           Save model, localStorage, validation (zod/mini), migrations, export/import
+src/ui/             Tech tree screen, name prompt, save controls
+dev/                Dev-only pages for the tech tree and save UI
 scripts/
+  e2e.mjs           Browser smoke test of the whole game flow
   screenshots.mjs   Captures the README screenshots
 ```
 

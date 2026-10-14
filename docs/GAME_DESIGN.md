@@ -47,7 +47,7 @@ The player starts with Normal fish only. Every other type is unlocked in the tec
 | --- | --- | --- | --- |
 | Normal | Baseline | Steady orbit, gentle wobble | Nothing |
 | Uncommon | Early value bump, makes low levels playable | Spawns in a school of 3–5 that swim together, a bit faster than Normal | Nothing |
-| Rare | Tanky, high value | Slow and large. Armour reduces every hit by a flat amount, so damage upgrades matter | Nothing |
+| Rare | Tanky, high value | Slow and large. Armour reduces every hit by a flat amount, but at least 25% of a hit always gets through, so damage upgrades matter | Nothing |
 | Electric | Chain damage | Drifts, then darts in sudden bursts; sometimes jumps to a new distance from the boat | Releases a current (see below) |
 | Epic | Chain capture | Swims away from the cursor when it gets close, then returns to its orbit | Chance to instantly capture each fish within range |
 | Goober | Spawner | Slow, bobs in and out, sometimes reverses direction | Bursts into fish of its current tier (see below) |
@@ -62,11 +62,16 @@ A fish killed by the current is captured, so another Electric fish starts a new 
 
 Upgrades: number of jumps, current damage, jump range.
 
+Electric fish drift slowly, then dart in short bursts, sometimes to a new distance from the boat.
+
 ### Epic net
 
 When an Epic fish is captured, every fish within range has a chance to be captured instantly.
 
 Upgrades: capture chance, range.
+
+Epic fish swim away from the net when it comes close, but tire after a short burst, so they stay
+catchable.
 
 ### Goober tiers
 
@@ -137,6 +142,10 @@ so drawing thousands of fish stays cheap.
 - At the start of each round the game computes `stats = applyUpgrades(baseStats, ownedLevels)`.
   The simulation only reads `stats`, so adding an upgrade means adding a config entry.
 - Shown as a radial graph centred on the boat. A node's neighbours appear once it is bought.
+- Each fish's unlock gates the rest of its nodes. Fish unlock in order: Uncommon → Rare →
+  Electric → Epic → Goober → Monster → Star.
+- Pacing target: finishing the tree takes roughly 1–1.5 hours. `src/game/tech/pacing.test.ts`
+  checks it by playing a whole game with a bot.
 
 ### Branches
 
@@ -150,7 +159,8 @@ so drawing thousands of fish stays cheap.
 **Time**
 - Longer rounds
 - Chance to add time when a fish is captured
-- Amount of time added
+- Amount of time added (bonus time is capped at one extra round length per round, so chains
+  can't stretch a round forever)
 
 **Economy**
 - Fish value (all fish)
@@ -182,7 +192,9 @@ so drawing thousands of fish stays cheap.
 
 ### Starting state
 
-Only Normal fish spawn. The Net branch and the Normal fish branch are visible.
+Only Normal fish spawn. The only visible node is the root in the centre, Bigger Net ($2,
+affordable after round 1). Buying it opens the rest of the Net branch and the Normal fish branch;
+Time, Economy and Spawning open from those.
 
 ## Final round and end screen
 
@@ -202,7 +214,7 @@ Stored in the browser's localStorage under `fishy.save`:
   money: number,
   round: number,
   upgrades: Record<nodeId, level>,
-  stats: { totalFish, fishByType, bestRound, playTimeMs },
+  stats: { totalFish, fishByType, bestRoundEarnings, playTimeMs },
   finalRoundDone: boolean,
   createdAt: string,
   updatedAt: string,
@@ -218,6 +230,8 @@ Stored in the browser's localStorage under `fishy.save`:
   3. Unknown upgrade ids are dropped and levels are capped at each node's max.
   4. The game asks before overwriting the current save.
 - There is no tamper protection. Editing your own save only affects you.
+- A save that can't be read is moved to `fishy.save.corrupt` instead of being deleted.
+- If the browser refuses to store the save, the game says so once and suggests exporting.
 
 ## Screens
 
@@ -234,9 +248,9 @@ round summary → hub → … → Final Round → end screen.
 
 ## Milestones
 
-1. Canvas loop, boat, Normal fish, net with auto-tick, capture, round timer, money, silhouette lens.
-2. Tech tree model and screen, name prompt, save, export and import.
-3. Fish types, one at a time.
-4. Star fish.
-5. Polish (particles, damage numbers, sound), then a balance pass.
-6. Final Round and end screen.
+1. ~~Canvas loop, boat, Normal fish, net with auto-tick, capture, round timer, money, silhouette lens.~~
+2. ~~Tech tree model and screen, name prompt, save, export and import.~~
+3. ~~Fish types, one at a time.~~
+4. ~~Star fish.~~
+5. ~~Final Round and end screen.~~
+6. Polish (sound, more effects), then a balance pass with real play.
