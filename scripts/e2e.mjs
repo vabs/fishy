@@ -1,6 +1,7 @@
 // Smoke test of the whole game flow in a real browser: npm run e2e
 // First visit -> name -> straight into round 1 -> summary -> hub -> buy an upgrade -> reload keeps
-// progress -> Final Round -> end screen -> mute -> Play Again. Needs Google Chrome installed.
+// progress -> a Feeding Frenzy round -> Final Round -> end screen -> mute -> Play Again. Needs
+// Google Chrome installed.
 import assert from "node:assert/strict";
 import { chaseFish, launchChrome, newPage, startDevServer } from "./lib/browser.mjs";
 
@@ -61,6 +62,31 @@ try {
   assert.equal(await text(page, "#hub-name"), NAME);
   assert.equal(money(await text(page, "#hub-money")), afterBuy);
 
+  step("round 5 brings a Feeding Frenzy: the hub says so, a banner announces the wave, the summary counts it");
+  await page.evaluate(() => {
+    const save = JSON.parse(localStorage.getItem("fishy.save"));
+    localStorage.setItem("fishy.save", JSON.stringify({ ...save, round: 5 }));
+  });
+  await page.reload();
+  await page.waitForSelector("#hub:not([hidden])");
+  assert.equal(await text(page, "#hub-round"), "Round 5 next");
+  assert.match(await text(page, "#hub-hint"), /Feeding Frenzy this round/);
+  assert.ok(await page.locator("#start-button.has-frenzy").isVisible(), "no Frenzy badge on Start Round");
+  await page.click("#start-button");
+  await page.waitForSelector("#frenzy-banner:not([hidden])", { timeout: 15_000 });
+  assert.match(await text(page, "#frenzy-banner"), /^Feeding Frenzy!/);
+  await chaseFish(page, { steps: 40 });
+  await page.waitForSelector("#frenzy-banner", { state: "hidden", timeout: 15_000 });
+  await page.waitForSelector("#summary-panel:not([hidden])", { timeout: 30_000 });
+  assert.equal(await text(page, "#summary-title"), "Round 5 complete");
+  assert.match(await text(page, "#summary-frenzy"), /^Feeding Frenzy: \+\$[\d,]+ from [\d,]+ fish$/);
+  await page.click("#continue-button");
+  round = 6;
+  await page.waitForSelector("#hub:not([hidden])");
+  assert.equal(await text(page, "#hub-round"), `Round ${round} next`);
+  assert.doesNotMatch(await text(page, "#hub-hint"), /Feeding Frenzy/);
+  assert.equal(await page.locator("#start-button.has-frenzy").count(), 0, "Frenzy badge on a plain round");
+
   step("a maxed tree offers the Final Round");
   const { TECH_NODES } = await dev.load("/src/game/tech/index.ts");
   const maxed = Object.fromEntries(TECH_NODES.map((node) => [node.id, node.maxLevel]));
@@ -71,12 +97,15 @@ try {
   await page.reload();
   await page.waitForSelector("#hub:not([hidden])");
   assert.equal(await text(page, "#start-button"), "Final Round");
+  assert.ok(await page.locator("#start-button.has-frenzy").isVisible(), "no Frenzy badge on the Final Round");
 
-  step("the Final Round ends on the thank-you screen");
+  step("the Final Round has its Feeding Frenzy and ends on the thank-you screen");
   await page.click("#start-button");
   await page.waitForFunction(() => document.querySelector("#hud-round")?.textContent === "Final Round");
+  await page.waitForSelector("#frenzy-banner:not([hidden])", { timeout: 30_000 });
   await page.waitForSelector("#summary-panel:not([hidden])", { timeout: 120_000 });
   assert.equal(await text(page, "#summary-title"), "Final Round complete");
+  assert.match(await text(page, "#summary-frenzy"), /^Feeding Frenzy: /);
   await page.click("#continue-button");
   await page.waitForSelector("#end-panel:not([hidden])");
   assert.equal(await text(page, "#end-rounds"), String(round));
