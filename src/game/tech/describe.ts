@@ -33,6 +33,7 @@ const STAT_FORMATS: Record<string, [string, Format]> = {
   startFish: ["Fish at round start", num()],
   twinChance: ["Twin chance", percent],
   valueMult: ["Value of every fish", times],
+  abilityValueMult: ["Value of fish caught by abilities", times],
   comboWindow: ["Combo window", unit("s", 2)],
   comboStep: ["Value per combo capture", (v) => `+${percent(v)}`],
   comboMax: ["Highest combo", times],

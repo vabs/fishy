@@ -367,7 +367,9 @@ export class World {
     if (this.captureQueue.length === 0) return;
     for (const { fish, source } of this.captureQueue.splice(0, MAX_CAPTURES_PER_STEP)) {
       this.updateCombo();
-      const value = FISH[fish.kind].value * this.stats.fish[fish.kind].valueMult * this.stats.valueMult * this.comboMult;
+      const sourceMult = source === "net" ? 1 : this.stats.abilityValueMult;
+      const value =
+        FISH[fish.kind].value * this.stats.fish[fish.kind].valueMult * this.stats.valueMult * sourceMult * this.comboMult;
       this.earned += value;
       this.caught[fish.kind] = (this.caught[fish.kind] ?? 0) + 1;
       this.earnedBy[fish.kind] = (this.earnedBy[fish.kind] ?? 0) + value;

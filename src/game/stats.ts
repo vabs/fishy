@@ -80,6 +80,12 @@ export interface Stats {
 
   /** Multiplier on the value of every fish. */
   valueMult: number;
+  /**
+   * Extra value multiplier for fish caught by an ability (Electric current, Epic net, Star shot,
+   * Whirlpool) rather than the net. Late in a game the net catches nearly everything anyway, so
+   * without this, abilities would just re-catch fish and earn nothing extra.
+   */
+  abilityValueMult: number;
   /** Captures within this many seconds of each other build a combo. 0 turns combos off. */
   comboWindow: number;
   /** Value multiplier added per capture in a combo. */
@@ -109,6 +115,7 @@ export const BASE_STATS: Stats = {
   twinChance: 0,
 
   valueMult: 1,
+  abilityValueMult: 1.5,
   comboWindow: 0,
   comboStep: 0.1,
   comboMax: 2,

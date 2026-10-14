@@ -171,6 +171,15 @@ describe("World round mechanics", () => {
     expect(world.combo).toBe(2);
   });
 
+  it("pays the ability bonus for fish caught by an ability, not by the net", () => {
+    const world = makeWorld({ startFish: 2, abilityValueMult: 1.5 });
+    const [byNet, byCurrent] = world.fish;
+    world.capture(byNet!, "net");
+    world.capture(byCurrent!, "electric");
+    run(world, STEP);
+    expect(world.earned).toBeCloseTo(FISH.normal.value * 2.5);
+  });
+
   it("spawns at a requested position", () => {
     const world = makeWorld({ startFish: 0 });
     const fish = world.spawn("normal", { at: { x: 600, y: 200 } })!;
