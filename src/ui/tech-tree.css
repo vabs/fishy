@@ -269,14 +269,18 @@
   animation: tech-deny 0.32s ease-in-out;
 }
 
-/* Tooltip, in screen space so it never scales. */
+/* Upgrade details and purchase action, in screen space so they never scale. */
 
 .tech-tip {
   position: absolute;
   left: 0;
   top: 0;
   z-index: 2;
-  width: 260px;
+  width: min(290px, calc(100% - 16px));
+  max-height: calc(100% - 16px);
+  box-sizing: border-box;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 12px 14px 12px;
   border: 1px solid var(--panel-edge, rgba(255, 255, 255, 0.12));
   border-top: 3px solid var(--tint);
@@ -284,7 +288,8 @@
   background: var(--panel, rgba(6, 30, 45, 0.92));
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.45);
   font-size: 13px;
-  pointer-events: none;
+  cursor: default;
+  touch-action: pan-y;
   backdrop-filter: blur(6px);
 }
 
@@ -305,6 +310,55 @@
 .tech-tip-lane {
   color: var(--tint);
   font-weight: 700;
+}
+
+.tech-level-progress {
+  display: flex;
+  gap: 4px;
+  height: 7px;
+  margin: 9px 0 12px;
+}
+
+.tech-level-segment {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--tint) 38%, transparent);
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.tech-level-segment.is-on {
+  border-color: var(--tint);
+  background: var(--tint);
+}
+
+.tech-tip-buy {
+  width: 100%;
+  min-height: 40px;
+  margin-top: 12px;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--tech-ready);
+  color: var(--accent-ink, #2a1505);
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.tech-tip-buy:hover:enabled {
+  filter: brightness(1.1);
+}
+
+.tech-tip-buy:disabled {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--ink-muted, #b9d8e4);
+  cursor: default;
+}
+
+.tech-tip-buy:focus-visible {
+  outline: 3px solid var(--ink, #fff7e6);
+  outline-offset: 3px;
 }
 
 .tech-tip-name {

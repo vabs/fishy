@@ -166,7 +166,6 @@ try {
   await page.locator("dialog[open]:not(.intro)").waitFor();
   await fits(page, "dialog[open]");
   await page.getByRole("button", { name: "Cancel", exact: true }).tap();
-  await tap("#hub-tools-toggle");
   await tap("#help-button");
   await page.setViewportSize({ width: 844, height: 390 });
   await fits(page, "dialog.intro");
@@ -197,9 +196,9 @@ try {
     range.selectNodeContents(money);
     const text = range.getBoundingClientRect();
     const controls = document.querySelector(".hud-controls").getBoundingClientRect();
-    return { left: text.left, right: text.right, controlsRight: controls.right };
+    return { left: text.left, right: text.right, controlsLeft: controls.left };
   });
-  assert.ok(hudLayout.right <= 320 && hudLayout.left >= hudLayout.controlsRight, `large balance overlaps controls: ${JSON.stringify(hudLayout)}`);
+  assert.ok(hudLayout.left >= 0 && hudLayout.right <= hudLayout.controlsLeft, `large balance overlaps controls: ${JSON.stringify(hudLayout)}`);
   await seed({ ...afterBuy, finalRoundDone: true, upgrades: Object.fromEntries(TECH_NODES.map((node) => [node.id, node.maxLevel])) });
   await page.locator("#end-panel").waitFor({ state: "visible" });
   await fits(page, "#end-panel");

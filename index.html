@@ -13,17 +13,24 @@
     <canvas id="game"></canvas>
 
     <div id="hud" hidden>
-      <div class="hud-group">
+      <div class="hud-group hud-meta">
         <span id="hud-round"></span>
-        <span id="hud-timer" class="hud-big"></span>
+        <span class="hud-bank">Bank <span id="hud-money"></span></span>
+      </div>
+      <div class="hud-primary">
+        <div class="hud-metric hud-clock">
+          <span class="hud-label">Time left</span>
+          <span id="hud-timer" class="hud-big"></span>
+        </div>
+        <div class="hud-metric hud-catch">
+          <span class="hud-label">This round</span>
+          <span id="hud-earned" class="hud-big"></span>
+          <span id="hud-combo" class="hud-combo"></span>
+        </div>
       </div>
       <div class="hud-controls">
         <div id="hud-audio" class="hud-audio"></div>
         <button id="pause-button" type="button" class="icon-button" aria-label="Pause round" title="Pause round">Ⅱ</button>
-      </div>
-      <div class="hud-group hud-right">
-        <span id="hud-money" class="hud-big"></span>
-        <span id="hud-earned"></span>
       </div>
     </div>
 
@@ -37,20 +44,28 @@
 
     <section id="hub" hidden>
       <header class="hub-bar">
-        <div class="hub-player">
-          <span id="hub-name" class="hub-name"></span>
-          <span id="hub-round" class="hub-muted"></span>
+        <div class="hub-account">
+          <div class="hub-player">
+            <span id="hub-name" class="hub-name"></span>
+            <span id="hub-round" class="hub-muted"></span>
+          </div>
+          <span id="hub-money" class="hub-money"></span>
         </div>
-        <span id="hub-money" class="hub-money"></span>
-        <p id="hub-hint" class="hub-hint hub-muted"></p>
-        <button id="hub-tools-toggle" type="button" class="icon-button hub-tools-toggle" aria-label="Game tools" aria-expanded="false" aria-controls="hub-tools" title="Game tools">⋯</button>
-        <div id="hub-tools" class="hub-tools">
-          <button id="help-button" type="button" class="icon-button" aria-label="How to play" title="How to play">?</button>
+        <div class="hub-launch">
+          <button id="start-button" type="button" class="primary-button">Start Round</button>
+          <p id="hub-hint" class="hub-hint hub-muted"></p>
+        </div>
+        <button id="hub-tools-toggle" type="button" class="icon-button hub-tools-toggle" aria-label="Settings" aria-expanded="false" aria-controls="hub-tools" title="Settings"><span aria-hidden="true">⚙</span><span class="settings-label">Settings</span></button>
+        <div id="hub-tools" class="hub-tools" aria-label="Settings" hidden>
+          <h2 class="settings-heading">Settings</h2>
+          <button id="help-button" type="button" class="icon-button settings-help" aria-label="How to play" title="How to play">How to play <span aria-hidden="true">?</span></button>
+          <span class="settings-section">Sound</span>
           <div id="hub-audio" class="hub-audio"></div>
+          <span class="settings-section">Display</span>
           <div id="hub-display" class="hub-display"></div>
+          <span class="settings-section">Progress</span>
           <div id="hub-save" class="hub-save"></div>
         </div>
-        <button id="start-button" type="button" class="primary-button">Start Round</button>
       </header>
       <div id="hub-tree" class="hub-tree"></div>
     </section>

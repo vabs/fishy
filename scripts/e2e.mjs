@@ -50,6 +50,7 @@ try {
   assert.ok(afterBuy < banked, "buying the root upgrade didn't spend money");
 
   step("the hub's help button reopens the slides, and Escape closes them");
+  await page.click("#hub-tools-toggle");
   await page.click("#help-button");
   await intro.waitFor();
   await page.keyboard.press("Escape");
@@ -57,6 +58,7 @@ try {
   assert.ok(await page.locator("#hub").isVisible());
 
   step("the colour-blind palette switch recolours the fish at once");
+  await page.click("#hub-tools-toggle");
   const paletteSwitch = page.locator("#hub-display .display-toggle");
   const starColour = () => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--fish-star").trim());
   assert.equal(await paletteSwitch.getAttribute("aria-pressed"), "false");
@@ -72,7 +74,8 @@ try {
   await page.waitForSelector("#hub:not([hidden])");
   assert.equal(await text(page, "#hub-name"), NAME);
   assert.equal(money(await text(page, "#hub-money")), afterBuy);
-  assert.equal(await page.isVisible("#hub-tools-toggle"), false, "the phone tools menu button shows on desktop");
+  assert.equal(await page.isVisible("#hub-tools-toggle"), true, "Settings missing on desktop");
+  await page.click("#hub-tools-toggle");
   assert.equal(await paletteSwitch.getAttribute("aria-pressed"), "true");
   assert.notEqual(await starColour(), standardStar);
 

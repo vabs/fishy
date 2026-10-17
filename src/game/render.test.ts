@@ -12,6 +12,7 @@ function canvasRecorder() {
   const arcs: number[] = [];
   const transforms: number[][] = [];
   const translations: number[][] = [];
+  const images: number[][] = [];
   const noop = () => {};
   const target = {
     shadowBlur: 0,
@@ -21,11 +22,13 @@ function canvasRecorder() {
     arc(_x: number, _y: number, radius: number) { arcs.push(radius); },
     setTransform(...values: number[]) { transforms.push(values); },
     translate(...values: number[]) { translations.push(values); },
+    drawImage(_image: CanvasImageSource, ...values: number[]) { images.push(values); },
     createRadialGradient: () => ({ addColorStop: noop }),
+    createLinearGradient: () => ({ addColorStop: noop }),
   };
   const ctx = new Proxy(target, { get: (object, key) => Reflect.get(object, key) ?? noop }) as unknown as CanvasRenderingContext2D;
   const canvas = { getContext: () => ctx, style: {} } as unknown as HTMLCanvasElement;
-  return { canvas, ctx, paints, arcs, transforms, translations, renderer: new Renderer(canvas) };
+  return { canvas, ctx, paints, arcs, transforms, translations, images, renderer: new Renderer(canvas) };
 }
 
 const scene = { world: null, pointer: null, stats: BASE_STATS };
@@ -47,6 +50,62 @@ describe("viewport rendering", () => {
 });
 
 describe("burst rendering", () => {
+  it("pulls a net-caught fish toward the net, shrinks it, and removes the visual after the catch", () => {
+    const { renderer, images, translations } = canvasRecorder();
+    vi.stubGlobal("document", { createElement: () => canvasRecorder().canvas });
+    renderer.onEvent({ type: "tick", x: 200, y: 200, radius: 70, hits: 1, crits: 0 });
+    renderer.onEvent({ type: "capture", kind: "normal", source: "net", x: 150, y: 200, value: 1, combo: 0 });
+    renderer.draw(scene, 0.04);
+    expect(images).toHaveLength(1);
+    const firstWidth = images[0]![2]!;
+    const firstX = translations.at(-1)![0]!;
+    expect(firstX).toBeGreaterThan(150);
+    expect(firstX).toBeLessThan(200);
+    renderer.draw(scene, 0.04);
+    expect(images).toHaveLength(2);
+    expect(images[1]![2]).toBeLessThan(firstWidth);
+    expect(translations.at(-1)![0]).toBeGreaterThan(firstX);
+    renderer.draw(scene, 0.4);
+    expect(images).toHaveLength(2);
+  });
+
+  it("does not pull ability captures or captures with an expired net position", () => {
+    const { renderer, images } = canvasRecorder();
+    renderer.onEvent({ type: "tick", x: 200, y: 200, radius: 70, hits: 1, crits: 0 });
+    renderer.onEvent({ type: "capture", kind: "normal", source: "epic", x: 150, y: 200, value: 1, combo: 0 });
+    renderer.draw(scene, 0.2);
+    renderer.onEvent({ type: "capture", kind: "normal", source: "net", x: 150, y: 200, value: 1, combo: 0 });
+    renderer.draw(scene, 0.01);
+    expect(images).toHaveLength(0);
+  });
+
+  it("bounds catch sprite artwork during a capture burst and restores its budget", () => {
+    const { renderer, images } = canvasRecorder();
+    vi.stubGlobal("document", { createElement: () => canvasRecorder().canvas });
+    const tick = () => renderer.onEvent({ type: "tick", x: 200, y: 200, radius: 70, hits: 1000, crits: 0 });
+    const capture = () => renderer.onEvent({ type: "capture", kind: "normal", source: "net", x: 150, y: 200, value: 1, combo: 0 });
+    tick();
+    for (let i = 0; i < 1000; i++) capture();
+    renderer.draw(scene, 0.01);
+    expect(images.length).toBeGreaterThan(0);
+    expect(images.length).toBeLessThanOrEqual(24);
+    renderer.draw(scene, 1);
+    images.length = 0;
+    tick();
+    capture();
+    renderer.draw(scene, 0.01);
+    expect(images).toHaveLength(1);
+  });
+
+  it("omits the added capture motion when reduced motion is requested", () => {
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    const { renderer, images } = canvasRecorder();
+    renderer.onEvent({ type: "tick", x: 200, y: 200, radius: 70, hits: 1, crits: 0 });
+    renderer.onEvent({ type: "capture", kind: "normal", source: "net", x: 150, y: 200, value: 1, combo: 0 });
+    renderer.draw(scene, 0.01);
+    expect(images).toHaveLength(0);
+  });
+
   it("combines nearby capture payouts without losing their value", () => {
     const { renderer, paints } = canvasRecorder();
     for (let i = 0; i < 1000; i++) renderer.onEvent({ type: "capture", kind: "normal", source: "net", x: 200, y: 200, value: 1, combo: i });

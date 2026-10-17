@@ -26,7 +26,7 @@ export function mountSaveControls(container: HTMLElement, options: SaveControlsO
       <button type="button" class="save-controls-button" data-action="import">Import save</button>
     </div>
     <input type="file" accept=".json,application/json" hidden />
-    <p class="save-controls-message" aria-live="polite"></p>`;
+    <p class="save-controls-message" role="status" aria-live="polite" aria-atomic="true"></p>`;
 
   const exportButton = root.querySelector<HTMLButtonElement>('[data-action="export"]')!;
   const importButton = root.querySelector<HTMLButtonElement>('[data-action="import"]')!;

@@ -26,11 +26,12 @@ upgrades between rounds, unlock stranger fish, and work your way to the Final Ro
 - **Pause.** Use the pause button during a round, then **Resume round** when ready. The round
   also pauses when you leave the tab or app, so you won't lose time in the background.
 - **Finish.** Max out the whole tree to unlock the Final Round.
-- **New here?** First-time players get a three-slide walkthrough before round 1. The **?** button
-  in the hub shows it again.
-- **Sound.** Press **M**, or the speaker button, to mute. In the hub, the button next to it sets
-  the music and effects volume. On smaller screens, open **⋯** for help, sound, display and save
-  tools.
+- **New here?** First-time players get a three-slide walkthrough before round 1. Open **Settings →
+  How to play** in the hub to see it again.
+- **Sound.** Press **M**, or the speaker button, to mute. Open **Settings** in the hub for help,
+  music and effects volume, display and save tools.
+- **Watch your progress.** Time left and this round's earnings sit front and centre. The timer
+  highlights the last five seconds; reduced motion disables its pulse.
 
 ![The tech tree: upgrade nodes spread out from a boat in branches for the net, time, economy, spawning and each fish type](docs/screenshots/tech-tree.png)
 
@@ -93,6 +94,8 @@ npm run build         # static site in dist/
 npm run preview       # serve the build locally
 npm run e2e           # play through the whole game flow in Chrome (needs Google Chrome)
 npm run e2e:mobile    # Chrome touch/phone layout and pause regression checks
+node scripts/feedback-e2e.mjs  # Settings, save status and HUD layout across screen sizes
+node scripts/tech-tree-e2e.mjs # Upgrade progress and desktop/mobile purchase controls
 npm run screenshots   # regenerate docs/screenshots (needs Google Chrome)
 ```
 

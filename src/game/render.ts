@@ -48,6 +48,8 @@ const MAX_HEAVY_EFFECTS = 12;
 /** Golden fish and treasure effects, which aren't any fish type's fx. */
 const MAX_BONUS_EFFECTS = 24;
 const MAX_NET_TARGETS = 24;
+const CATCH_SECONDS = 0.28;
+const MAX_CATCH_SPRITES = 24;
 const MAX_WHIRLPOOL_TARGETS = 96;
 const MERGE_SECONDS = 0.1;
 /** The Feeding Frenzy tint and foam fade in and out over this long at the ends of the wave. */
@@ -85,6 +87,15 @@ interface Particle {
   life: number;
 }
 
+interface CatchSprite {
+  kind: FishKind;
+  golden: boolean;
+  x: number;
+  y: number;
+  target: Point;
+  age: number;
+}
+
 export interface Scene {
   world: World | null;
   pointer: Point | null;
@@ -110,6 +121,10 @@ export class Renderer {
   private floaters: Floater[] = [];
   private pulses: Pulse[] = [];
   private particles: Particle[] = [];
+  private catches: CatchSprite[] = [];
+  private lastNetTick: (Point & { age: number }) | null = null;
+  private netCinch = 0;
+  private readonly reducedMotion = typeof matchMedia === "function" ? matchMedia("(prefers-reduced-motion: reduce)") : null;
   private effects: { effect: Effect; age: number; event: FxEvent }[] = [];
   private bonusEffects: { effect: Effect; age: number }[] = [];
   private time = 0;
@@ -138,6 +153,9 @@ export class Renderer {
     this.floaters = [];
     this.particles = [];
     this.pulses = [];
+    this.catches = [];
+    this.lastNetTick = null;
+    this.netCinch = 0;
     this.effects = [];
     this.bonusEffects = [];
   }
@@ -145,11 +163,21 @@ export class Renderer {
   onEvent(event: WorldEvent): void {
     switch (event.type) {
       case "tick":
+        this.lastNetTick = { x: event.x, y: event.y, age: 0 };
+        if (event.hits > 0 && !this.reducedMotion?.matches) this.netCinch = PULSE_SECONDS;
         if (this.pulses.length < MAX_PULSES) {
           this.pulses.push({ x: event.x, y: event.y, radius: event.radius, strong: event.hits > 0, age: 0 });
         }
         break;
       case "capture": {
+        // Keep only a visual copy: capture, payout and the net's hit area stay owned by World.
+        if (event.source === "net" && this.lastNetTick && this.lastNetTick.age <= MERGE_SECONDS &&
+            !this.reducedMotion?.matches && this.catches.length < MAX_CATCH_SPRITES) {
+          this.catches.push({
+            kind: event.kind, golden: !!event.golden, x: event.x, y: event.y,
+            target: { x: this.lastNetTick.x, y: this.lastNetTick.y }, age: 0,
+          });
+        }
         // A golden catch keeps its own payout, so it never merges with the plain catches around it.
         const floaterColor = event.golden ? COLORS.goldFloater : COLORS.floater;
         const nearby = this.floaters.find((f) =>
@@ -382,6 +410,38 @@ export class Renderer {
 
   private drawNet(pointer: Point, radius: number, charge: number): void {
     const ctx = this.ctx;
+    const cinch = this.reducedMotion?.matches ? 0 : Math.sin(Math.PI * this.netCinch / PULSE_SECONDS);
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(pointer.x, pointer.y, radius, 0, TAU);
+    ctx.clip();
+    ctx.translate(pointer.x, pointer.y);
+    ctx.rotate(Math.PI / 4);
+    const meshScale = 1 - cinch * 0.08;
+    ctx.scale(meshScale, meshScale);
+    ctx.strokeStyle = `rgba(225, 250, 255, ${0.13 + cinch * 0.12})`;
+    ctx.lineWidth = 1 / this.viewScale;
+    // Bound line count even with very large upgraded nets or a narrow mobile viewport.
+    const spacing = Math.max(16 / this.viewScale, radius / 5);
+    const extent = radius / 0.92;
+    ctx.beginPath();
+    for (let offset = -Math.ceil(extent / spacing) * spacing; offset <= extent; offset += spacing) {
+      ctx.moveTo(offset, -extent);
+      ctx.lineTo(offset, extent);
+      ctx.moveTo(-extent, offset);
+      ctx.lineTo(extent, offset);
+    }
+    ctx.stroke();
+    ctx.restore();
+
+    // The bright outer rim always marks the actual hit area; only the inner weave cinches.
+    if (cinch > 0) {
+      ctx.lineWidth = 1.5 / this.viewScale;
+      ctx.strokeStyle = `rgba(235, 255, 255, ${cinch * 0.65})`;
+      ctx.beginPath();
+      ctx.arc(pointer.x, pointer.y, radius * meshScale, 0, TAU);
+      ctx.stroke();
+    }
     ctx.lineWidth = 2 / this.viewScale;
     ctx.strokeStyle = COLORS.net;
     ctx.beginPath();
@@ -510,6 +570,10 @@ export class Renderer {
   }
 
   private advanceEffects(dt: number): void {
+    this.netCinch = Math.max(0, this.netCinch - dt);
+    if (this.lastNetTick) this.lastNetTick.age += dt;
+    for (const fish of this.catches) fish.age += dt;
+    this.catches = this.reducedMotion?.matches ? [] : this.catches.filter((fish) => fish.age < CATCH_SECONDS);
     for (const f of this.floaters) f.age += dt;
     for (const p of this.pulses) p.age += dt;
     for (const p of this.particles) {
@@ -536,6 +600,21 @@ export class Renderer {
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.radius * (1 + 0.15 * t), 0, TAU);
       ctx.stroke();
+    }
+
+    for (const fish of this.catches) {
+      const t = fish.age / CATCH_SECONDS;
+      const pull = 1 - (1 - t) * (1 - t);
+      const sprites = this.sprite(fish.kind);
+      const scale = 1 - t * 0.8;
+      const width = sprites.width * scale;
+      const height = sprites.height * scale;
+      ctx.save();
+      ctx.translate(fish.x + (fish.target.x - fish.x) * pull, fish.y + (fish.target.y - fish.y) * pull);
+      ctx.rotate(Math.atan2(fish.target.y - fish.y, fish.target.x - fish.x));
+      ctx.globalAlpha = 1 - t;
+      ctx.drawImage(fish.golden ? sprites.golden : sprites.full, -width / 2, -height / 2, width, height);
+      ctx.restore();
     }
 
     for (const p of this.particles) {

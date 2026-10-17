@@ -224,8 +224,14 @@ export function mountTechTree(container: HTMLElement, options: { onBuy(nodeId: s
 
   const tip = html("div", "tech-tip");
   tip.id = tipId;
-  tip.setAttribute("role", "tooltip");
+  tip.setAttribute("role", "region");
+  tip.setAttribute("aria-label", "Upgrade details");
   tip.hidden = true;
+  const tipContent = html("div", "tech-tip-content");
+  tipContent.id = `${tipId}-content`;
+  const tipBuy = html("button", "tech-tip-buy", "Buy upgrade");
+  tipBuy.type = "button";
+  tip.append(tipContent, tipBuy);
 
   const controls = html("div", "tech-controls");
   const zoomOut = html("button", "tech-control", "−");
@@ -328,6 +334,9 @@ export function mountTechTree(container: HTMLElement, options: { onBuy(nodeId: s
   let autoFit = true;
   let hoverId: string | null = null;
   let focusId: string | null = null;
+  let detailId: string | null = null;
+  let tipHovered = false;
+  let tipTimer = 0;
   let animateTimer = 0;
   let selectedId: string | null = null;
   let touchMode = window.matchMedia("(max-width: 700px), (any-pointer: coarse)").matches;
@@ -359,7 +368,7 @@ export function mountTechTree(container: HTMLElement, options: { onBuy(nodeId: s
   }
 
   function renderSheet(v: NodeView): void {
-    renderDetails(v, sheetContent, true);
+    renderDetails(v, sheetContent);
     sheet.style.setProperty("--tint", LANE_TINTS[laneOf(v.node)]);
     const maxed = isMaxed(v.node, state.upgrades);
     const buyable = canBuy(v.node, state.upgrades, state.money);
@@ -435,7 +444,7 @@ export function mountTechTree(container: HTMLElement, options: { onBuy(nodeId: s
     applyView(true);
   }
 
-  function renderDetails(v: NodeView, target: HTMLElement, touch = false): void {
+  function renderDetails(v: NodeView, target: HTMLElement): void {
     const { node } = v;
     const level = levelOf(node, state.upgrades);
     const maxed = level >= node.maxLevel;
@@ -446,9 +455,21 @@ export function mountTechTree(container: HTMLElement, options: { onBuy(nodeId: s
     const head = html("div", "tech-tip-head");
     head.append(
       html("span", "tech-tip-lane", layout.lanes.find((l) => l.key === laneOf(node))?.label ?? ""),
-      html("span", "tech-tip-level", maxed ? `Level ${level} · Max` : `Level ${level} → ${level + 1} of ${node.maxLevel}`),
+      html("span", "tech-tip-level", `Level ${level} of ${node.maxLevel}${maxed ? " · Max" : ""}`),
     );
-    target.append(head, html("h3", "tech-tip-name", node.name), html("p", "tech-tip-desc", node.description));
+    const progress = html("div", "tech-level-progress");
+    progress.setAttribute("role", "progressbar");
+    progress.setAttribute("aria-label", `${node.name} upgrade level`);
+    progress.setAttribute("aria-valuemin", "0");
+    progress.setAttribute("aria-valuemax", String(node.maxLevel));
+    progress.setAttribute("aria-valuenow", String(level));
+    progress.setAttribute("aria-valuetext", `Level ${level} of ${node.maxLevel}${maxed ? ", fully upgraded" : ""}`);
+    for (let i = 0; i < node.maxLevel; i++) {
+      const segment = html("span", `tech-level-segment${i < level ? " is-on" : ""}`);
+      segment.setAttribute("aria-hidden", "true");
+      progress.append(segment);
+    }
+    target.append(head, progress, html("h3", "tech-tip-name", node.name), html("p", "tech-tip-desc", node.description));
 
     const changes = nodeChanges(BASE_STATS, node, state.upgrades);
     if (changes.length > 0) {
@@ -467,7 +488,7 @@ export function mountTechTree(container: HTMLElement, options: { onBuy(nodeId: s
       foot.textContent = "Fully upgraded";
     } else if (state.money >= cost) {
       foot.classList.add("is-ready");
-      foot.append(html("strong", "", formatMoney(cost)), html("span", "", touch ? "Ready to upgrade" : "Click to buy"));
+      foot.append(html("strong", "", formatMoney(cost)), html("span", "", "Ready to upgrade"));
     } else {
       foot.classList.add("is-short");
       foot.append(html("strong", "", formatMoney(cost)), html("span", "", `${formatMoney(cost - state.money)} more`));
@@ -475,8 +496,12 @@ export function mountTechTree(container: HTMLElement, options: { onBuy(nodeId: s
     target.append(foot);
   }
 
+  function activeDetailId(): string | null {
+    return tipHovered || tipBuy.matches(":focus-visible") ? detailId : hoverId ?? focusId;
+  }
+
   function placeTip(): void {
-    const id = hoverId ?? focusId;
+    const id = activeDetailId();
     const v = id ? views.get(id) : undefined;
     if (touchMode || !sheet.hidden || !v || !v.visible || root.classList.contains("is-panning")) {
       tip.hidden = true;
@@ -500,14 +525,28 @@ export function mountTechTree(container: HTMLElement, options: { onBuy(nodeId: s
   }
 
   function showTip(): void {
-    const id = hoverId ?? focusId;
+    window.clearTimeout(tipTimer);
+    const id = activeDetailId();
     const v = id ? views.get(id) : undefined;
     for (const other of views.values()) other.el.removeAttribute("aria-describedby");
     if (v) {
-      renderDetails(v, tip);
-      v.el.setAttribute("aria-describedby", tipId);
+      detailId = id;
+      renderDetails(v, tipContent);
+      tip.style.setProperty("--tint", LANE_TINTS[laneOf(v.node)]);
+      tip.setAttribute("aria-label", `${v.node.name} upgrade details`);
+      const maxed = isMaxed(v.node, state.upgrades);
+      tipBuy.disabled = !canBuy(v.node, state.upgrades, state.money);
+      tipBuy.textContent = maxed ? "Fully upgraded" : `Buy upgrade · ${formatMoney(nextCost(v.node, levelOf(v.node, state.upgrades)))}`;
+      tipBuy.setAttribute("aria-label", maxed ? `${v.node.name} fully upgraded` : `Buy ${v.node.name} for ${formatMoney(nextCost(v.node, levelOf(v.node, state.upgrades)))}`);
+      v.el.setAttribute("aria-describedby", tipContent.id);
     }
     placeTip();
+  }
+
+  // The short delay lets the pointer cross the gap from a node to its Buy button.
+  function scheduleTipClose(): void {
+    window.clearTimeout(tipTimer);
+    tipTimer = window.setTimeout(showTip, 180);
   }
 
   function update(next: TechTreeState): void {
@@ -563,7 +602,7 @@ export function mountTechTree(container: HTMLElement, options: { onBuy(nodeId: s
     }
 
     if (autoFit) fit(mounted);
-    if (hoverId ?? focusId) showTip();
+    if (activeDetailId()) showTip();
     if (selectedId) {
       const selected = views.get(selectedId);
       if (selected?.visible) renderSheet(selected);
@@ -611,7 +650,7 @@ export function mountTechTree(container: HTMLElement, options: { onBuy(nodeId: s
     const v = nodeFrom(event.target);
     if (!v || (event.relatedTarget instanceof Node && v.el.contains(event.relatedTarget))) return;
     hoverId = null;
-    showTip();
+    scheduleTipClose();
   });
   nodeLayer.addEventListener("focusin", (event) => {
     const v = nodeFrom(event.target);
@@ -619,15 +658,59 @@ export function mountTechTree(container: HTMLElement, options: { onBuy(nodeId: s
     focusId = v.node.id;
     // Only follow keyboard focus; a click shouldn't move the tree under the cursor.
     if (v.el.matches(":focus-visible")) {
+      // Keyboard navigation takes ownership even if the pointer stays over the old details.
+      hoverId = null;
+      tipHovered = false;
       touchMode = false;
       root.classList.remove("is-touch");
       reveal(v);
     }
     showTip();
   });
-  nodeLayer.addEventListener("focusout", () => {
+  nodeLayer.addEventListener("focusout", (event) => {
+    if (event.relatedTarget instanceof Node && tip.contains(event.relatedTarget)) return;
     focusId = null;
-    showTip();
+    scheduleTipClose();
+  });
+
+  nodeLayer.addEventListener("keydown", (event) => {
+    // Keep the purchase action next to its node in the keyboard sequence.
+    if (event.key !== "Tab" || event.shiftKey || tip.hidden || tipBuy.disabled || !nodeFrom(event.target)) return;
+    event.preventDefault();
+    tipBuy.focus({ preventScroll: true });
+  });
+  tip.addEventListener("pointerenter", () => {
+    tipHovered = true;
+    window.clearTimeout(tipTimer);
+  });
+  tip.addEventListener("pointerleave", () => {
+    tipHovered = false;
+    scheduleTipClose();
+  });
+  tip.addEventListener("focusout", (event) => {
+    if (event.relatedTarget instanceof Node && tip.contains(event.relatedTarget)) return;
+    focusId = null;
+    scheduleTipClose();
+  });
+  tipBuy.addEventListener("keydown", (event) => {
+    if (event.key !== "Tab") return;
+    const selected = detailId ? views.get(detailId) : undefined;
+    if (!selected) return;
+    if (event.shiftKey) {
+      event.preventDefault();
+      selected.el.focus({ preventScroll: true });
+    } else {
+      const visible = [...views.values()].filter((v) => v.visible);
+      const next = visible[visible.indexOf(selected) + 1];
+      if (next) {
+        event.preventDefault();
+        next.el.focus({ preventScroll: true });
+      }
+    }
+  });
+  tipBuy.addEventListener("click", () => {
+    const selected = detailId ? views.get(detailId) : undefined;
+    if (selected && canBuy(selected.node, state.upgrades, state.money)) options.onBuy(selected.node.id);
   });
 
   const gestures = new TreeGestures();
@@ -638,6 +721,7 @@ export function mountTechTree(container: HTMLElement, options: { onBuy(nodeId: s
 
   root.addEventListener("pointerdown", (event) => {
     if (event.button !== 0) return;
+    if (event.target instanceof Element && event.target.closest(".tech-tip, .tech-controls")) return;
     touchMode = event.pointerType === "touch";
     root.classList.toggle("is-touch", touchMode);
     hint.textContent = touchMode ? "Tap an upgrade · Drag to pan · Pinch to zoom" : "Drag to pan · Scroll to zoom";
@@ -645,7 +729,6 @@ export function mountTechTree(container: HTMLElement, options: { onBuy(nodeId: s
       const rect = root.getBoundingClientRect();
       zoomAt(event.clientX - rect.left, event.clientY - rect.top, TOUCH_MIN_SCALE / view.scale);
     }
-    if (event.target instanceof Element && event.target.closest(".tech-controls")) return;
     gestures.down(pointer(event), view);
     // Capture touch from the beginning; the selection uses the original down target.
     if (touchMode) root.setPointerCapture(event.pointerId);
@@ -678,9 +761,12 @@ export function mountTechTree(container: HTMLElement, options: { onBuy(nodeId: s
   function dismiss(): void {
     releaseCaptures(gestures.cancelAll());
     window.clearTimeout(animateTimer);
+    window.clearTimeout(tipTimer);
     root.classList.remove("is-panning", "is-animating");
     hoverId = null;
     focusId = null;
+    detailId = null;
+    tipHovered = false;
     tip.hidden = true;
     for (const v of views.values()) v.el.removeAttribute("aria-describedby");
     closeSheet();
@@ -696,7 +782,7 @@ export function mountTechTree(container: HTMLElement, options: { onBuy(nodeId: s
   // Pointer-generated clicks after touch, drag, or cancellation must never purchase.
   // Keyboard activation (detail zero) keeps the existing direct-buy behavior.
   root.addEventListener("click", (event) => {
-    if (event.target instanceof Element && event.target.closest(".tech-controls")) return;
+    if (event.target instanceof Element && event.target.closest(".tech-controls, .tech-tip")) return;
     const pointerType = (event as PointerEvent).pointerType;
     if (!gestures.suppressClick || (event.detail === 0 && pointerType !== "touch")) return;
     event.stopPropagation();
@@ -719,6 +805,7 @@ export function mountTechTree(container: HTMLElement, options: { onBuy(nodeId: s
   root.addEventListener(
     "wheel",
     (event) => {
+      if (event.target instanceof Element && event.target.closest(".tech-tip")) return;
       event.preventDefault();
       const rect = root.getBoundingClientRect();
       // Trackpads send small pixel deltas, mouse wheels large ones; both zoom smoothly.
@@ -750,8 +837,11 @@ export function mountTechTree(container: HTMLElement, options: { onBuy(nodeId: s
     } else if (event.key === "Escape" && !sheet.hidden) {
       closeSheet(true);
     } else if (event.key === "Escape" && !tip.hidden) {
-      // Dismiss without moving focus; the next hover or focus brings it back.
+      // Return focus from the purchase action to its node when dismissing details.
+      if (tip.contains(document.activeElement)) views.get(detailId ?? "")?.el.focus({ preventScroll: true });
       hoverId = null;
+      focusId = null;
+      tipHovered = false;
       tip.hidden = true;
     } else return;
     event.preventDefault();

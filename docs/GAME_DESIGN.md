@@ -25,13 +25,20 @@ the net above the finger to keep fish visible; lifting the finger deactivates it
 does not create another net.
 
 The tech tree supports dragging to pan, mouse-wheel or two-finger pinch zoom, and tapping an
-upgrade to inspect it before using Buy. Compact screens put help, sound and save controls under
-the ⋯ button while keeping money and Start Round visible. Portrait and landscape are both
+upgrade to inspect it before using Buy. Desktop upgrade details also offer a Buy button, and
+segmented bars show current upgrade levels. Help, sound, display and save controls sit under
+Settings on every screen, while Start Round is centred above the tree. Portrait and landscape are both
 supported, with controls kept clear of screen cutouts and the home indicator.
 
 A round can be paused with the HUD pause button. Switching tabs/apps or rotating the device also
 pauses it. Time and simulation stay frozen until Resume round; the HUD stays visible. Dialogs
 scroll within the visible screen, including when the name-entry keyboard is open.
+
+The HUD centres time remaining and the current round's earnings, with banked money and round number
+to the side. The last five seconds highlight and pulse; the pulse stops while paused and is disabled
+with reduced motion. A fine mesh makes the net visible, its inner weave tightens on successful hits,
+and caught fish briefly pull inward. These effects leave the net's hit area and timing unchanged;
+reduced motion disables the tightening and fish pull.
 
 The arena keeps the area of a 1280 × 800 reference field as its aspect ratio changes. The net,
 abilities and fish speeds use those logical coordinates, so a smaller display does not increase

@@ -40,6 +40,7 @@ const hud = {
   timer: element("#hud-timer"),
   money: element("#hud-money"),
   earned: element("#hud-earned"),
+  combo: element("#hud-combo"),
 };
 const hub = {
   root: element("#hub"),
@@ -173,6 +174,7 @@ function showOnly(screen: "hub" | "round" | "summary" | "end"): void {
   netInput.clear();
   tree.dismiss();
   paused = false;
+  hud.root.dataset.paused = "false";
   pausePanel.hidden = true;
   if (screen !== "round") {
     roundHint.hidden = true;
@@ -354,12 +356,14 @@ function resize(): void {
 
 function setToolsOpen(open: boolean): void {
   hubTools.classList.toggle("is-open", open);
+  hubTools.hidden = !open;
   toolsToggle.setAttribute("aria-expanded", String(open));
 }
 
 function pauseRound(message = "Your round is paused."): void {
   if (!world || world.over || paused) return;
   paused = true;
+  hud.root.dataset.paused = "true";
   netInput.clear();
   world.pointer = null;
   accumulator = 0;
@@ -372,6 +376,7 @@ function pauseRound(message = "Your round is paused."): void {
 function resumeRound(): void {
   if (!world || world.over || document.hidden) return;
   paused = false;
+  hud.root.dataset.paused = "false";
   pausePanel.hidden = true;
   accumulator = 0;
   lastFrame = performance.now();
@@ -393,10 +398,13 @@ function updateHud(): void {
   const playing = !world.over;
   setText(hud.round, finalRound ? "Final Round" : `Round ${playingRound}`);
   setText(hud.timer, `${world.timeLeft.toFixed(1)}s`);
-  setMoney(hud.money, playing ? save.money + world.earned : save.money);
-  const combo = world.combo > 0 ? ` · combo ×${world.comboMult.toFixed(1)}` : "";
+  hud.timer.setAttribute("aria-label", `${world.timeLeft.toFixed(1)} seconds left`);
+  hud.root.classList.toggle("is-urgent", playing && world.timeLeft <= 5);
+  setMoney(hud.money, save.money);
+  const combo = world.combo > 0 ? `Combo ×${world.comboMult.toFixed(1)}` : "";
   const earnings = touchLayout.matches ? formatCompactMoney(world.earned) : formatMoney(world.earned);
-  setText(hud.earned, playing ? `+${earnings} this round${combo}` : "");
+  setText(hud.earned, `+${earnings}`);
+  setText(hud.combo, playing ? combo : "");
   const showHint = playing && playingRound === 1 && world.totalCaught === 0 && world.elapsed < HINT_SECONDS;
   if (roundHint.hidden === showHint) roundHint.hidden = !showHint;
   updateFrenzyBanner(world, playing);
@@ -467,9 +475,17 @@ element("#pause-button").addEventListener("click", () => pauseRound());
 resumeButton.addEventListener("click", resumeRound);
 toolsToggle.addEventListener("click", () => setToolsOpen(!hubTools.classList.contains("is-open")));
 document.addEventListener("pointerdown", (event) => {
+  if (document.querySelector("dialog[open]")) return;
   if (!hubTools.contains(event.target as Node) && !toolsToggle.contains(event.target as Node)) setToolsOpen(false);
 });
 window.addEventListener("keydown", (event) => {
+  if (event.defaultPrevented || document.querySelector("dialog[open]")) return;
+  if (event.key === "Escape" && !hubTools.hidden) {
+    event.preventDefault();
+    setToolsOpen(false);
+    toolsToggle.focus({ preventScroll: true });
+    return;
+  }
   if (event.key === "Escape" && world && !world.over) {
     event.preventDefault();
     if (paused) resumeRound();
