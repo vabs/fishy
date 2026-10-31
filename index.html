@@ -174,7 +174,10 @@
           ><span class="settings-label">Settings</span>
         </button>
         <div id="hub-tools" class="hub-tools" aria-label="Settings" hidden>
-          <h2 class="settings-heading">Settings</h2>
+          <div class="settings-header">
+            <h2 class="settings-heading">Settings</h2>
+            <button id="hub-tools-close" type="button" class="icon-button settings-close" aria-label="Close settings">×</button>
+          </div>
           <button
             id="help-button"
             type="button"
@@ -227,34 +230,42 @@
         <span id="summary-earned" class="summary-earned-amount"></span>
         <span class="summary-earned-label">earned this round</span>
       </p>
-      <p id="summary-frenzy" class="summary-frenzy" hidden></p>
-      <table id="summary-table" class="summary-table">
-        <thead>
-          <tr>
-            <th scope="col">Fish</th>
-            <th scope="col">Caught</th>
-            <th scope="col">Earned</th>
-          </tr>
-        </thead>
-        <tbody id="summary-rows"></tbody>
-        <tfoot>
-          <tr>
-            <th scope="row">Total</th>
-            <td id="summary-fish"></td>
-            <td id="summary-total"></td>
-          </tr>
-        </tfoot>
-      </table>
-      <p id="summary-empty" class="summary-empty" hidden>
-        No fish this round. Keep the net over them a little longer.
-      </p>
-      <div
-        id="summary-bounties"
-        class="bounties is-summary"
-        aria-label="Bounty rewards"
-        hidden
-      ></div>
-      <button id="continue-button" type="button">Continue</button>
+      <div class="summary-body">
+        <div class="summary-catches">
+          <table id="summary-table" class="summary-table">
+            <thead>
+              <tr>
+                <th scope="col">Fish</th>
+                <th scope="col">Caught</th>
+                <th scope="col">Earned</th>
+              </tr>
+            </thead>
+            <tbody id="summary-rows"></tbody>
+            <tfoot>
+              <tr>
+                <th scope="row">Total</th>
+                <td id="summary-fish"></td>
+                <td id="summary-total"></td>
+              </tr>
+            </tfoot>
+          </table>
+          <p id="summary-empty" class="summary-empty" hidden>
+            No fish this round. Keep the net over them a little longer.
+          </p>
+        </div>
+        <aside class="summary-extras" aria-label="Round bonuses">
+          <p id="summary-frenzy" class="summary-frenzy" hidden></p>
+          <div
+            id="summary-bounties"
+            class="bounties is-summary"
+            aria-label="Bounty rewards"
+            hidden
+          ></div>
+        </aside>
+      </div>
+      <footer class="summary-footer">
+        <button id="continue-button" type="button">Continue</button>
+      </footer>
     </section>
 
     <section

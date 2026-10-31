@@ -337,9 +337,7 @@ body.playing #game {
   display: grid;
   gap: 10px;
   width: min(330px, calc(100vw - var(--safe-left) - var(--safe-right) - 20px));
-  max-height: calc(
-    var(--app-height) - var(--safe-top) - var(--safe-bottom) - 140px
-  );
+  max-height: calc(var(--app-height) - var(--settings-header-bottom, 140px) - var(--safe-bottom) - 14px);
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 18px;
@@ -1352,9 +1350,7 @@ button.secondary-button:active:enabled,
   }
   .hub-tools {
     right: calc(8px + var(--safe-right));
-    max-height: calc(
-      var(--app-height) - var(--safe-top) - var(--safe-bottom) - 125px
-    );
+
     padding: 16px;
   }
 }
@@ -1365,12 +1361,6 @@ button.secondary-button:active:enabled,
   }
   .hub-account {
     flex-direction: row;
-  }
-  .hub-tools {
-    position: fixed;
-    top: calc(8px + var(--safe-top));
-    bottom: calc(8px + var(--safe-bottom));
-    max-height: none;
   }
 }
 
@@ -2301,4 +2291,84 @@ button:active:enabled {
   #hud-bounties .bounty-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #hud-bounties .bounty-progress { padding-left: 0; font-size: 12px; line-height: 16px; white-space: nowrap; }
   #hud-bounties .bounty-mark { font-size: 13px; line-height: 16px; }
+}
+
+/* Keep the gear above the drawer in short landscape viewports. */
+.hub-tools:not(.is-title-settings) {
+  position: absolute;
+  top: calc(100% + 6px);
+  bottom: auto;
+}
+.settings-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--paper) url("/art/paper.webp") center / 600px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.settings-header .settings-heading { margin: 0; }
+.hub-tools .settings-close {
+  flex: none;
+  width: 44px;
+  min-height: 44px;
+  border: 1px solid #b59464;
+  background: #fff5dd80;
+  color: var(--ink-dark);
+  font: 400 28px var(--body);
+}
+
+/* Only the body scrolls; the paper footer stays visible even in a full logbook. */
+.summary-panel {
+  --summary-padding: 32px;
+  padding-inline: var(--summary-padding);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-bottom: 0;
+}
+.summary-panel > .logbook-kicker,
+.summary-panel > h2,
+.summary-panel > .summary-earned,
+.summary-footer { flex: none; }
+.summary-body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  text-align: left;
+}
+.summary-catches, .summary-extras { min-width: 0; }
+.summary-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  margin: 0 calc(-1 * var(--summary-padding));
+  padding: 14px var(--summary-padding) 20px;
+  background: var(--paper) url("/art/paper.webp") center / 650px;
+  box-shadow: 0 -8px 16px #60401e18;
+}
+.summary-footer #continue-button { width: 100%; }
+@media (min-width: 1000px) {
+  .summary-panel { width: min(840px, calc(100vw - 48px)); }
+  .summary-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+    gap: 24px;
+  }
+  .summary-extras {
+    padding-left: 20px;
+    border-left: 1px solid #8d725344;
+  }
+}
+@media (max-width: 760px) {
+  .summary-panel { --summary-padding: 22px; }
+}
+@media (min-width: 900px) {
+  .achievement-toast {
+    left: auto;
+    right: calc(var(--safe-right) + 18px);
+    transform: none;
+  }
 }
