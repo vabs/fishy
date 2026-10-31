@@ -221,9 +221,10 @@ export function pad(
     for (const cents of [-5, 5]) {
       last = oscillator(ctx, wave, freq, filter, o.time, end);
       last.detune.value = cents + (Math.random() - 0.5) * 4;
+      cleanUp(last);
     }
   }
-  if (last) cleanUp(last, filter, out);
+  if (last) last.addEventListener("ended", () => { filter.disconnect(); out.disconnect(); });
   return end;
 }
 
