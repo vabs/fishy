@@ -2,28 +2,76 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
     <title>Fishy</title>
     <meta name="theme-color" content="#0d3b4f" />
-    <link rel="icon" type="image/png" sizes="64x64" href="%BASE_URL%art/favicon-64.png" />
-    <link rel="apple-touch-icon" sizes="512x512" href="%BASE_URL%art/icon-512.png" />
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="64x64"
+      href="%BASE_URL%art/favicon-64.png"
+    />
+    <link
+      rel="apple-touch-icon"
+      sizes="512x512"
+      href="%BASE_URL%art/icon-512.png"
+    />
   </head>
   <body>
     <canvas id="game"></canvas>
 
-    <section id="title" class="title-screen" aria-label="Fishy main menu" hidden>
+    <section
+      id="title"
+      class="title-screen"
+      aria-label="Fishy main menu"
+      hidden
+    >
       <div class="title-content">
-        <img class="title-logo" src="%BASE_URL%art/logo.webp" width="1600" height="640" alt="Fishy" />
+        <img
+          class="title-logo"
+          src="%BASE_URL%art/logo.webp"
+          width="1600"
+          height="640"
+          alt="Fishy"
+        />
         <p class="title-tagline">A little boat. A sea of possibilities.</p>
-        <p id="title-greeting" class="title-greeting">Welcome aboard, skipper.</p>
+        <p id="title-greeting" class="title-greeting">
+          Welcome aboard, skipper.
+        </p>
         <nav class="title-menu" aria-label="Main menu">
-          <button id="title-play" class="primary-button" type="button">Play <span aria-hidden="true">➜</span></button>
+          <button id="title-play" class="primary-button" type="button">
+            Play <span aria-hidden="true">➜</span>
+          </button>
           <div class="title-endless-option">
-            <button id="title-endless" class="secondary-button" type="button" disabled aria-describedby="title-endless-lock"><span class="title-lock" aria-hidden="true">⚿</span> Endless Sea</button>
-            <small id="title-endless-lock">Play your first round to unlock</small>
+            <button
+              id="title-endless"
+              class="secondary-button"
+              type="button"
+              disabled
+              aria-describedby="title-endless-lock"
+            >
+              <svg class="title-lock ui-icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 10V7a4 4 0 0 1 8 0v3"/><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M12 14v3"/></svg> Endless Sea
+            </button>
+            <small id="title-endless-lock"
+              >Play your first round to unlock</small
+            >
           </div>
-          <button id="title-achievements" class="secondary-button" type="button">Achievements <span id="title-achievements-count" class="count-badge">0 / 22</span></button>
-          <button id="title-settings" class="secondary-button" type="button">Settings</button>
+          <button
+            id="title-achievements"
+            class="secondary-button"
+            type="button"
+          >
+            Achievements
+            <span id="title-achievements-count" class="count-badge"
+              >0 / 22</span
+            >
+          </button>
+          <button id="title-settings" class="secondary-button" type="button">
+            Settings
+          </button>
         </nav>
         <p class="title-footer">Catch a moment of calm.</p>
       </div>
@@ -39,30 +87,68 @@
           <span class="hud-label">Time left</span>
           <span id="hud-timer" class="hud-big"></span>
         </div>
+        <div id="hud-endless" class="hud-endless" hidden>
+          <span class="hud-label">Endless Sea</span>
+          <strong><span id="hud-endless-fish">0</span> fish</strong>
+          <span
+            ><span id="hud-endless-time">0:00</span> at sea · best
+            <span id="hud-endless-best">×1.0</span></span
+          >
+        </div>
         <div class="hud-metric hud-catch">
-          <span class="hud-label">This round</span>
+          <span class="hud-label hud-label-round">This round</span>
+          <span class="hud-label hud-label-trip">This trip</span>
           <span id="hud-earned" class="hud-big"></span>
           <span id="hud-combo" class="hud-combo"></span>
         </div>
       </div>
       <div class="hud-controls">
         <div id="hud-audio" class="hud-audio"></div>
-        <button id="pause-button" type="button" class="icon-button" aria-label="Pause round" title="Pause round">Ⅱ</button>
+        <button
+          id="pause-button"
+          type="button"
+          class="icon-button"
+          aria-label="Pause round"
+          title="Pause round"
+        >
+          Ⅱ
+        </button>
       </div>
+      <div
+        id="hud-bounties"
+        class="bounties is-hud"
+        aria-label="Bounty checklist"
+        hidden
+      ></div>
     </div>
 
-    <p id="round-hint" class="round-hint" hidden>Move your net over the fish. It catches them on its own.</p>
+    <p id="round-hint" class="round-hint" hidden>
+      Move your net over the fish. It catches them on its own.
+    </p>
 
     <div id="frenzy-banner" class="frenzy-banner" role="status" hidden>
       <span class="frenzy-title">Feeding Frenzy!</span>
-      <span class="frenzy-detail"><span id="frenzy-value"></span> <span id="frenzy-time" aria-hidden="true"></span></span>
-      <span class="frenzy-bar" aria-hidden="true"><span id="frenzy-bar-fill" class="frenzy-bar-fill"></span></span>
+      <span class="frenzy-detail"
+        ><span id="frenzy-value"></span>
+        <span id="frenzy-time" aria-hidden="true"></span
+      ></span>
+      <span class="frenzy-bar" aria-hidden="true"
+        ><span id="frenzy-bar-fill" class="frenzy-bar-fill"></span
+      ></span>
     </div>
 
     <section id="hub" hidden>
       <header class="hub-bar">
         <div class="hub-account">
-          <button id="hub-home" type="button" class="icon-button hub-home" aria-label="Main menu" title="Main menu"><span aria-hidden="true">⌂</span></button>
+          <button
+            id="hub-home"
+            type="button"
+            class="icon-button hub-home"
+            aria-label="Main menu"
+            title="Main menu"
+          >
+            <span aria-hidden="true">⌂</span>
+          </button>
           <div class="hub-player">
             <span id="hub-name" class="hub-name"></span>
             <span id="hub-round" class="hub-muted"></span>
@@ -70,13 +156,34 @@
           <span id="hub-money" class="hub-money"></span>
         </div>
         <div class="hub-launch">
-          <button id="start-button" type="button" class="primary-button">Start Round</button>
+          <button id="start-button" type="button" class="primary-button">
+            Start Round
+          </button>
           <p id="hub-hint" class="hub-hint hub-muted"></p>
         </div>
-        <button id="hub-tools-toggle" type="button" class="icon-button hub-tools-toggle" aria-label="Settings" aria-expanded="false" aria-controls="hub-tools" title="Settings"><span aria-hidden="true">⚙</span><span class="settings-label">Settings</span></button>
+        <button
+          id="hub-tools-toggle"
+          type="button"
+          class="icon-button hub-tools-toggle"
+          aria-label="Settings"
+          aria-expanded="false"
+          aria-controls="hub-tools"
+          title="Settings"
+        >
+          <span aria-hidden="true">⚙</span
+          ><span class="settings-label">Settings</span>
+        </button>
         <div id="hub-tools" class="hub-tools" aria-label="Settings" hidden>
           <h2 class="settings-heading">Settings</h2>
-          <button id="help-button" type="button" class="icon-button settings-help" aria-label="How to play" title="How to play">How to play <span aria-hidden="true">?</span></button>
+          <button
+            id="help-button"
+            type="button"
+            class="icon-button settings-help"
+            aria-label="How to play"
+            title="How to play"
+          >
+            How to play <span aria-hidden="true">?</span>
+          </button>
           <span class="settings-section">Sound</span>
           <div id="hub-audio" class="hub-audio"></div>
           <span class="settings-section">Display</span>
@@ -86,17 +193,35 @@
           <div id="hub-save" class="hub-save"></div>
         </div>
       </header>
-      <div id="hub-bounties" class="bounties is-hub" aria-label="Next round’s bounties" hidden></div>
+      <div
+        id="hub-bounties"
+        class="bounties is-hub"
+        aria-label="Next round’s bounties"
+        hidden
+      ></div>
       <div id="hub-tree" class="hub-tree"></div>
     </section>
 
-    <section id="pause-panel" class="panel pause-panel" hidden role="dialog" aria-modal="true" aria-labelledby="pause-title" aria-describedby="pause-message">
+    <section
+      id="pause-panel"
+      class="panel pause-panel"
+      hidden
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="pause-title"
+      aria-describedby="pause-message"
+    >
+      <span class="logbook-kicker">A moment ashore</span>
       <h2 id="pause-title">Round paused</h2>
       <p id="pause-message">Take your time. Resume when you’re ready.</p>
       <button id="resume-button" type="button">Resume round</button>
+      <button id="harbour-button" class="secondary-button" type="button" hidden>
+        Return to harbour
+      </button>
     </section>
 
     <section id="summary-panel" class="panel summary-panel" hidden>
+      <span class="logbook-kicker">Captain’s log · Today’s haul</span>
       <h2 id="summary-title"></h2>
       <p class="summary-earned">
         <span id="summary-earned" class="summary-earned-amount"></span>
@@ -120,11 +245,83 @@
           </tr>
         </tfoot>
       </table>
-      <p id="summary-empty" class="summary-empty" hidden>No fish this round. Keep the net over them a little longer.</p>
+      <p id="summary-empty" class="summary-empty" hidden>
+        No fish this round. Keep the net over them a little longer.
+      </p>
+      <div
+        id="summary-bounties"
+        class="bounties is-summary"
+        aria-label="Bounty rewards"
+        hidden
+      ></div>
       <button id="continue-button" type="button">Continue</button>
     </section>
 
+    <section
+      id="endless-panel"
+      class="panel logbook endless-panel"
+      aria-labelledby="endless-title"
+      hidden
+    >
+      <span class="logbook-kicker">Captain’s log · Endless Sea</span>
+      <h2 id="endless-title">A fine day at sea</h2>
+      <p class="summary-earned">
+        <span id="endless-earned" class="summary-earned-amount">$0</span
+        ><span class="summary-earned-label">session earnings</span>
+      </p>
+      <p class="endless-bank-note">Endless catches don't go to your bank</p>
+      <dl class="logbook-stats">
+        <dt>Fish caught</dt>
+        <dd id="endless-fish">0</dd>
+        <dt>Time at sea</dt>
+        <dd id="endless-time">0:00</dd>
+        <dt>Best combo</dt>
+        <dd id="endless-combo">×1.0</dd>
+      </dl>
+      <div
+        id="endless-records"
+        class="endless-records"
+        aria-label="New personal records"
+      ></div>
+      <div class="panel-actions">
+        <button id="endless-again" type="button">Keep fishing</button>
+        <button id="endless-harbour" class="secondary-button" type="button">
+          Back to harbour
+        </button>
+      </div>
+    </section>
+
+    <section
+      id="achievements-panel"
+      class="panel achievements-panel"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="achievements-title"
+      hidden
+    >
+      <header class="achievements-header">
+        <div>
+          <span class="logbook-kicker">Treasures of the journey</span>
+          <h2 id="achievements-title">Your achievements</h2>
+        </div>
+        <span id="achievements-count" class="count-badge">0 / 22</span>
+        <button
+          id="achievements-close"
+          class="secondary-button"
+          type="button"
+          aria-label="Close achievements"
+        >
+          ×
+        </button>
+      </header>
+      <p class="achievements-intro">
+        Every great skipper starts with a single catch.
+      </p>
+      <div id="achievements-grid" class="achievements-grid"></div>
+    </section>
+
     <section id="end-panel" class="panel end-panel" hidden>
+      <span class="logbook-kicker">Captain’s log · Journey complete</span>
       <h1>Thank you for playing!</h1>
       <p id="end-message"></p>
       <dl>
@@ -138,9 +335,20 @@
         <dd id="end-time"></dd>
       </dl>
       <button id="play-again-button" type="button">Play Again</button>
-      <p class="end-note">Play Again starts over from round 1. Your name is kept.</p>
+      <p class="end-note">
+        Play Again starts over from round 1. Your name, achievements and Endless
+        records are kept.
+      </p>
     </section>
 
+    <div
+      id="achievement-toast"
+      class="achievement-toast"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+      hidden
+    ></div>
     <div id="toast" class="toast" role="status" hidden></div>
 
     <script type="module" src="/src/main.ts"></script>
