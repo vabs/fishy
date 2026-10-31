@@ -34,7 +34,7 @@ aboard" for a new player, "Welcome back" for a returning one) and four buttons.
 - **Settings** opens the same Settings drawer as the hub.
 
 A first visit goes name prompt → three how-to-play slides → title screen. The hub's ⌂ button
-returns to the title screen, as does Back to harbour after an Endless trip.
+returns to the title screen, as does Head home after an Endless trip.
 
 ## Input
 
@@ -302,7 +302,8 @@ player's current upgrades and the same simulation as a round.
   nothing and show nothing.
 - Fish spawn as usual, but at most 80 swim at once (`ENDLESS.maxFish`, about 1.3× the busiest
   moment of a fully upgraded timed round). Spawns over the cap are dropped, school members and
-  burst fish included.
+  burst fish included. Golden fish (chest spills too) and Frenzy pour-ins get 40 fish of surge room
+  above the cap (`ENDLESS.surgeRoom`), so a sea that has filled up still gets its surprises.
 - Feeding Frenzy waves recur: the first starts 45 s in (`ENDLESS.firstFrenzy`), then one every 90 s
   from start to start (`ENDLESS.frenzyEvery`). Each lasts the normal wave length and sweeps the
   opposite way to the one before. Wave times are worked out from the first start and a wave
@@ -317,11 +318,11 @@ player's current upgrades and the same simulation as a round.
   (1 min), night (2 min) and dawn (3 min). The tint covers only the water. At night the caustics
   give way to a few moonlight glints, the net's lens is lit a little brighter so fish inside stay
   readable, and a lantern glows around the boat. It has no effect on play.
-- Pausing works as in a round. The pause panel adds Return to harbour, the only way to end a trip.
+- Pausing works as in a round. The pause panel adds End trip, the only way to end a trip.
 - The logbook that follows shows the trip's earnings, fish, time at sea and best combo, notes that
   Endless catches don't go to the bank, and marks each new personal record (best session earnings,
   most fish caught, longest trip, best combo; only strict improvements count). Keep fishing starts
-  another trip; Back to harbour goes to the title screen.
+  another trip; Head home goes to the title screen.
 - A trip never changes money, round, upgrades or the round earnings records. It adds its fish,
   golden fish, chests, time and round records to the lifetime stats (so it counts towards
   achievements), and updates the Endless records: sessions, total fish, total time, best earnings,
@@ -348,7 +349,8 @@ crown, combo) drawn inside a brass medallion.
   badge the save qualifies for but hasn't been granted, and `grantAchievements` stamps each with
   the time earned. Two live facts can also be passed in, for a check made before the save is
   written: whether every bounty this round was completed, and how long the current trip has lasted.
-- The game checks at the end of every round and Endless trip. Each new badge gets a toast ("Achievement
+- The game checks at the end of every round and Endless trip, and once a minute during a trip so
+  Lost at Sea and Sea Legs unlock the moment they're reached. Each new badge gets a toast ("Achievement
   unlocked" and its name over the medallion) for 3 s, one after another, and a short brass
   fanfare.
 - It also checks quietly when a save loads or is imported, with a single "N achievements
@@ -546,7 +548,7 @@ slides) → title screen.
 
 - **Play:** hub (tech tree, bounty board, money, Start Round, Settings) → round → round summary →
   hub → … → Final Round → end screen → Play Again → round 1.
-- **Endless Sea:** Endless trip → pause → Return to harbour → Endless logbook → another trip, or
+- **Endless Sea:** Endless trip → pause → End trip → Endless logbook → another trip, or
   back to the title screen.
 - **Achievements** and **Settings** open over the title screen, and from the hub, whose ⌂ button
   returns to the title screen.

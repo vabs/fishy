@@ -109,7 +109,8 @@ round's earnings; a missed one just pays nothing.
 Play your first round to unlock it, then open it from the title screen. It's a sandbox with your
 current upgrades and no clock:
 
-- Fish keep coming, up to 80 swimming at once. Time bonuses are off.
+- Fish keep coming, up to 80 swimming at once; golden fish and Frenzy pour-ins may go up to 40
+  over that, so a full sea still gets its surprises. Time bonuses are off.
 - A Feeding Frenzy wave comes 45 seconds in, then every 90 seconds, from alternating sides.
 - A treasure chest floats in every 60–100 seconds (the next one waits while one is still out) and
   always spills golden fish. Golden fish appear from the start.
@@ -119,9 +120,9 @@ current upgrades and no clock:
 - The HUD shows fish caught, time at sea, your best combo and the trip's earnings.
 - Nothing you earn here goes to your bank, and your money, round and upgrades stay as they were.
   Fish, golden fish, chests and records still count towards lifetime stats and achievements.
-- To leave, pause and choose **Return to harbour**. The logbook shows the trip's earnings, fish,
+- To leave, pause and choose **End trip**. The logbook shows the trip's earnings, fish,
   time and best combo, and marks any new personal record: best session earnings, most fish
-  caught, longest trip, best combo. **Keep fishing** starts another trip; **Back to harbour**
+  caught, longest trip, best combo. **Keep fishing** starts another trip; **Head home**
   returns to the title screen.
 
 ## Achievements
