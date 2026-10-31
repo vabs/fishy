@@ -1,19 +1,23 @@
+import { mixForMode, urgencyHatForStep, type MusicMode } from "./dynamics";
 import { fetchManifest, loadTrack, type LoadedTrack, type LoopBuffer } from "./loader";
 import type { LayerName, MusicManifest } from "./manifest";
 import {
   BED_STYLES,
   PATTERN_STEPS,
   arpForStep,
+  bassForBar,
   chordForBar,
   grooveForBar,
+  frenzyForStep,
   isChordStart,
   melodyForBar,
   type BedStyle,
+  type MelodyActivity,
   type Chord,
   type GrooveHit,
   type MelodyNote,
 } from "./patterns";
-import { bass, bell, kick, noise, pad, pluck } from "./synth";
+import { bass, bell, clap, kick, noise, pad, pluck, steelDrum, risingNoise, type NoiseRiser } from "./synth";
 import {
   BEATS_PER_BAR,
   DEFAULT_BPM,
@@ -47,7 +51,7 @@ import {
  * sample-accurate however busy the main thread is.
  */
 
-export type MusicMode = "hub" | "round" | "final" | "end";
+export type { MusicMode } from "./dynamics";
 
 /** How far ahead notes are scheduled, s: enough to ride out a slow frame, short enough for the combo layer to react. */
 const LOOKAHEAD = 0.3;
@@ -57,20 +61,16 @@ const LATE = 0.02;
 
 /** The hub hears the music from under water: low-passed and 6 dB down. */
 const HUB_CUTOFF = 700;
-const OPEN_CUTOFF = 16000;
 const HUB_LEVEL = 0.5;
-const END_LEVEL = 0.85;
 /** Chapter change, s. */
 const CROSSFADE = 3;
 /** Fade-in when the music first starts, s. */
 const FIRST_FADE = 2.5;
 /** The Final Round always has some of the combo layer. */
 const FINAL_COMBO_FLOOR = 0.35;
-/** Swing: off-beat eighths of the groove land this share of a beat late. */
-const SWING = 0.08;
 
 /** Levels of the generated parts, before the music volume. Kept low: the music sits behind the game. */
-const LEVEL = { pad: 0.02, melody: 0.1, kick: 0.16, shaker: 0.03, bass: 0.08, arp: 0.07, stinger: 0.1 };
+const LEVEL = { pad: 0.016, melody: 0.065, kick: 0.12, clap: 0.045, openHat: 0.022, shaker: 0.016, bass: 0.06, arp: 0.045, stinger: 0.1 };
 
 /** Sets a parameter's course from `now`: hold until `start`, then ramp to `value` by `end`. */
 function glide(param: AudioParam, now: number, value: number, start: number, end: number, exponential = false): void {
@@ -146,14 +146,14 @@ abstract class Bed {
   }
 }
 
-/** The placeholder bed, generated in code: a soft pad and a sparse marimba line, different every bar. */
+/** Generated chapter bed: warm pad and a seeded steel pan, marimba or kalimba melody. */
 class GeneratedBed extends Bed {
   private readonly style: BedStyle;
   private readonly out: GainNode;
   private nextStep = 0;
-  private melody: { bar: number; notes: MelodyNote[] } = { bar: -1, notes: [] };
+  private melody: { bar: number; activity: MelodyActivity; notes: MelodyNote[] } = { bar: -1, activity: "hub", notes: [] };
 
-  constructor(ctx: AudioContext, dest: AudioNode, chapter: number, start: number) {
+  constructor(ctx: AudioContext, dest: AudioNode, chapter: number, start: number, private readonly activityAt: (time: number) => MelodyActivity) {
     super(ctx, chapter, { origin: start, bpm: DEFAULT_BPM, beatsPerBar: BEATS_PER_BAR }, DEFAULT_KEY);
     this.style = BED_STYLES[chapter] ?? BED_STYLES[0]!;
     this.out = this.fader(dest);
@@ -180,15 +180,17 @@ class GeneratedBed extends Bed {
       const freqs = [degreeToHz(key, chord.bass, 2), ...chord.pad.map((degree) => degreeToHz(key, degree))];
       pad(ctx, out, { time, freqs, gain: LEVEL.pad, length: style.barsPerChord * barLength(this.clock), cutoff: style.padCutoff });
     }
-    if (this.melody.bar !== bar) this.melody = { bar, notes: melodyForBar(style, bar) };
+    const activity = this.activityAt(time);
+    if (this.melody.bar !== bar || this.melody.activity !== activity) this.melody = { bar, activity, notes: melodyForBar(style, bar, activity) };
     const kalimba = style.voice === "kalimba";
     for (const note of this.melody.notes) {
       if (note.step !== step) continue;
-      pluck(ctx, out, {
+      const instrument = style.voice === "steelDrum" ? steelDrum : pluck;
+      instrument(ctx, out, {
         time,
         freq: degreeToHz(key, note.degree),
         gain: LEVEL.melody * note.velocity,
-        decay: kalimba ? 1.4 : 1.1,
+        decay: style.voice === "steelDrum" ? 0.65 : kalimba ? 1.1 : 0.85,
         overtone: kalimba ? 5.4 : 3.93,
         bright: kalimba ? 0.18 : 0.3,
       });
@@ -223,7 +225,9 @@ class LoopBed extends Bed {
     source.loop = true;
     source.loopStart = loop.loopStart;
     source.loopEnd = loop.loopEnd;
-    source.connect(gainNode(this.ctx, trim, dest));
+    const level = gainNode(this.ctx, trim, dest);
+    source.connect(level);
+    source.onended = () => { source.disconnect(); level.disconnect(); };
     source.start(start);
     this.sources.push(source);
   }
@@ -242,6 +246,11 @@ class LoopBed extends Bed {
     this.stems[layer]?.gain.setTargetAtTime(level, now, 0.15);
   }
 
+  override dispose(): void {
+    super.dispose();
+    for (const stem of Object.values(this.stems)) stem.disconnect();
+  }
+
   override fadeOut(at: number, seconds: number): void {
     super.fadeOut(at, seconds);
     for (const source of this.sources) source.stop(this.stopAt + 0.1);
@@ -251,7 +260,7 @@ class LoopBed extends Bed {
 export class Music {
   private ctx: AudioContext | null = null;
   private filter!: BiquadFilterNode;
-  private buses!: Record<keyof Buses | "stinger", GainNode>;
+  private buses!: Record<keyof Buses | "stinger" | "urgency" | "frenzy", GainNode>;
   private beds: Bed[] = [];
   private current: Bed | null = null;
   /** Null until fetched. */
@@ -260,13 +269,19 @@ export class Music {
   private loads = new Map<number, Promise<LoadedTrack | null>>();
   private chapter = 0;
   private mode: MusicMode = "hub";
+  /** Retained through fade-out, including when a loop groove stem stays muted in endless. */
+  private endlessGroove = false;
   private combo = 0;
+  private urgency = 0;
+  private frenzy = false;
+  private riser: NoiseRiser | null = null;
   /** The generated layers' grid, and their next step on it. */
   private layerClock: Clock | null = null;
   private layerStep = 0;
   /** The groove and combo layers play between these times. */
   private layersFrom = Infinity;
   private layersUntil = Infinity;
+  private bassLine: { bar: number; notes: ReturnType<typeof bassForBar> } = { bar: -1, notes: [] };
   private groove: { bar: number; hits: GrooveHit[] } = { bar: -1, hits: [] };
 
   /** The key the music is in, for sound effects to match. */
@@ -287,6 +302,8 @@ export class Music {
       groove: gainNode(ctx, 0, this.filter),
       combo: gainNode(ctx, 0, this.filter),
       stinger: gainNode(ctx, 1, output),
+      urgency: gainNode(ctx, 0, this.filter),
+      frenzy: gainNode(ctx, 0, this.filter),
     };
     window.setInterval(() => this.pump(), TICK_MS);
     void fetchManifest().then(({ manifest, base }) => {
@@ -299,7 +316,14 @@ export class Music {
   setMode(mode: MusicMode): void {
     if (mode === this.mode) return;
     this.mode = mode;
-    if (mode !== "round" && mode !== "final") this.combo = 0;
+    if (mode === "round" || mode === "final" || mode === "endless") this.endlessGroove = mode === "endless";
+    this.groove.bar = -1;
+    if (mode === "endless") this.setUrgency(0);
+    if (mode !== "round" && mode !== "final" && mode !== "endless") {
+      this.combo = 0;
+      this.setUrgency(0);
+      this.setFrenzy(false);
+    }
     this.applyMode(false);
   }
 
@@ -315,6 +339,37 @@ export class Music {
     if (Math.abs(level - this.combo) < 0.01) return;
     this.combo = level;
     if (this.ctx && this.current) this.current.setStem("combo", this.comboLevel, this.ctx.currentTime);
+  }
+
+  /** A wave adds a bright octave lead and a separate tambourine layer. */
+  setFrenzy(active: boolean): void {
+    const next = active && (this.mode === "round" || this.mode === "final" || this.mode === "endless");
+    if (next === this.frenzy) return;
+    this.frenzy = next;
+    if (!this.ctx || !this.buses) return;
+    const now = this.ctx.currentTime;
+    glide(this.buses.frenzy.gain, now, next ? 1 : 0, now, now + 0.025);
+  }
+
+  /** Last-five-seconds lift. Its dedicated bus also silences notes already in the lookahead. */
+  setUrgency(level: number): void {
+    const playing = this.mode === "round" || this.mode === "final";
+    const next = playing ? Math.max(0, Math.min(1, level)) : 0;
+    if (Math.abs(next - this.urgency) < 0.01 && next !== 0) return;
+    if (next === 0 && this.urgency === 0) return;
+    this.urgency = next;
+    const ctx = this.ctx;
+    if (!ctx || !this.buses) return;
+    const now = ctx.currentTime;
+    glide(this.buses.urgency.gain, now, next > 0 ? 1 : 0, now, now + 0.025);
+    if (next > 0) {
+      this.riser ??= risingNoise(ctx, this.buses.urgency, now, 0.018);
+      this.riser.setLevel(next);
+    } else {
+      this.riser?.stop();
+      this.riser = null;
+    }
+    this.current?.setStem("combo", this.comboLevel, now);
   }
 
   /** A one-bar phrase at the end of a round, resolving to the tonic, from the next beat. */
@@ -355,8 +410,9 @@ export class Music {
   }
 
   private get comboLevel(): number {
-    if (this.mode === "final") return Math.max(this.combo, FINAL_COMBO_FLOOR);
-    return this.mode === "round" ? this.combo : 0;
+    const level = Math.min(1, this.combo + this.urgency * 0.3);
+    if (this.mode === "final") return Math.max(level, FINAL_COMBO_FLOOR);
+    return this.mode === "round" || this.mode === "endless" ? level : 0;
   }
 
   private applyMode(instant: boolean): void {
@@ -365,14 +421,15 @@ export class Music {
     if (!ctx || !bed) return;
     const now = ctx.currentTime;
     const { filter, buses } = this;
-    const playing = this.mode === "round" || this.mode === "final";
-    const cutoff = this.mode === "hub" ? HUB_CUTOFF : OPEN_CUTOFF;
-    const level = this.mode === "hub" ? HUB_LEVEL : this.mode === "end" ? END_LEVEL : 1;
+    const mix = mixForMode(this.mode);
+    const playing = mix.groove > 0;
+    const cutoff = mix.cutoff;
+    const level = mix.bed;
     const layers = playing ? 1 : 0;
     if (instant) {
       filter.frequency.setValueAtTime(cutoff, now);
       buses.bed.gain.setValueAtTime(level, now);
-      buses.groove.gain.setValueAtTime(layers, now);
+      buses.groove.gain.setValueAtTime(mix.groove, now);
       buses.combo.gain.setValueAtTime(layers, now);
       this.layersFrom = playing ? now : Infinity;
       this.layersUntil = Infinity;
@@ -381,10 +438,12 @@ export class Music {
       const downbeat = nextDownbeat(bed.clock, now + 0.05);
       glide(filter.frequency, now, cutoff, now, downbeat, true);
       glide(buses.bed.gain, now, level, now, downbeat);
-      glide(buses.groove.gain, now, 1, downbeat - 0.02, downbeat);
+      glide(buses.groove.gain, now, mix.groove, downbeat - 0.02, downbeat);
       glide(buses.combo.gain, now, 1, downbeat - 0.02, downbeat);
       this.layersFrom = downbeat;
       this.layersUntil = Infinity;
+      // Silent steps may already have been scanned in the hub's lookahead. Revisit the entry bar.
+      this.layerStep = Math.min(this.layerStep, stepIndexAt(bed.clock, downbeat));
     } else {
       // The layers drop over a beat; the filter closes (or opens, for the end screen) over a bar.
       const beat = beatLength(bed.clock);
@@ -396,6 +455,7 @@ export class Music {
       glide(buses.bed.gain, now, level, now, now + bar);
     }
     bed.setStem("combo", this.comboLevel, now);
+    bed.setStem("groove", this.endlessGroove ? 0 : 1, now);
   }
 
   private async switchBed(): Promise<void> {
@@ -407,13 +467,15 @@ export class Music {
     const now = ctx.currentTime;
     const previous = this.current;
     const start = previous ? nextDownbeat(previous.clock, now + 0.1) : now + 0.1;
-    const bed = loaded ? new LoopBed(ctx, this.buses, chapter, loaded, start) : new GeneratedBed(ctx, this.buses.bed, chapter, start);
+    const bed = loaded ? new LoopBed(ctx, this.buses, chapter, loaded, start) : new GeneratedBed(ctx, this.buses.bed, chapter, start, (time) => this.activityAt(time));
     bed.fadeIn(start, previous ? CROSSFADE : FIRST_FADE);
     previous?.fadeOut(start, CROSSFADE);
     this.beds.push(bed);
     this.current = bed;
-    if (previous) bed.setStem("combo", this.comboLevel, now);
-    else this.applyMode(true);
+    if (previous) {
+      bed.setStem("combo", this.comboLevel, now);
+      bed.setStem("groove", this.endlessGroove ? 0 : 1, now);
+    } else this.applyMode(true);
     this.keepLoaded(chapter);
   }
 
@@ -441,6 +503,8 @@ export class Music {
       // A new bed: the layers follow its grid from its first downbeat.
       this.layerClock = bed.clock;
       this.layerStep = stepIndexAt(bed.clock, now);
+      this.groove.bar = -1;
+      this.bassLine.bar = -1;
     }
     for (; ; this.layerStep++) {
       const time = stepTime(bed.clock, this.layerStep);
@@ -455,10 +519,23 @@ export class Music {
     const bar = Math.floor(index / perBar);
     const step = index % perBar;
     const chord = bed.chordAt(time);
-    if (!bed.hasStem("groove")) {
-      if (this.groove.bar !== bar) this.groove = { bar, hits: grooveForBar(bed.chapter + 1, bar) };
-      const swing = step % 4 === 2 ? SWING * beatLength(bed.clock) : 0;
-      for (const hit of this.groove.hits) if (hit.step === step) this.playHit(hit, time + swing, chord, bed.key);
+    const frenzy = frenzyForStep(chord, index, this.frenzy);
+    if (frenzy) {
+      pluck(ctx, this.buses.frenzy, { time, freq: degreeToHz(bed.key, frenzy.degree), gain: 0.028 * frenzy.velocity, decay: 0.18, overtone: 2, bright: 0.35 });
+      noise(ctx, this.buses.frenzy, { time, gain: 0.018 * frenzy.percussion, attack: 0.001, decay: 0.045, filter: "highpass", from: 8800, q: 1.2 });
+    }
+    const roll = urgencyHatForStep(step, this.urgency);
+    if (roll !== null) {
+      noise(ctx, this.buses.urgency, { time, gain: 0.025 * roll, attack: 0.001, decay: 0.035, filter: "highpass", from: 7500, q: 0.5 });
+    }
+    if (this.endlessGroove || !bed.hasStem("groove")) {
+      if (this.groove.bar !== bar) this.groove = { bar, hits: grooveForBar(bed.chapter + 1, bar, this.endlessGroove) };
+      for (const hit of this.groove.hits) if (hit.step === step) this.playHit(hit, time);
+      if (this.bassLine.bar !== bar) this.bassLine = { bar, notes: bassForBar(bed.chapter + 1, bar, chord) };
+      for (const note of this.bassLine.notes) {
+        if (note.step !== step) continue;
+        bass(ctx, this.buses.groove, time, degreeToHz(bed.key, note.degree, 2), LEVEL.bass * note.velocity, note.length * beatLength(bed.clock) / 4);
+      }
     }
     if (!bed.hasStem("combo")) {
       const note = arpForStep(chord, index, this.comboLevel);
@@ -475,7 +552,12 @@ export class Music {
     }
   }
 
-  private playHit(hit: GrooveHit, time: number, chord: Chord | null, key: Key): void {
+  private activityAt(time: number): MelodyActivity {
+    if ((this.mode !== "round" && this.mode !== "final" && this.mode !== "endless") || time < this.layersFrom || time >= this.layersUntil) return "hub";
+    return this.mode === "endless" ? "endless" : "round";
+  }
+
+  private playHit(hit: GrooveHit, time: number): void {
     const ctx = this.ctx!;
     const dest = this.buses.groove;
     switch (hit.sound) {
@@ -483,10 +565,13 @@ export class Music {
         kick(ctx, dest, time, LEVEL.kick * hit.velocity);
         break;
       case "shaker":
-        noise(ctx, dest, { time, gain: LEVEL.shaker * hit.velocity, attack: 0.004, decay: 0.07, filter: "highpass", from: 7000, q: 0.7 });
+        noise(ctx, dest, { time, gain: LEVEL.shaker * hit.velocity, attack: 0.001, decay: 0.025, filter: "highpass", from: 7000, q: 0.7 });
         break;
-      case "bass":
-        bass(ctx, dest, time, degreeToHz(key, chord?.bass ?? 0, 2), LEVEL.bass * hit.velocity, 0.45);
+      case "clap":
+        clap(ctx, dest, time, LEVEL.clap * hit.velocity);
+        break;
+      case "openHat":
+        noise(ctx, dest, { time, gain: LEVEL.openHat * hit.velocity, attack: 0.002, decay: 0.12, filter: "highpass", from: 6500, q: 0.6 });
         break;
     }
   }

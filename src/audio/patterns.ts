@@ -1,5 +1,5 @@
 /*
- * Note patterns for the generated music: chords, the sparse marimba line, the groove and the combo
+ * Note patterns for the generated music: chords, the melody, the groove and the combo
  * arpeggio. Every bar draws its choices from its own seeded random numbers, so the music never
  * repeats a fixed loop yet any bar can be regenerated exactly. Notes are scale degrees (see
  * theory.ts), so the same patterns fit any pentatonic key. Pure, so it's tested.
@@ -49,14 +49,14 @@ export interface BedStyle {
   low: number;
   high: number;
   /** Melody timbre. */
-  voice: "marimba" | "kalimba";
+  voice: "marimba" | "kalimba" | "steelDrum";
   /** Pad brightness: its low-pass cutoff, Hz. */
   padCutoff: number;
 }
 
 export const BED_STYLES: readonly BedStyle[] = [
   {
-    // Shallows: the start of the game. Plain, open, mid register.
+    // Shallows: bright steel pan over an open, mid-register pad.
     seed: 11,
     progressions: [
       ["I", "vi", "ii", "V"],
@@ -68,7 +68,7 @@ export const BED_STYLES: readonly BedStyle[] = [
     restChance: 0.2,
     low: 0,
     high: 7,
-    voice: "marimba",
+    voice: "steelDrum",
     padCutoff: 1100,
   },
   {
@@ -153,17 +153,21 @@ export interface MelodyNote {
 /** Steps the melody may take between notes, in scale degrees: mostly small, sometimes still. */
 const MOVES = [-2, -1, -1, 0, 1, 1, 2];
 
-/** The marimba line for one bar: a few notes on eighths, wandering by small steps, landing on chord tones on the beat. */
-export function melodyForBar(style: BedStyle, bar: number): MelodyNote[] {
+export type MelodyActivity = "hub" | "round" | "endless";
+
+/** The melody for one bar: a few notes on eighths, wandering by small steps, landing on chord tones on the beat. */
+export function melodyForBar(style: BedStyle, bar: number, activity: MelodyActivity = "hub"): MelodyNote[] {
   const rng = barRng(style.seed, bar);
-  if (rng() < style.restChance) return [];
+  if (rng() < (activity === "hub" ? style.restChance : 0.04)) return [];
   const chord = chordForBar(style, bar);
   const start = style.low + Math.floor(rng() * (style.high - style.low + 1));
   let degree = snapToChord(start, chord, style.low, style.high);
   const notes: MelodyNote[] = [];
   for (let eighth = 0; eighth < 8; eighth++) {
+    if (activity === "hub" && eighth % 2 === 1) continue;
     const onBeat = eighth % 2 === 0;
-    const chance = style.density * (eighth === 0 ? 1.5 : onBeat ? 1 : 0.5);
+    const density = activity === "hub" ? style.density : activity === "endless" ? endlessVariation(bar).density : 0.78;
+    const chance = density * (eighth === 0 ? 1.5 : onBeat ? 1 : 0.5);
     if (rng() >= chance) continue;
     degree = Math.min(style.high, Math.max(style.low, degree + pick(rng, MOVES)));
     if (onBeat) degree = snapToChord(degree, chord, style.low, style.high);
@@ -172,7 +176,7 @@ export function melodyForBar(style: BedStyle, bar: number): MelodyNote[] {
   return notes;
 }
 
-export type GrooveSound = "kick" | "shaker" | "bass";
+export type GrooveSound = "kick" | "clap" | "openHat" | "shaker";
 
 export interface GrooveHit {
   step: number;
@@ -180,23 +184,40 @@ export interface GrooveHit {
   velocity: number;
 }
 
-/** The round groove for one bar: a soft kick on 1 and 3, a shaker on eighths, a plucked bass on the chord root. */
-export function grooveForBar(seed: number, bar: number): GrooveHit[] {
+/** Straight four-on-the-floor drums with backbeats, off-beat open hats and accented sixteenths. */
+export function grooveForBar(seed: number, bar: number, endless = false): GrooveHit[] {
   const rng = barRng(seed ^ 0x27d4eb2f, bar);
-  const hits: GrooveHit[] = [
-    { step: 0, sound: "kick", velocity: 1 },
-    { step: 8, sound: "kick", velocity: 0.75 },
-    { step: 0, sound: "bass", velocity: 1 },
-    { step: 10, sound: "bass", velocity: 0.6 },
-  ];
-  if (rng() < 0.3) hits.push({ step: 14, sound: "kick", velocity: 0.45 });
-  else if (rng() < 0.3) hits.push({ step: 6, sound: "kick", velocity: 0.4 });
-  if (rng() < 0.4) hits.push({ step: 14, sound: "bass", velocity: 0.45 });
-  for (let step = 0; step < PATTERN_STEPS; step += 2) {
-    hits.push({ step, sound: "shaker", velocity: step % 4 === 2 ? 0.8 : 0.45 });
-    if (rng() < 0.18) hits.push({ step: step + 1, sound: "shaker", velocity: 0.25 });
+  const hits: GrooveHit[] = [];
+  for (let step = 0; step < PATTERN_STEPS; step++) {
+    if (step % 4 === 0) hits.push({ step, sound: "kick", velocity: step === 0 ? 1 : 0.88 });
+    if (!endless && (step === 4 || step === 12)) hits.push({ step, sound: "clap", velocity: 0.8 + rng() * 0.2 });
+    if (step % 4 === 2) hits.push({ step, sound: "openHat", velocity: 0.7 + rng() * 0.2 });
+    hits.push({ step, sound: "shaker", velocity: (step % 4 === 2 ? 0.55 : step % 2 === 0 ? 0.35 : 0.18) + rng() * 0.12 });
   }
   return hits;
+}
+
+export interface BassNote {
+  step: number;
+  /** Pentatonic degree in octave 2, including root inversions. */
+  degree: number;
+  velocity: number;
+  /** Length in sixteenth-note steps; leaves a gap before the next attack. */
+  length: number;
+}
+
+/** Syncopated root, octave and pentatonic passing tones, regenerated from the bar's seed. */
+export function bassForBar(seed: number, bar: number, chord: Chord | null): BassNote[] {
+  const rng = barRng(seed ^ 0x165667b1, bar);
+  const root = chord?.bass ?? 0;
+  const rhythms = [[0, 3, 6, 10, 13, 15], [0, 2, 7, 10, 12, 15], [0, 3, 5, 8, 11, 14]];
+  const steps = pick(rng, rhythms);
+  return steps.map((step, i) => ({
+    step,
+    degree: root + (i === 0 ? 0 : i === 2 ? SCALE_SIZE : pick(rng, [0, 1, 2, 3, SCALE_SIZE])),
+    velocity: i === 0 ? 1 : 0.5 + rng() * 0.3,
+    length: Math.min(1.6, (steps[i + 1] ?? PATTERN_STEPS) - step - 0.25),
+  }));
 }
 
 /**
@@ -216,4 +237,23 @@ export function arpForStep(chord: Chord | null, step: number, level: number): { 
   const degree = cycle[position % cycle.length] ?? SCALE_SIZE;
   const accent = step % 4 === 0 ? 1 : 0.7;
   return { degree, velocity: (0.4 + 0.6 * level) * accent };
+}
+
+/** An octave above the combo arp plus a tambourine accent on every sixteenth, only during a wave. */
+export function frenzyForStep(chord: Chord | null, step: number, active: boolean): { degree: number; velocity: number; percussion: number } | null {
+  if (!active) return null;
+  const note = arpForStep(chord, step, 1)!;
+  return { degree: note.degree + SCALE_SIZE, velocity: note.velocity * 0.65, percussion: step % 4 === 2 ? 1 : step % 2 === 0 ? 0.65 : 0.35 };
+}
+
+/** A restrained density change every sixteen bars keeps long sessions moving without a buildup. */
+export function endlessVariation(bar: number): { density: number } {
+  const densities = [0.46, 0.54, 0.42, 0.5];
+  return { density: densities[Math.floor(Math.max(0, bar) / 16) % densities.length]! };
+}
+
+/** Short in-key reward phrases; durations include each note's attack and release. */
+export function rewardPhrase(kind: "bounty" | "achievement"): { degree: number; offset: number; length: number }[] {
+  if (kind === "bounty") return [5, 7, 10].map((degree, i) => ({ degree, offset: i * 0.085, length: 0.16 }));
+  return [0, 2, 3, 4, 5].map((degree, i) => ({ degree, offset: i * 0.14, length: i === 4 ? 0.6 : 0.19 }));
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_KEY,
+  DEFAULT_BPM,
   barLength,
   degreeToHz,
   degreeToMidi,
@@ -65,6 +66,9 @@ describe("pitch", () => {
 });
 
 describe("clock", () => {
+  it("runs eight generated bars in about 15.48 seconds", () => {
+    expect(8 * barLength({ origin: 0, bpm: DEFAULT_BPM, beatsPerBar: 4 })).toBeCloseTo(15.48387, 4);
+  });
   const clock: Clock = { origin: 10, bpm: 120, beatsPerBar: 4 };
 
   it("finds the next beat and downbeat at or after a time", () => {
@@ -90,13 +94,13 @@ describe("clock", () => {
 
 describe("loopTempo", () => {
   it("nudges the tempo so a loop is a whole number of bars", () => {
-    // 8 bars of 4/4 at 92 BPM is 20.8696 s; typed as 20.87.
-    const bpm = loopTempo(20.87, 92, 4);
-    expect(bpm).toBeCloseTo(92, 1);
-    expect((20.87 / ((60 / bpm) * 4)) % 1).toBeCloseTo(0, 9);
+    // 8 bars of 4/4 at 124 BPM is 15.48387 s; typed as 15.484.
+    const bpm = loopTempo(15.484, 124, 4);
+    expect(bpm).toBeCloseTo(124, 1);
+    expect((15.484 / ((60 / bpm) * 4)) % 1).toBeCloseTo(0, 9);
   });
 
   it("treats a loop shorter than a bar as one bar", () => {
-    expect(loopTempo(1, 92, 4)).toBe(240);
+    expect(loopTempo(1, 124, 4)).toBe(240);
   });
 });

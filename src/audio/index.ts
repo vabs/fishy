@@ -1,4 +1,5 @@
 import type { FxEvent, World, WorldEvent } from "../game/world";
+import { urgencyLevel } from "./dynamics";
 import { AudioEngine } from "./engine";
 import { chapterFor, comboLevel } from "./mapping";
 import { Music } from "./music";
@@ -7,7 +8,7 @@ import { Sfx } from "./sfx";
 
 export type { AudioSettings } from "./settings";
 
-export type Screen = "hub" | "round" | "summary" | "end";
+export type Screen = "title" | "hub" | "round" | "summary" | "end";
 
 /**
  * The game's sound, as main.ts sees it: tell it what's on screen, what was bought, and each frame's
@@ -20,7 +21,11 @@ export interface GameAudio {
   update(change: Partial<AudioSettings>): void;
   onChange(listener: (settings: AudioSettings) => void): () => void;
   /** A screen was shown. `final` is whether the round being played (or just finished) is the Final Round. */
-  screen(screen: Screen, context: { final: boolean; upgrades: Readonly<Record<string, number>> }): void;
+  screen(screen: Screen, context: { final: boolean; endless?: boolean; upgrades: Readonly<Record<string, number>> }): void;
+  /** A bounty was just completed. */
+  bounty(): void;
+  /** An achievement was just earned. */
+  achievement(): void;
   /** A tech tree node was bought; `upgrades` includes it. */
   purchase(nodeId: string, upgrades: Readonly<Record<string, number>>): void;
   /** One frame's drained world events, and the world they came from. */
@@ -51,6 +56,8 @@ export function createGameAudio(): GameAudio {
 
   /** World time of the last capture, for telling when a combo has run out. */
   let lastCaptureAt = Number.NEGATIVE_INFINITY;
+  let roundActive = false;
+  let roundFinal = false;
 
   function fx(event: FxEvent): void {
     switch (`${event.kind}:${event.name}`) {
@@ -81,18 +88,28 @@ export function createGameAudio(): GameAudio {
     update: (change) => engine.update(change),
     onChange: (listener) => engine.onChange(listener),
 
-    screen(screen, { final, upgrades }) {
+    screen(screen, { final, endless = false, upgrades }) {
+      // Only a finished round (or endless session) gets the stinger. Pausing shows the hub mix
+      // and must stay silent, so it leaves the round active.
+      if (screen === "summary" && roundActive) {
+        music.stinger(roundFinal);
+        roundActive = false;
+      }
       music.setChapter(chapterFor(upgrades));
       switch (screen) {
+        case "title":
+          music.setMode("title");
+          break;
         case "hub":
           music.setMode("hub");
           break;
         case "round":
           lastCaptureAt = Number.NEGATIVE_INFINITY;
-          music.setMode(final ? "final" : "round");
+          roundActive = true;
+          roundFinal = final && !endless;
+          music.setMode(endless ? "endless" : final ? "final" : "round");
           break;
         case "summary":
-          music.stinger(final);
           music.setMode("hub");
           break;
         case "end":
@@ -130,11 +147,18 @@ export function createGameAudio(): GameAudio {
         const sinceCapture = world.elapsed - lastCaptureAt;
         // The combo layer also lifts the music for a Feeding Frenzy wave.
         const frenzy = world.frenzyActive;
+        music.setFrenzy(!world.over && frenzy);
+        music.setUrgency(world.over ? 0 : urgencyLevel(world.timeLeft));
         music.setCombo(world.over ? 0 : comboLevel({ mult: world.comboMult, max: comboMax, sinceCapture, window: comboWindow, frenzy }));
+      } else {
+        music.setUrgency(0);
+        music.setFrenzy(false);
       }
       music.pump();
     },
 
+    bounty: () => sfx.bounty(),
+    achievement: () => sfx.achievement(),
     preview: () => sfx.preview(),
   };
 }

@@ -1,7 +1,7 @@
 /*
  * Small synthesised instruments, shared by the music and the sound effects. Each call builds a few
  * oscillators or a noise source for one note, schedules it at `time` (AudioContext seconds) and
- * cleans the nodes up when it ends. Every function returns the time the note is silent.
+ * cleans the nodes up when it ends. One-shot voices return their end time; the riser has an explicit stop.
  */
 
 /** "Silent" for exponential ramps, which can't reach 0: −80 dB. */
@@ -31,6 +31,7 @@ function oscillator(ctx: AudioContext, wave: Wave, freq: number, dest: AudioNode
 /** Disconnects `nodes` when `source` stops, so finished notes can be garbage collected. */
 function cleanUp(source: AudioScheduledSourceNode, ...nodes: AudioNode[]): void {
   source.onended = () => {
+    source.disconnect();
     for (const node of nodes) node.disconnect();
   };
 }
@@ -141,13 +142,13 @@ export function noise(ctx: AudioContext, dest: AudioNode, o: NoiseOptions): { en
   return { end, out };
 }
 
-/** A soft, low kick: a sine that drops in pitch. */
+/** A short, punchy kick: a sine that drops in pitch. */
 export function kick(ctx: AudioContext, dest: AudioNode, time: number, gain: number): number {
   const out = voice(ctx, dest);
-  const end = strike(out.gain, time, gain, 0.004, 0.32);
-  const osc = oscillator(ctx, "sine", 110, out, time, end + 0.02);
-  osc.frequency.setValueAtTime(110, time);
-  osc.frequency.exponentialRampToValueAtTime(46, time + 0.14);
+  const end = strike(out.gain, time, gain, 0.002, 0.16);
+  const osc = oscillator(ctx, "sine", 145, out, time, end + 0.02);
+  osc.frequency.setValueAtTime(145, time);
+  osc.frequency.exponentialRampToValueAtTime(48, time + 0.065);
   cleanUp(osc, out);
   return end;
 }
@@ -168,11 +169,14 @@ export function bass(ctx: AudioContext, dest: AudioNode, time: number, freq: num
   const out = voice(ctx, dest);
   const filter = ctx.createBiquadFilter();
   filter.type = "lowpass";
-  filter.frequency.value = 420;
-  filter.connect(out);
-  const end = strike(out.gain, time, gain, 0.012, length);
+  filter.frequency.value = 280;
+  const highpass = ctx.createBiquadFilter();
+  highpass.type = "highpass";
+  highpass.frequency.value = 42;
+  filter.connect(highpass).connect(out);
+  const end = strike(out.gain, time, gain, 0.008, length);
   const osc = oscillator(ctx, "triangle", freq, filter, time, end + 0.02);
-  cleanUp(osc, filter, out);
+  cleanUp(osc, filter, highpass, out);
   return end;
 }
 
@@ -217,9 +221,10 @@ export function pad(
     for (const cents of [-5, 5]) {
       last = oscillator(ctx, wave, freq, filter, o.time, end);
       last.detune.value = cents + (Math.random() - 0.5) * 4;
+      cleanUp(last);
     }
   }
-  if (last) cleanUp(last, filter, out);
+  if (last) last.addEventListener("ended", () => { filter.disconnect(); out.disconnect(); });
   return end;
 }
 
@@ -255,5 +260,92 @@ export function run(
   out.gain.exponentialRampToValueAtTime(SILENT, end);
   cleanUp(osc, filter, out, sparkle);
   cleanUp(octave);
+  return end;
+}
+
+/** A compact snare/clap: filtered noise with a quiet, short sine body. */
+export function clap(ctx: AudioContext, dest: AudioNode, time: number, gain: number): number {
+  const { end } = noise(ctx, dest, { time, gain, attack: 0.003, decay: 0.105, filter: "bandpass", from: 1900, to: 3200, q: 0.6 });
+  const out = voice(ctx, dest);
+  strike(out.gain, time, gain * 0.35, 0.002, 0.065);
+  const body = oscillator(ctx, "sine", 185, out, time, end + 0.02);
+  cleanUp(body, out);
+  return end;
+}
+
+/** A continuous riser whose level tracks simulation time, so pauses and time bonuses do not desync it. */
+export interface NoiseRiser {
+  setLevel(level: number): void;
+  stop(): void;
+}
+
+/** Quiet filtered surf, reused until stopped; all nodes disconnect after its short release. */
+export function risingNoise(ctx: AudioContext, dest: AudioNode, time: number, gain: number): NoiseRiser {
+  const out = voice(ctx, dest);
+  const filter = ctx.createBiquadFilter();
+  filter.type = "bandpass";
+  filter.Q.value = 0.6;
+  filter.frequency.value = 700;
+  filter.connect(out);
+  const source = ctx.createBufferSource();
+  source.buffer = noiseBuffer(ctx);
+  source.loop = true;
+  source.connect(filter);
+  source.start(time);
+  cleanUp(source, filter, out);
+  let stopped = false;
+  return {
+    setLevel(level) {
+      if (stopped) return;
+      filter.frequency.setTargetAtTime(700 + level * level * 7000, ctx.currentTime, 0.04);
+      out.gain.setTargetAtTime(gain * (0.2 + level * 0.8), ctx.currentTime, 0.03);
+    },
+    stop() {
+      if (stopped) return;
+      stopped = true;
+      const now = ctx.currentTime;
+      out.gain.cancelScheduledValues(now);
+      out.gain.setValueAtTime(out.gain.value, now);
+      out.gain.linearRampToValueAtTime(0, now + 0.02);
+      source.stop(now + 0.025);
+    },
+  };
+}
+
+/** A small, rounded brass voice: two detuned saws with a soft attack and a closing low-pass. */
+export function brass(ctx: AudioContext, dest: AudioNode, time: number, freq: number, gain: number, length: number): number {
+  const out = voice(ctx, dest);
+  const end = strike(out.gain, time, gain * 0.5, 0.035, Math.max(0.04, length - 0.035));
+  const filter = ctx.createBiquadFilter();
+  filter.type = "lowpass";
+  filter.Q.value = 0.5;
+  filter.frequency.setValueAtTime(1100, time);
+  filter.frequency.linearRampToValueAtTime(2400, time + 0.05);
+  filter.frequency.exponentialRampToValueAtTime(700, end);
+  filter.connect(out);
+  const low = oscillator(ctx, "sawtooth", freq, filter, time, end + 0.02);
+  const high = oscillator(ctx, "sawtooth", freq, filter, time, end + 0.02);
+  low.detune.value = -6;
+  high.detune.value = 6;
+  cleanUp(low, filter, out);
+  cleanUp(high);
+  return end;
+}
+
+/** Steel pan: a bent sine fundamental and two fast-decaying, inharmonic shell partials. */
+export function steelDrum(ctx: AudioContext, dest: AudioNode, o: PluckOptions): number {
+  const out = voice(ctx, dest);
+  out.gain.value = o.gain * 0.8;
+  const end = o.time + o.decay + 0.003;
+  for (const [ratio, level, decay] of [[1, 1, 1], [2.03, 0.35, 0.36], [3.87, 0.16, 0.19]] as const) {
+    const partial = ctx.createGain();
+    partial.connect(out);
+    const tail = strike(partial.gain, o.time, level, 0.003, o.decay * decay);
+    const osc = oscillator(ctx, "sine", o.freq * ratio, partial, o.time, tail + 0.02);
+    osc.detune.setValueAtTime(38, o.time);
+    osc.detune.exponentialRampToValueAtTime(0.1, o.time + 0.045);
+    cleanUp(osc, partial);
+    if (ratio === 1) osc.addEventListener("ended", () => out.disconnect());
+  }
   return end;
 }

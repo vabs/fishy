@@ -12,7 +12,7 @@ describe("parseManifest", () => {
           files: ["shallows.opus", { src: "shallows.m4a", loopStart: 0.046 }],
           loopStart: 0,
           loopEnd: 20.87,
-          bpm: 92,
+          bpm: 108,
           key: "D major",
           gainDb: -3,
           layers: { groove: ["shallows-groove.opus"] },
@@ -31,7 +31,7 @@ describe("parseManifest", () => {
       ],
       loopStart: 0,
       loopEnd: 20.87,
-      bpm: 92,
+      bpm: 108,
       beatsPerBar: 4,
       key: DEFAULT_KEY,
       gainDb: -3,
@@ -41,7 +41,7 @@ describe("parseManifest", () => {
 
   it("fills defaults for a bare entry", () => {
     const { manifest } = parseManifest({ chapters: [{ files: "bed.mp3" }] });
-    expect(manifest.chapters[0]).toMatchObject({ loopStart: 0, loopEnd: null, bpm: 92, beatsPerBar: 4, key: DEFAULT_KEY, gainDb: 0 });
+    expect(manifest.chapters[0]).toMatchObject({ loopStart: 0, loopEnd: null, bpm: 124, beatsPerBar: 4, key: DEFAULT_KEY, gainDb: 0 });
   });
 
   it("drops what doesn't make sense and says why", () => {
@@ -49,7 +49,7 @@ describe("parseManifest", () => {
       chapters: [{ files: [] }, { files: ["a.opus"], loopStart: 5, loopEnd: 2, bpm: 9000, key: "Q" }, 42],
     });
     expect(manifest.chapters[0]).toBeNull();
-    expect(manifest.chapters[1]).toMatchObject({ loopEnd: null, bpm: 92, key: DEFAULT_KEY });
+    expect(manifest.chapters[1]).toMatchObject({ loopEnd: null, bpm: 124, key: DEFAULT_KEY });
     expect(manifest.chapters[2]).toBeNull();
     expect(problems).toHaveLength(5);
   });
