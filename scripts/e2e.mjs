@@ -1,7 +1,6 @@
 // Smoke test of the whole game flow in a real browser: npm run e2e
-// First visit -> name -> straight into round 1 -> summary -> hub -> buy an upgrade -> colour-blind
-// palette -> reload keeps progress -> a Feeding Frenzy round -> Final Round -> end screen -> mute ->
-// Play Again. Needs Google Chrome installed.
+// First visit -> name -> tutorial -> title -> timed rounds/bounties -> hub -> Endless ->
+// achievements -> reload -> Feeding Frenzy -> Final Round -> end screen -> Play Again. Needs Google Chrome installed.
 import assert from "node:assert/strict";
 import { chaseFish, launchChrome, newPage, startDevServer } from "./lib/browser.mjs";
 
@@ -23,12 +22,17 @@ try {
   await page.keyboard.press("ArrowRight");
   assert.equal((await intro.locator(".intro-good-luck").innerText()).trim(), `Good luck, ${NAME}!`);
 
-  step("Let's play goes straight into round 1 with a tip");
+  step("the tutorial leads to the title; Play starts round 1 with a tip");
   await intro.getByRole("button", { name: "Let's play" }).click();
+  await page.locator("#title").waitFor({ state: "visible" });
+  assert.ok(await page.locator("#title-endless").isDisabled());
+  assert.ok(await page.locator("#title-endless-lock").isVisible());
+  await page.click("#title-play");
   await page.waitForSelector("#hud:not([hidden])");
   assert.equal(await intro.count(), 0, "slides still open");
   assert.ok(await page.locator("#hub").isHidden(), "hub shown with nothing to buy");
   await page.waitForSelector("#round-hint:not([hidden])");
+  assert.ok(await page.locator("#hud-bounties").isHidden());
 
   step("rounds bank money until the first upgrade is affordable, then the hub opens");
   let round = 1;
@@ -36,7 +40,14 @@ try {
     await chaseFish(page, { steps: 120 });
     await page.waitForSelector("#summary-panel:not([hidden])", { timeout: 30_000 });
     assert.equal(await text(page, "#summary-title"), `Round ${round} complete`);
-    await page.click("#continue-button");
+    await continueVisible(page);
+    if (round === 1) {
+      await page.reload();
+      await page.locator("#title").waitFor({ state: "visible" });
+      assert.ok(await page.locator("#title-endless").isEnabled(), "Endless did not unlock after round 1");
+      assert.ok(await page.locator("#title-endless-lock").isHidden());
+      await page.click("#title-play");
+    } else await page.click("#continue-button");
     round++;
     await page.waitForSelector("#hub:not([hidden]), #hud:not([hidden])");
     if (await page.locator("#hub").isVisible()) break;
@@ -44,6 +55,57 @@ try {
   }
   assert.equal(await text(page, "#hub-name"), NAME);
   assert.equal(await text(page, "#hub-round"), `Round ${round} next`);
+  assert.ok(round >= 2);
+  assert.ok(await page.locator("#hub-bounties").isVisible());
+  assert.ok(await page.locator("#hub-bounties .bounty-row").count() >= 2);
+
+  step("Endless unlocks after round 1, records a trip and leaves the bank alone");
+  const beforeEndless = await page.evaluate(() => JSON.parse(localStorage.getItem("fishy.save")));
+  await page.click("#hub-home");
+  assert.ok(await page.locator("#title-endless").isEnabled());
+  assert.ok(await page.locator("#title-endless-lock").isHidden());
+  await page.click("#title-endless");
+  await page.waitForSelector('#hud[data-mode="endless"]:not([hidden])');
+  assert.ok(await page.locator("#hud-bounties").isHidden());
+  await chaseFish(page, { steps: 100 });
+  await page.waitForFunction(() => {
+    const [m, s] = document.querySelector("#hud-endless-time").textContent.split(":").map(Number);
+    return m * 60 + s >= 10;
+  });
+  assert.equal(await page.locator("#hud.is-urgent").count(), 0);
+  await page.click("#pause-button");
+  await page.locator("#harbour-button").waitFor({ state: "visible" });
+  const frozen = await text(page, "#hud-endless-time");
+  await page.waitForTimeout(350);
+  assert.equal(await text(page, "#hud-endless-time"), frozen);
+  await page.click("#harbour-button");
+  await page.locator("#endless-panel").waitFor({ state: "visible" });
+  const afterEndless = await page.evaluate(() => JSON.parse(localStorage.getItem("fishy.save")));
+  assert.equal(afterEndless.money, beforeEndless.money);
+  assert.equal(afterEndless.round, beforeEndless.round);
+  assert.deepEqual(afterEndless.upgrades, beforeEndless.upgrades);
+  assert.equal(afterEndless.endless.sessions, beforeEndless.endless.sessions + 1);
+  assert.ok(afterEndless.endless.timeMs >= beforeEndless.endless.timeMs + 10000);
+  assert.ok(await page.locator("#endless-records").innerText());
+  await page.click("#endless-harbour");
+
+  step("achievements open and close back to the title with focus restored");
+  await page.click("#title-achievements");
+  await page.locator("#achievements-panel").waitFor({ state: "visible" });
+  assert.equal(await page.locator(".achievement-card").count(), 22);
+  await page.keyboard.press("Escape");
+  assert.ok(await page.locator("#achievements-panel").isHidden());
+  assert.ok(await page.locator("#title").isVisible());
+  assert.equal(await page.locator("#title-achievements").evaluate((el) => el === document.activeElement), true);
+
+  step("title Settings reuses the same drawer and closes on Escape");
+  await page.click("#title-settings");
+  await page.locator("#hub-tools").waitFor({ state: "visible" });
+  assert.equal(await page.locator("#hub-tools").count(), 1);
+  await page.keyboard.press("Escape");
+  assert.ok(await page.locator("#hub-tools").isHidden());
+  await page.click("#title-play");
+  await page.locator("#hub").waitFor({ state: "visible" });
   const banked = money(await text(page, "#hub-money"));
   await page.click(".tech-node.is-root");
   const afterBuy = money(await text(page, "#hub-money"));
@@ -71,6 +133,7 @@ try {
 
   step("a reload keeps the save and the palette, and skips the name prompt");
   await page.reload();
+  await page.click("#title-play");
   await page.waitForSelector("#hub:not([hidden])");
   assert.equal(await text(page, "#hub-name"), NAME);
   assert.equal(money(await text(page, "#hub-money")), afterBuy);
@@ -85,11 +148,13 @@ try {
     localStorage.setItem("fishy.save", JSON.stringify({ ...save, round: 5 }));
   });
   await page.reload();
+  await page.click("#title-play");
   await page.waitForSelector("#hub:not([hidden])");
   assert.equal(await text(page, "#hub-round"), "Round 5 next");
   assert.match(await text(page, "#hub-hint"), /Feeding Frenzy this round/);
   assert.ok(await page.locator("#start-button.has-frenzy").isVisible(), "no Frenzy badge on Start Round");
   await page.click("#start-button");
+  await page.locator("#hud-bounties").waitFor({ state: "visible" });
   await page.waitForSelector("#frenzy-banner:not([hidden])", { timeout: 15_000 });
   assert.match(await text(page, "#frenzy-banner"), /^Feeding Frenzy!/);
   await chaseFish(page, { steps: 40 });
@@ -112,8 +177,10 @@ try {
     localStorage.setItem("fishy.save", JSON.stringify({ ...save, upgrades }));
   }, maxed);
   await page.reload();
+  await page.click("#title-play");
   await page.waitForSelector("#hub:not([hidden])");
   assert.equal(await text(page, "#start-button"), "Final Round");
+  assert.ok(await page.locator("#hub-bounties").isHidden());
   assert.ok(await page.locator("#start-button.has-frenzy").isVisible(), "no Frenzy badge on the Final Round");
 
   step("the Final Round has its Feeding Frenzy and ends on the thank-you screen");
@@ -122,6 +189,7 @@ try {
   await page.waitForSelector("#frenzy-banner:not([hidden])", { timeout: 30_000 });
   await page.waitForSelector("#summary-panel:not([hidden])", { timeout: 120_000 });
   assert.equal(await text(page, "#summary-title"), "Final Round complete");
+  await continueVisible(page);
   assert.match(await text(page, "#summary-frenzy"), /^Feeding Frenzy: /);
   await page.click("#continue-button");
   await page.waitForSelector("#end-panel:not([hidden])");
@@ -129,6 +197,7 @@ try {
 
   step("the end screen survives a reload");
   await page.reload();
+  await page.click("#title-play");
   await page.waitForSelector("#end-panel:not([hidden])");
 
   step("M mutes the sound");
@@ -136,6 +205,7 @@ try {
   const audioSettings = await page.evaluate(() => localStorage.getItem("fishy.audio"));
   assert.equal(JSON.parse(audioSettings).muted, true);
 
+  const beforeReset = await page.evaluate(() => JSON.parse(localStorage.getItem("fishy.save")));
   step("Play Again starts over in round 1, keeps the name and leaves the sound and display settings alone");
   await page.click("#play-again-button");
   await page.waitForSelector("#hud:not([hidden])");
@@ -144,6 +214,8 @@ try {
   assert.equal(fresh.playerName, NAME);
   assert.equal(fresh.money, 0);
   assert.deepEqual(fresh.upgrades, {});
+  assert.deepEqual(fresh.achievements, beforeReset.achievements);
+  assert.deepEqual(fresh.endless, beforeReset.endless);
   assert.equal(await page.evaluate(() => localStorage.getItem("fishy.audio")), audioSettings);
   assert.equal(await page.locator('#hud-audio [data-action="mute"]').getAttribute("aria-pressed"), "true");
   assert.equal(await page.evaluate(() => localStorage.getItem("fishy.display")), displaySettings);
@@ -166,4 +238,15 @@ async function text(page, selector) {
 
 function money(label) {
   return Number(label.replace(/[$,]/g, ""));
+}
+
+/** The logbook footer stays available at both ends of a long summary. */
+async function continueVisible(page) {
+  for (const bottom of [false, true]) {
+    await page.locator(".summary-body").evaluate((el, bottom) => { el.scrollTop = bottom ? el.scrollHeight : 0; }, bottom);
+    const button = await page.locator("#continue-button").boundingBox();
+    const viewport = page.viewportSize();
+    assert.ok(button && button.y >= 0 && button.y + button.height <= viewport.height,
+      "Continue is outside the summary viewport");
+  }
 }

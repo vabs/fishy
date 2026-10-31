@@ -16,11 +16,23 @@ try {
       ...createSave("Captain with a very long name"), money: 123456789, round: 2,
     });
     await page.goto(dev.url);
+    await page.locator("#title-play").click();
     await page.locator("#hub").waitFor({ state: "visible" });
     assert.ok(await page.locator("#hub-tools-toggle").isVisible(), `Settings missing at ${width}px`);
     assert.ok(await page.locator("#hub-tools").isHidden(), "Settings should start closed");
     const start = await page.locator("#start-button").boundingBox();
-    assert.ok(Math.abs(start.x + start.width / 2 - width / 2) < 2, "Start Round should be centred");
+    if (width >= 700) {
+      assert.ok(Math.abs(start.x + start.width / 2 - width / 2) < 2, "Start Round should be centred");
+    } else {
+      assert.ok(start.x >= 0 && start.x + start.width <= width && start.y >= 0 &&
+        start.y + start.height <= page.viewportSize().height, "Start Round overflows the viewport");
+      for (const selector of ["#hub-money", "#hub-tools-toggle"]) {
+        const box = await page.locator(selector).boundingBox();
+        assert.ok(start.x + start.width <= box.x || box.x + box.width <= start.x ||
+          start.y + start.height <= box.y || box.y + box.height <= start.y,
+        `Start Round overlaps ${selector} at ${width}px`);
+      }
+    }
     await page.locator("#hub-tools-toggle").click();
     await page.locator("#hub-tools").waitFor({ state: "visible" });
     const download = page.waitForEvent("download");

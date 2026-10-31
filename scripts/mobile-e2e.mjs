@@ -11,6 +11,7 @@ try {
   const { TECH_NODES } = await dev.load("/src/game/tech/index.ts");
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 3 });
   const page = await context.newPage();
+  await page.emulateMedia({ reducedMotion: "reduce" });
   const errors = [];
   page.on("pageerror", (error) => errors.push(String(error)));
   // Observe the real canvas projection without adding test hooks to the shipped game.
@@ -28,7 +29,7 @@ try {
         const matrix = this.getTransform();
         const density = this.canvas.width / this.canvas.getBoundingClientRect().width;
         const point = { x: (matrix.a * x + matrix.c * y + matrix.e) / density, y: (matrix.b * x + matrix.d * y + matrix.f) / density };
-        if (colour === "rgba(255,255,255,0.85)" && radius > 10) window.drawnNet = point;
+        if (colour === "#fff1cd" && radius > 10) window.drawnNet = point;
         if (colour === "rgba(255,255,255,0.25)") window.drawnFinger = point;
       }
       return arc.call(this, x, y, radius, ...args);
@@ -41,6 +42,7 @@ try {
   const seed = async (save) => {
     await page.evaluate((data) => localStorage.setItem("fishy.save", JSON.stringify(data)), save);
     await page.reload();
+    await tap("#title-play");
   };
 
   step("name entry and tutorial fit a phone and a reduced keyboard viewport");
@@ -56,6 +58,8 @@ try {
   assert.match(await page.locator(".intro-slide").nth(1).innerText(), /pinch to zoom/);
   await page.getByRole("button", { name: "Next", exact: true }).tap();
   await page.getByRole("button", { name: "Let's play", exact: true }).tap();
+  await fits(page, "#title");
+  await tap("#title-play");
   await page.locator("#hud").waitFor({ state: "visible" });
 
   step("hold/drag places the net 56px above the finger; lift/cancel clear it; DPR is capped");
@@ -172,7 +176,15 @@ try {
   await page.getByRole("button", { name: "Skip", exact: true }).tap();
   await tap("#hub-tools-toggle");
   await fits(page, "#hub-tools");
+  const settings = await page.locator("#hub-tools").boundingBox();
+  const gear = await page.locator("#hub-tools-toggle").boundingBox();
+  assert.ok(settings.y >= gear.y + gear.height, "landscape Settings covers the gear");
   await tap("#hub-tools-toggle");
+  assert.ok(await page.locator("#hub-tools").isHidden());
+  await tap("#hub-tools-toggle");
+  await tap("#hub-tools-close");
+  assert.ok(await page.locator("#hub-tools").isHidden());
+  assert.equal(await page.locator("#hub-tools-toggle").evaluate((el) => el === document.activeElement), true);
 
   step("starting a round dismisses an open upgrade sheet; summary and end screens scroll");
   await tap(".tech-node.is-root");
@@ -181,6 +193,9 @@ try {
   assert.ok(await page.locator(".tech-sheet").isHidden(), "details leaked into the round");
   await page.locator("#summary-panel").waitFor({ state: "visible", timeout: 25000 });
   await fits(page, "#summary-panel");
+  await fits(page, "#continue-button");
+  await page.locator(".summary-body").evaluate((el) => { el.scrollTop = el.scrollHeight; });
+  await fits(page, "#continue-button");
   await tap("#continue-button");
   await page.setViewportSize({ width: 320, height: 568 });
   await seed({ ...afterBuy, money: 123456789 });

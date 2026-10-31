@@ -9,7 +9,12 @@ try {
   const page = await context.newPage();
   const errors = [];
   page.on("pageerror", (error) => errors.push(String(error)));
+  const { createSave } = await dev.load("/src/save/index.ts");
+  const seed = { ...createSave("Tree inspector"), round: 2, money: 10000 };
+  await page.addInitScript((data) => localStorage.setItem("fishy.save", JSON.stringify(data)), seed);
   await page.goto(dev.url);
+  await page.locator("#title-play").click();
+  await page.locator("#hub").waitFor({ state: "visible" });
   await page.evaluate(mountIsolatedTree);
 
   const root = page.locator(".tech-node.is-root");
@@ -92,7 +97,10 @@ try {
 
   const mobileContext = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const mobile = await mobileContext.newPage();
+  await mobile.addInitScript((data) => localStorage.setItem("fishy.save", JSON.stringify(data)), seed);
   await mobile.goto(dev.url);
+  await mobile.locator("#title-play").tap();
+  await mobile.locator("#hub").waitFor({ state: "visible" });
   await mobile.evaluate(mountIsolatedTree);
   await mobile.locator(".tech-node.is-root").tap();
   await mobile.locator(".tech-sheet").waitFor({ state: "visible" });
