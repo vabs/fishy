@@ -1,4 +1,12 @@
 import "./style.css";
+import "./app/feedback.css";
+import { bountyBoard, bountyFacts, bountyResult } from "./app/bounties";
+import { endlessRecordsDiff, endlessUnlocked, formatSeaTime } from "./app/endless";
+import { ACHIEVEMENTS, grantAchievements, newAchievements, type AchievementMoment } from "./game/achievements";
+import { bountyGuarantees, type Bounty } from "./game/bounties";
+import { renderBounties } from "./ui/bounties-view";
+import { renderAchievements } from "./ui/achievements-view";
+import { showAchievementToast } from "./ui/achievement-toast";
 import { createGameAudio } from "./audio";
 import { formatCompactMoney, formatDuration, formatMoney } from "./format";
 import { FISH, FISH_KINDS, type FishKind } from "./game/fish";
@@ -11,7 +19,7 @@ import { summaryRows, type SummaryRow } from "./game/summary";
 import { TECH_NODES, applyUpgrades, buy, canBuy, isTreeComplete, refundRemovedLevels } from "./game/tech";
 import { STEP, World, isFrenzyRound, type Point } from "./game/world";
 import { createViewport } from "./game/viewport";
-import { createSave, loadSave, recordRound, resetProgress, sanitizeUpgrades, writeSave, type SaveData } from "./save";
+import { createSave, loadSave, recordEndless, recordRound, resetProgress, sanitizeUpgrades, writeSave, type SaveData } from "./save";
 import { mountAudioControls } from "./ui/audio-controls";
 import { mountDisplayControls } from "./ui/display-controls";
 import { loadDisplaySettings } from "./ui/display-settings";
@@ -71,6 +79,22 @@ const end = {
   best: element("#end-best"),
   time: element("#end-time"),
 };
+const title = element("#title");
+const titlePlay = element<HTMLButtonElement>("#title-play");
+const titleEndless = element<HTMLButtonElement>("#title-endless");
+const titleSettings = element<HTMLButtonElement>("#title-settings");
+const endlessPanel = element("#endless-panel");
+const achievementsPanel = element("#achievements-panel");
+const achievementsClose = element<HTMLButtonElement>("#achievements-close");
+const hubAchievements = document.createElement("button");
+hubAchievements.id = "hub-achievements";
+hubAchievements.type = "button";
+hubAchievements.className = "hub-achievements";
+element(".hub-player").append(hubAchievements);
+const summaryBountyReward = document.createElement("p");
+summaryBountyReward.id = "summary-bounty-reward";
+summaryBountyReward.className = "summary-frenzy";
+element("#summary-bounties").before(summaryBountyReward);
 const toast = element("#toast");
 const roundHint = element("#round-hint");
 const frenzyBanner = {
@@ -94,13 +118,14 @@ onPaletteChange(() => {
   for (const icon of summary.rows.querySelectorAll<HTMLCanvasElement>("canvas[data-icon]")) {
     paintRowIcon(icon, icon.dataset.icon as SummaryRow["key"]);
   }
+  if (!achievementsPanel.hidden) drawAchievements();
 });
 
 const renderer = new Renderer(canvas);
 const audio = createGameAudio();
 mountAudioControls(element("#hud-audio"), audio, "hud");
 mountAudioControls(element("#hub-audio"), audio, "hub");
-mountDisplayControls(element("#hub-display"));
+const display = mountDisplayControls(element("#hub-display"), element("#hub-haptics"));
 let save: SaveData;
 let world: World | null = null;
 /** Stats of the round being played, or the base stats between rounds. */
@@ -117,6 +142,19 @@ let accumulator = 0;
 let lastFrame = performance.now();
 let toastTimer = 0;
 let saveFailureShown = false;
+let returningPlayer = false;
+type Screen = "title" | "hub" | "round" | "summary" | "end" | "endless";
+let screen: Screen = "title";
+let activeBounties: readonly Bounty[] = [];
+const completedBounties = new Set<string>();
+let coinTarget: Point | null = null;
+let achievementOpener: HTMLElement | null = null;
+let achievementBackground: HTMLElement | null = null;
+let toolsOpener: HTMLElement = toolsToggle;
+let countUp: { amount: number; start: number } | null = null;
+const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+const timeParam = import.meta.env.DEV ? new URLSearchParams(location.search).get("time") : null;
+const devTime = timeParam !== null && Number.isFinite(Number(timeParam)) ? Number(timeParam) : undefined;
 
 /**
  * Dev only: `?fish=electric,epic` makes only those types spawn, sharing Normal's base spawn rate,
@@ -170,22 +208,99 @@ function showToast(message: string): void {
   toastTimer = window.setTimeout(() => (toast.hidden = true), TOAST_SECONDS * 1000);
 }
 
-function showOnly(screen: "hub" | "round" | "summary" | "end"): void {
+function showOnly(next: Screen): void {
   netInput.clear();
   tree.dismiss();
+  setToolsOpen(false);
+  countUp = null;
+  summary.earned.classList.remove("is-counting");
+  screen = next;
   paused = false;
   hud.root.dataset.paused = "false";
+  hud.root.classList.remove("is-urgent");
   pausePanel.hidden = true;
-  if (screen !== "round") {
+  if (next !== "round") {
     roundHint.hidden = true;
     frenzyBanner.root.hidden = true;
+    coinTarget = null;
   }
-  hub.root.hidden = screen !== "hub";
-  hud.root.hidden = screen !== "round";
-  summary.root.hidden = screen !== "summary";
-  end.root.hidden = screen !== "end";
-  document.body.classList.toggle("playing", screen === "round");
-  audio.screen(screen, { final: finalRound, upgrades: save.upgrades });
+  title.hidden = next !== "title";
+  hub.root.hidden = next !== "hub";
+  hud.root.hidden = next !== "round";
+  summary.root.hidden = next !== "summary";
+  end.root.hidden = next !== "end";
+  endlessPanel.hidden = next !== "endless";
+  document.body.classList.toggle("playing", next === "round");
+  audio.screen(next === "endless" ? "summary" : next, {
+    final: finalRound, endless: next === "round" ? hud.root.dataset.mode === "endless" : world?.endless, upgrades: save.upgrades,
+  });
+}
+
+function showTitle(): void {
+  world = null;
+  stats = BASE_STATS;
+  finalRound = false;
+  element("#title-greeting").textContent = `Welcome ${returningPlayer ? "back" : "aboard"}, ${save.playerName}.`;
+  const unlocked = endlessUnlocked(save);
+  titleEndless.disabled = !unlocked;
+  element("#title-endless-lock").hidden = unlocked;
+  updateAchievementCounts();
+  showOnly("title");
+  resize();
+  titlePlay.focus({ preventScroll: true });
+}
+
+function updateAchievementCounts(): void {
+  const count = `${ACHIEVEMENTS.filter((a) => Object.hasOwn(save.achievements, a.id)).length} / ${ACHIEVEMENTS.length}`;
+  element("#title-achievements-count").textContent = count;
+  element("#achievements-count").textContent = count;
+  hubAchievements.textContent = `Achievements ${count}`;
+}
+
+function checkAchievements(moment: AchievementMoment = {}, silent = false): void {
+  const unlocked = newAchievements(save, moment);
+  if (unlocked.length) {
+    setSave(grantAchievements(save, unlocked.map((a) => a.id)));
+    if (silent) showToast(`${unlocked.length} achievement${unlocked.length === 1 ? "" : "s"} unlocked`);
+    else for (const achievement of unlocked) {
+      showAchievementToast(element("#achievement-toast"), achievement);
+      audio.achievement();
+    }
+  }
+  updateAchievementCounts();
+}
+
+function drawAchievements(): void {
+  renderAchievements(element("#achievements-grid"), ACHIEVEMENTS, save.achievements);
+  updateAchievementCounts();
+}
+
+function openAchievements(opener: HTMLElement): void {
+  setToolsOpen(false);
+  drawAchievements();
+  achievementOpener = opener;
+  achievementBackground = screen === "title" ? title : hub.root;
+  achievementBackground.inert = true;
+  achievementsPanel.hidden = false;
+  achievementsClose.focus({ preventScroll: true });
+}
+
+function closeAchievements(): void {
+  achievementsPanel.hidden = true;
+  if (achievementBackground) achievementBackground.inert = false;
+  achievementOpener?.focus({ preventScroll: true });
+  achievementBackground = null;
+}
+
+/** Persists a board once; starting directly from Play must roll it too. */
+function prepareBounties(): readonly Bounty[] {
+  const next = bountyBoard(save);
+  if (next !== save) setSave(next);
+  return save.bounties?.list ?? [];
+}
+
+function vibrate(ms: number): void {
+  if (display.settings.haptics && typeof navigator.vibrate === "function") navigator.vibrate(ms);
 }
 
 function showHub(): void {
@@ -197,6 +312,11 @@ function showHub(): void {
 
 function renderHub(): void {
   const complete = isTreeComplete(save.upgrades);
+  const list = prepareBounties();
+  const emptyFacts = { caught: {}, maxComboMult: 1, goldenCaught: 0, chestsOpened: 0,
+    bestTickCatches: 0, earned: 0, frenzyCaught: 0 };
+  renderBounties(element("#hub-bounties"), bountyResult(list, emptyFacts).items.map((b) => ({ ...b, failed: false })), "hub");
+  updateAchievementCounts();
   hub.name.textContent = save.playerName;
   hub.round.textContent = complete ? "Final Round next" : `Round ${save.round} next`;
   setMoney(hub.money, save.money);
@@ -220,16 +340,33 @@ function hint(complete: boolean, frenzy: boolean): string {
 }
 
 function startRound(): void {
-  finalRound = isTreeComplete(save.upgrades);
+  activeBounties = prepareBounties();
+  beginSession(false);
+}
+
+function startEndless(): void {
+  if (!endlessUnlocked(save)) return;
+  activeBounties = [];
+  beginSession(true);
+}
+
+function beginSession(endless: boolean): void {
+  finalRound = !endless && isTreeComplete(save.upgrades);
   playingRound = save.round;
   stats = applyDevOverrides(applyUpgrades(BASE_STATS, save.upgrades));
-  setToolsOpen(false);
+  completedBounties.clear();
+  hud.root.dataset.mode = endless ? "endless" : "round";
+  element("#hud-endless").hidden = !endless;
+  element("#harbour-button").hidden = !endless;
+  renderBounties(element("#hud-bounties"), [], "hud");
+  world = null;
   showOnly("round");
   resize();
   world = new World(stats, createRng(Date.now()), viewport.worldWidth, viewport.worldHeight, {
-    round: playingRound,
-    final: finalRound,
+    round: playingRound, final: finalRound, endless, guarantee: bountyGuarantees(activeBounties),
   });
+  updateHud();
+  resize();
   accumulator = 0;
   lastFrame = performance.now();
   roundHint.textContent = touchLayout.matches
@@ -237,30 +374,71 @@ function startRound(): void {
     : "Move your net over the fish. It catches them on its own.";
 }
 
+/** The only exit from an Endless trip; records it exactly once and never banks its catch. */
+function finishEndless(): void {
+  if (!world?.endless || world.over) return;
+  const finished = world;
+  finished.finish();
+  const before = save.endless;
+  const durationMs = Math.round(finished.elapsed * 1000);
+  // EndlessResult predates haul/Star records; retain those live achievement facts here as well.
+  const recorded = recordEndless(save, { earned: finished.earned, caught: finished.caught,
+    durationMs, maxCombo: finished.maxComboMult, goldenCaught: finished.bonusCount.golden,
+    chestsOpened: finished.bonusCount.treasure });
+  setSave({ ...recorded, stats: { ...recorded.stats,
+    bestTickCatches: Math.max(recorded.stats.bestTickCatches, finished.bestTickCatches),
+    bestStarHits: Math.max(recorded.stats.bestStarHits, finished.bestStarHits) } });
+  element("#endless-earned").textContent = formatMoney(finished.earned);
+  element("#endless-fish").textContent = finished.totalCaught.toLocaleString("en-US");
+  element("#endless-time").textContent = formatSeaTime(finished.elapsed);
+  element("#endless-combo").textContent = `×${finished.maxComboMult.toFixed(1)}`;
+  element("#endless-records").replaceChildren(...endlessRecordsDiff(before, save.endless).map((label) => {
+    const chip = document.createElement("span");
+    chip.textContent = `✦ ${label}`;
+    return chip;
+  }));
+  showOnly("endless");
+  checkAchievements({ endlessSessionMs: durationMs });
+}
+
 function endRound(finished: World): void {
+  const bounties = bountyResult(activeBounties, bountyFacts(finished));
   const recorded = recordRound(save, {
     earned: finished.earned,
     caught: finished.caught,
     durationMs: Math.round(finished.elapsed * 1000),
     goldenCaught: finished.bonusCount.golden,
     chestsOpened: finished.bonusCount.treasure,
+    maxCombo: finished.maxComboMult, bestTickCatches: finished.bestTickCatches,
+    bestStarHits: finished.bestStarHits, bountiesCompleted: bounties.completed,
+    bountyReward: bounties.reward, allBounties: bounties.all,
   });
   setSave(finalRound ? { ...recorded, finalRoundDone: true } : recorded);
 
   summary.title.textContent = finalRound ? "Final Round complete" : `Round ${playingRound} complete`;
-  summary.earned.textContent = formatMoney(finished.earned);
+  const total = finished.earned + bounties.reward;
+  summary.earned.textContent = formatMoney(total);
+  renderBounties(element("#summary-bounties"), bounties.items, "summary");
+  summaryBountyReward.hidden = activeBounties.length === 0;
+  summaryBountyReward.textContent = `Bounties +${formatMoney(bounties.reward)}`;
   // Already counted in the rows below; this says how much of it the wave brought in.
   summary.frenzy.hidden = !finished.frenzy;
   summary.frenzy.textContent = finished.frenzy
     ? `Feeding Frenzy: +${formatMoney(finished.frenzyEarned)} from ${finished.frenzyCaught.toLocaleString("en-US")} fish`
     : "";
   summary.fish.textContent = finished.totalCaught.toLocaleString("en-US");
-  summary.total.textContent = formatMoney(finished.earned);
+  summary.total.textContent = formatMoney(total);
   const rows = summaryRows(finished);
   summary.rows.replaceChildren(...rows.map(summaryRow));
   summary.table.hidden = rows.length === 0;
   summary.empty.hidden = rows.length > 0;
   showOnly("summary");
+  if (!reducedMotion.matches) {
+    countUp = { amount: total, start: performance.now() };
+    summary.earned.classList.add("is-counting");
+    summary.earned.textContent = formatMoney(0);
+  }
+  checkAchievements({ allBounties: bounties.all });
 }
 
 function summaryRow({ key, count: caught, earned }: SummaryRow): HTMLTableRowElement {
@@ -354,12 +532,42 @@ function resize(): void {
   const density = touchLayout.matches ? Math.min(window.devicePixelRatio || 1, 2) : window.devicePixelRatio || 1;
   renderer.resize(width, height, density, viewport);
   world?.resize(viewport.worldWidth, viewport.worldHeight);
+  measureCoinTarget();
+  measureSettingsBounds();
+}
+
+/** Read layout only on HUD start/mode/resize, never from the frame loop. */
+function measureCoinTarget(): void {
+  if (hud.root.hidden) { coinTarget = null; return; }
+  const rect = hud.earned.getBoundingClientRect();
+  coinTarget = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+}
+
+/** Header height changes with phone orientation, names and upgrade hints. */
+function measureSettingsBounds(): void {
+  if (hub.root.hidden) return;
+  const bottom = element(".hub-bar").getBoundingClientRect().bottom - (window.visualViewport?.offsetTop ?? 0);
+  hubTools.style.setProperty("--settings-header-bottom", `${bottom}px`);
 }
 
 function setToolsOpen(open: boolean): void {
+  const fromTitle = screen === "title";
+  if (open) {
+    toolsOpener = fromTitle ? titleSettings : toolsToggle;
+    if (fromTitle) document.body.append(hubTools);
+    hubTools.classList.toggle("is-title-settings", fromTitle);
+    if (!fromTitle) measureSettingsBounds();
+  }
   hubTools.classList.toggle("is-open", open);
   hubTools.hidden = !open;
-  toolsToggle.setAttribute("aria-expanded", String(open));
+  toolsToggle.setAttribute("aria-expanded", String(open && !fromTitle));
+  titleSettings.setAttribute("aria-expanded", String(open && fromTitle));
+  titleSettings.setAttribute("aria-controls", "hub-tools");
+  if (!open && hubTools.parentElement === document.body) {
+    element(".hub-bar").append(hubTools);
+    hubTools.classList.remove("is-title-settings");
+  }
+  if (open && fromTitle) element<HTMLButtonElement>("#hub-tools-close").focus({ preventScroll: true });
 }
 
 function pauseRound(message = "Your round is paused."): void {
@@ -371,6 +579,7 @@ function pauseRound(message = "Your round is paused."): void {
   accumulator = 0;
   pauseMessage.textContent = message;
   pausePanel.hidden = false;
+  element("#harbour-button").hidden = !world.endless;
   audio.screen("hub", { final: finalRound, upgrades: save.upgrades });
   resumeButton.focus({ preventScroll: true });
 }
@@ -382,7 +591,7 @@ function resumeRound(): void {
   pausePanel.hidden = true;
   accumulator = 0;
   lastFrame = performance.now();
-  audio.screen("round", { final: finalRound, upgrades: save.upgrades });
+  audio.screen("round", { final: finalRound, endless: world.endless, upgrades: save.upgrades });
 }
 
 function setText(el: HTMLElement, text: string): void {
@@ -398,18 +607,37 @@ function setMoney(el: HTMLElement, amount: number): void {
 function updateHud(): void {
   if (!world) return;
   const playing = !world.over;
-  setText(hud.round, finalRound ? "Final Round" : `Round ${playingRound}`);
-  setText(hud.timer, `${world.timeLeft.toFixed(1)}s`);
-  hud.timer.setAttribute("aria-label", `${world.timeLeft.toFixed(1)} seconds left`);
-  hud.root.classList.toggle("is-urgent", playing && world.timeLeft <= 5);
+  setText(hud.round, world.endless ? "Endless Sea" : finalRound ? "Final Round" : `Round ${playingRound}`);
+  if (!world.endless) {
+    setText(hud.timer, `${world.timeLeft.toFixed(1)}s`);
+    hud.timer.setAttribute("aria-label", `${world.timeLeft.toFixed(1)} seconds left`);
+  } else {
+    setText(element("#hud-endless-fish"), world.totalCaught.toLocaleString("en-US"));
+    setText(element("#hud-endless-time"), formatSeaTime(world.elapsed));
+    setText(element("#hud-endless-best"), `×${world.maxComboMult.toFixed(1)}`);
+  }
+  hud.root.classList.toggle("is-urgent", !world.endless && playing && world.timeLeft <= 5);
   setMoney(hud.money, save.money);
   const combo = world.combo > 0 ? `Combo ×${world.comboMult.toFixed(1)}` : "";
   const earnings = touchLayout.matches ? formatCompactMoney(world.earned) : formatMoney(world.earned);
   setText(hud.earned, `+${earnings}`);
   setText(hud.combo, playing ? combo : "");
-  const showHint = playing && playingRound === 1 && world.totalCaught === 0 && world.elapsed < HINT_SECONDS;
+  const showHint = playing && !world.endless && playingRound === 1 && world.totalCaught === 0 && world.elapsed < HINT_SECONDS;
   if (roundHint.hidden === showHint) roundHint.hidden = !showHint;
   updateFrenzyBanner(world, playing);
+  const items = bountyResult(activeBounties, bountyFacts(world)).items;
+  renderBounties(element("#hud-bounties"), items.map((b) => ({ ...b, failed: false })), "hud");
+  items.forEach((item, index) => {
+    const id = activeBounties[index]!.id;
+    if (!item.done || completedBounties.has(id)) return;
+    completedBounties.add(id);
+    audio.bounty();
+    renderer.shake(3);
+    vibrate(20);
+    if (!reducedMotion.matches) element("#hud-bounties").animate([
+      { backgroundColor: "#ffd58688" }, { backgroundColor: "transparent" },
+    ], { duration: 350 });
+  });
 }
 
 /** Shows the Feeding Frenzy banner while the wave runs, with a bar that empties as it does. */
@@ -442,7 +670,8 @@ function frame(now: number): void {
       world.pointer = pointer;
       world.update(STEP);
       accumulator -= STEP;
-      if (world.over) {
+      if (world.over && !world.endless) {
+        updateHud();
         endRound(world);
         break;
       }
@@ -452,10 +681,27 @@ function frame(now: number): void {
     const events = world.drainEvents();
     for (const event of events) renderer.onEvent(event);
     audio.frame(events, world);
+    const captures = events.filter((e) => e.type === "capture").length;
+    if (events.some((e) => e.type === "chest-open")) vibrate(30);
+    else if (captures >= 8 || events.some((e) => e.type === "fx" &&
+      ((e.kind === "star" && e.name === "launch") || (e.kind === "monster" && e.name === "implode")))) vibrate(15);
   }
 
-  renderer.draw({ world, pointer, stats, finger }, paused ? 0 : dt);
-  updateHud();
+  renderer.draw({ world, pointer, stats, finger, coinTarget,
+    timeOfDay: world?.endless ? devTime ?? (world.elapsed / 240) % 1 : undefined }, paused ? 0 : dt);
+  if (renderer.drainCoinArrivals() > 0 && screen === "round" && !reducedMotion.matches) {
+    // Cancel/restart through the animation API: no forced layout to retrigger the bump.
+    for (const animation of hud.earned.getAnimations()) animation.cancel();
+    hud.earned.classList.add("is-bumping");
+    const bump = hud.earned.animate([{ scale: "1" }, { scale: "1.12", offset: 0.35 }, { scale: "1" }], { duration: 180 });
+    bump.onfinish = () => hud.earned.classList.remove("is-bumping");
+  }
+  if (screen === "round") updateHud();
+  if (countUp) {
+    const progress = reducedMotion.matches ? 1 : Math.min(1, (now - countUp.start) / 800);
+    summary.earned.textContent = formatMoney(countUp.amount * (1 - (1 - progress) ** 3));
+    if (progress === 1) { countUp = null; summary.earned.classList.remove("is-counting"); }
+  }
   requestAnimationFrame(frame);
 }
 
@@ -478,14 +724,19 @@ resumeButton.addEventListener("click", resumeRound);
 toolsToggle.addEventListener("click", () => setToolsOpen(!hubTools.classList.contains("is-open")));
 document.addEventListener("pointerdown", (event) => {
   if (document.querySelector("dialog[open]")) return;
-  if (!hubTools.contains(event.target as Node) && !toolsToggle.contains(event.target as Node)) setToolsOpen(false);
+  if (!hubTools.contains(event.target as Node) && !toolsToggle.contains(event.target as Node) && !titleSettings.contains(event.target as Node)) setToolsOpen(false);
 });
 window.addEventListener("keydown", (event) => {
   if (event.defaultPrevented || document.querySelector("dialog[open]")) return;
+  if (!achievementsPanel.hidden) {
+    if (event.key === "Escape") { event.preventDefault(); closeAchievements(); }
+    if (event.key === "Tab") { event.preventDefault(); achievementsClose.focus(); }
+    return;
+  }
   if (event.key === "Escape" && !hubTools.hidden) {
     event.preventDefault();
     setToolsOpen(false);
-    toolsToggle.focus({ preventScroll: true });
+    toolsOpener.focus({ preventScroll: true });
     return;
   }
   if (event.key === "Escape" && world && !world.over) {
@@ -501,6 +752,7 @@ requestAnimationFrame(frame);
 // The sea keeps drawing behind the name prompt on a first visit.
 const loaded = await loadOrCreateSave();
 save = loaded.save;
+returningPlayer = !loaded.isNew;
 
 const tree = mountTechTree(hub.tree, {
   onBuy(nodeId) {
@@ -516,10 +768,26 @@ mountSaveControls(hub.save, {
   nodes: TECH_NODES,
   onImport(imported) {
     setSave(imported);
-    showHome();
+    returningPlayer = true;
+    checkAchievements({}, true);
+    showTitle();
   },
 });
 hub.start.addEventListener("click", startRound);
+titlePlay.addEventListener("click", showHome);
+titleEndless.addEventListener("click", startEndless);
+titleSettings.addEventListener("click", () => setToolsOpen(hubTools.hidden === true));
+element("#hub-tools-close").addEventListener("click", () => {
+  setToolsOpen(false);
+  toolsOpener.focus({ preventScroll: true });
+});
+element("#hub-home").addEventListener("click", showTitle);
+element("#title-achievements").addEventListener("click", () => openAchievements(element("#title-achievements")));
+hubAchievements.addEventListener("click", () => openAchievements(hubAchievements));
+achievementsClose.addEventListener("click", closeAchievements);
+element("#harbour-button").addEventListener("click", finishEndless);
+element("#endless-again").addEventListener("click", startEndless);
+element("#endless-harbour").addEventListener("click", showTitle);
 element("#help-button").addEventListener("click", () => {
   setToolsOpen(false);
   void showIntro({ playerName: save.playerName, mode: "replay" });
@@ -530,6 +798,7 @@ element("#play-again-button").addEventListener("click", () => {
   showHome();
 });
 
-// New players learn the basics before their first round.
+// New players learn the basics before arriving at the title.
+checkAchievements({}, true);
 if (loaded.isNew) await showIntro({ playerName: save.playerName, mode: "first" });
-showHome();
+showTitle();
