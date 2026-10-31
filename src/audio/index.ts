@@ -1,4 +1,5 @@
 import type { FxEvent, World, WorldEvent } from "../game/world";
+import { urgencyLevel } from "./dynamics";
 import { AudioEngine } from "./engine";
 import { chapterFor, comboLevel } from "./mapping";
 import { Music } from "./music";
@@ -130,8 +131,9 @@ export function createGameAudio(): GameAudio {
         const sinceCapture = world.elapsed - lastCaptureAt;
         // The combo layer also lifts the music for a Feeding Frenzy wave.
         const frenzy = world.frenzyActive;
+        music.setUrgency(world.over ? 0 : urgencyLevel(world.timeLeft));
         music.setCombo(world.over ? 0 : comboLevel({ mult: world.comboMult, max: comboMax, sinceCapture, window: comboWindow, frenzy }));
-      }
+      } else music.setUrgency(0);
       music.pump();
     },
 

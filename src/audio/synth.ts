@@ -271,3 +271,42 @@ export function clap(ctx: AudioContext, dest: AudioNode, time: number, gain: num
   cleanUp(body, out);
   return end;
 }
+
+/** A continuous riser whose level tracks simulation time, so pauses and time bonuses do not desync it. */
+export interface NoiseRiser {
+  setLevel(level: number): void;
+  stop(): void;
+}
+
+/** Quiet filtered surf, reused until stopped; all nodes disconnect after its short release. */
+export function risingNoise(ctx: AudioContext, dest: AudioNode, time: number, gain: number): NoiseRiser {
+  const out = voice(ctx, dest);
+  const filter = ctx.createBiquadFilter();
+  filter.type = "bandpass";
+  filter.Q.value = 0.6;
+  filter.frequency.value = 700;
+  filter.connect(out);
+  const source = ctx.createBufferSource();
+  source.buffer = noiseBuffer(ctx);
+  source.loop = true;
+  source.connect(filter);
+  source.start(time);
+  cleanUp(source, filter, out);
+  let stopped = false;
+  return {
+    setLevel(level) {
+      if (stopped) return;
+      filter.frequency.setTargetAtTime(700 + level * level * 7000, ctx.currentTime, 0.04);
+      out.gain.setTargetAtTime(gain * (0.2 + level * 0.8), ctx.currentTime, 0.03);
+    },
+    stop() {
+      if (stopped) return;
+      stopped = true;
+      const now = ctx.currentTime;
+      out.gain.cancelScheduledValues(now);
+      out.gain.setValueAtTime(out.gain.value, now);
+      out.gain.linearRampToValueAtTime(0, now + 0.02);
+      source.stop(now + 0.025);
+    },
+  };
+}

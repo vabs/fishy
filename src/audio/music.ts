@@ -1,3 +1,4 @@
+import { urgencyHatForStep } from "./dynamics";
 import { fetchManifest, loadTrack, type LoadedTrack, type LoopBuffer } from "./loader";
 import type { LayerName, MusicManifest } from "./manifest";
 import {
@@ -15,7 +16,7 @@ import {
   type GrooveHit,
   type MelodyNote,
 } from "./patterns";
-import { bass, bell, clap, kick, noise, pad, pluck } from "./synth";
+import { bass, bell, clap, kick, noise, pad, pluck, risingNoise, type NoiseRiser } from "./synth";
 import {
   BEATS_PER_BAR,
   DEFAULT_BPM,
@@ -252,7 +253,7 @@ class LoopBed extends Bed {
 export class Music {
   private ctx: AudioContext | null = null;
   private filter!: BiquadFilterNode;
-  private buses!: Record<keyof Buses | "stinger", GainNode>;
+  private buses!: Record<keyof Buses | "stinger" | "urgency", GainNode>;
   private beds: Bed[] = [];
   private current: Bed | null = null;
   /** Null until fetched. */
@@ -262,6 +263,8 @@ export class Music {
   private chapter = 0;
   private mode: MusicMode = "hub";
   private combo = 0;
+  private urgency = 0;
+  private riser: NoiseRiser | null = null;
   /** The generated layers' grid, and their next step on it. */
   private layerClock: Clock | null = null;
   private layerStep = 0;
@@ -289,6 +292,7 @@ export class Music {
       groove: gainNode(ctx, 0, this.filter),
       combo: gainNode(ctx, 0, this.filter),
       stinger: gainNode(ctx, 1, output),
+      urgency: gainNode(ctx, 0, this.filter),
     };
     window.setInterval(() => this.pump(), TICK_MS);
     void fetchManifest().then(({ manifest, base }) => {
@@ -301,7 +305,10 @@ export class Music {
   setMode(mode: MusicMode): void {
     if (mode === this.mode) return;
     this.mode = mode;
-    if (mode !== "round" && mode !== "final") this.combo = 0;
+    if (mode !== "round" && mode !== "final") {
+      this.combo = 0;
+      this.setUrgency(0);
+    }
     this.applyMode(false);
   }
 
@@ -317,6 +324,27 @@ export class Music {
     if (Math.abs(level - this.combo) < 0.01) return;
     this.combo = level;
     if (this.ctx && this.current) this.current.setStem("combo", this.comboLevel, this.ctx.currentTime);
+  }
+
+  /** Last-five-seconds lift. Its dedicated bus also silences notes already in the lookahead. */
+  setUrgency(level: number): void {
+    const playing = this.mode === "round" || this.mode === "final";
+    const next = playing ? Math.max(0, Math.min(1, level)) : 0;
+    if (Math.abs(next - this.urgency) < 0.01 && next !== 0) return;
+    if (next === 0 && this.urgency === 0) return;
+    this.urgency = next;
+    const ctx = this.ctx;
+    if (!ctx || !this.buses) return;
+    const now = ctx.currentTime;
+    glide(this.buses.urgency.gain, now, next > 0 ? 1 : 0, now, now + 0.025);
+    if (next > 0) {
+      this.riser ??= risingNoise(ctx, this.buses.urgency, now, 0.018);
+      this.riser.setLevel(next);
+    } else {
+      this.riser?.stop();
+      this.riser = null;
+    }
+    this.current?.setStem("combo", this.comboLevel, now);
   }
 
   /** A one-bar phrase at the end of a round, resolving to the tonic, from the next beat. */
@@ -357,8 +385,9 @@ export class Music {
   }
 
   private get comboLevel(): number {
-    if (this.mode === "final") return Math.max(this.combo, FINAL_COMBO_FLOOR);
-    return this.mode === "round" ? this.combo : 0;
+    const level = Math.min(1, this.combo + this.urgency * 0.3);
+    if (this.mode === "final") return Math.max(level, FINAL_COMBO_FLOOR);
+    return this.mode === "round" ? level : 0;
   }
 
   private applyMode(instant: boolean): void {
@@ -459,6 +488,10 @@ export class Music {
     const bar = Math.floor(index / perBar);
     const step = index % perBar;
     const chord = bed.chordAt(time);
+    const roll = urgencyHatForStep(step, this.urgency);
+    if (roll !== null) {
+      noise(ctx, this.buses.urgency, { time, gain: 0.025 * roll, attack: 0.001, decay: 0.035, filter: "highpass", from: 7500, q: 0.5 });
+    }
     if (!bed.hasStem("groove")) {
       if (this.groove.bar !== bar) this.groove = { bar, hits: grooveForBar(bed.chapter + 1, bar) };
       for (const hit of this.groove.hits) if (hit.step === step) this.playHit(hit, time);
