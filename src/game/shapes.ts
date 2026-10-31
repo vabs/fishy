@@ -3,7 +3,7 @@ import { FISH_SPECS, type FishColors, type FishKind } from "./fish";
 import { fishColors } from "./palette";
 
 /** Colour of every fish outside the net. Types are told apart by outline alone. */
-const SILHOUETTE = "#071c2b";
+const SILHOUETTE = "#101f2c";
 const FLASH = "#ffffff";
 /** Hue a golden fish is painted in. It keeps the type's own light and shade, so its markings show. */
 const GOLD = "#ffc425";
@@ -39,6 +39,23 @@ export function buildSprites(kind: FishKind, dpr: number, colors: FishColors = f
   ctx.scale(dpr, dpr);
   ctx.translate(width / 2, height / 2);
   spec.shape(ctx, spec.def, colors);
+  // Source-atop keeps every type's outline, eye and markings intact. This is cached once.
+  ctx.save();
+  ctx.globalCompositeOperation = "source-atop";
+  const shade = ctx.createLinearGradient(0, -height / 2, 0, height / 2);
+  shade.addColorStop(0, "rgba(16, 26, 41, 0.2)");
+  shade.addColorStop(0.45, "rgba(255, 246, 218, 0)");
+  shade.addColorStop(0.8, "rgba(255, 246, 218, 0.16)");
+  shade.addColorStop(1, "rgba(255, 246, 218, 0.04)");
+  ctx.fillStyle = shade;
+  ctx.fillRect(-width / 2, -height / 2, width, height);
+  if (kind === "epic") {
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.arc(spec.def.size * 0.235, -spec.def.size * 0.18, spec.def.size * 0.009, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
   return { full, silhouette: tint(full, SILHOUETTE), flash: tint(full, FLASH), golden: gild(full), width, height };
 }
 
