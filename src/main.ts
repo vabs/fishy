@@ -381,13 +381,10 @@ function finishEndless(): void {
   finished.finish();
   const before = save.endless;
   const durationMs = Math.round(finished.elapsed * 1000);
-  // EndlessResult predates haul/Star records; retain those live achievement facts here as well.
-  const recorded = recordEndless(save, { earned: finished.earned, caught: finished.caught,
+  setSave(recordEndless(save, { earned: finished.earned, caught: finished.caught,
     durationMs, maxCombo: finished.maxComboMult, goldenCaught: finished.bonusCount.golden,
-    chestsOpened: finished.bonusCount.treasure });
-  setSave({ ...recorded, stats: { ...recorded.stats,
-    bestTickCatches: Math.max(recorded.stats.bestTickCatches, finished.bestTickCatches),
-    bestStarHits: Math.max(recorded.stats.bestStarHits, finished.bestStarHits) } });
+    chestsOpened: finished.bonusCount.treasure, bestTickCatches: finished.bestTickCatches,
+    bestStarHits: finished.bestStarHits }));
   element("#endless-earned").textContent = formatMoney(finished.earned);
   element("#endless-fish").textContent = finished.totalCaught.toLocaleString("en-US");
   element("#endless-time").textContent = formatSeaTime(finished.elapsed);
