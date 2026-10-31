@@ -1,6 +1,6 @@
 /*
  * Keys, scales and the musical clock. Everything Fishy generates sits in one pentatonic key and
- * tempo (D major pentatonic at 92 BPM unless a loop file says otherwise), so any note fits with any
+ * tempo (D major pentatonic at 124 BPM unless a loop file says otherwise), so any note fits with any
  * other. Pure: no Web Audio here, so it runs in tests.
  */
 
@@ -13,7 +13,7 @@ export interface Key {
 }
 
 export const DEFAULT_KEY: Key = { tonic: 2, mode: "major" };
-export const DEFAULT_BPM = 92;
+export const DEFAULT_BPM = 124;
 export const BEATS_PER_BAR = 4;
 /** The scheduler's grid: sixteenth notes. */
 export const STEPS_PER_BEAT = 4;
