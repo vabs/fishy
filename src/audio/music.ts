@@ -225,7 +225,9 @@ class LoopBed extends Bed {
     source.loop = true;
     source.loopStart = loop.loopStart;
     source.loopEnd = loop.loopEnd;
-    source.connect(gainNode(this.ctx, trim, dest));
+    const level = gainNode(this.ctx, trim, dest);
+    source.connect(level);
+    source.onended = () => { source.disconnect(); level.disconnect(); };
     source.start(start);
     this.sources.push(source);
   }
@@ -242,6 +244,11 @@ class LoopBed extends Bed {
 
   override setStem(layer: LayerName, level: number, now: number): void {
     this.stems[layer]?.gain.setTargetAtTime(level, now, 0.15);
+  }
+
+  override dispose(): void {
+    super.dispose();
+    for (const stem of Object.values(this.stems)) stem.disconnect();
   }
 
   override fadeOut(at: number, seconds: number): void {
@@ -262,6 +269,8 @@ export class Music {
   private loads = new Map<number, Promise<LoadedTrack | null>>();
   private chapter = 0;
   private mode: MusicMode = "hub";
+  /** Retained through fade-out, including when a loop groove stem stays muted in endless. */
+  private endlessGroove = false;
   private combo = 0;
   private urgency = 0;
   private frenzy = false;
@@ -307,6 +316,7 @@ export class Music {
   setMode(mode: MusicMode): void {
     if (mode === this.mode) return;
     this.mode = mode;
+    if (mode === "round" || mode === "final" || mode === "endless") this.endlessGroove = mode === "endless";
     this.groove.bar = -1;
     if (mode === "endless") this.setUrgency(0);
     if (mode !== "round" && mode !== "final" && mode !== "endless") {
@@ -445,7 +455,7 @@ export class Music {
       glide(buses.bed.gain, now, level, now, now + bar);
     }
     bed.setStem("combo", this.comboLevel, now);
-    bed.setStem("groove", this.mode === "endless" ? 0 : 1, now);
+    bed.setStem("groove", this.endlessGroove ? 0 : 1, now);
   }
 
   private async switchBed(): Promise<void> {
@@ -464,7 +474,7 @@ export class Music {
     this.current = bed;
     if (previous) {
       bed.setStem("combo", this.comboLevel, now);
-      bed.setStem("groove", this.mode === "endless" ? 0 : 1, now);
+      bed.setStem("groove", this.endlessGroove ? 0 : 1, now);
     } else this.applyMode(true);
     this.keepLoaded(chapter);
   }
@@ -518,8 +528,8 @@ export class Music {
     if (roll !== null) {
       noise(ctx, this.buses.urgency, { time, gain: 0.025 * roll, attack: 0.001, decay: 0.035, filter: "highpass", from: 7500, q: 0.5 });
     }
-    if (this.mode === "endless" || !bed.hasStem("groove")) {
-      if (this.groove.bar !== bar) this.groove = { bar, hits: grooveForBar(bed.chapter + 1, bar, this.mode === "endless") };
+    if (this.endlessGroove || !bed.hasStem("groove")) {
+      if (this.groove.bar !== bar) this.groove = { bar, hits: grooveForBar(bed.chapter + 1, bar, this.endlessGroove) };
       for (const hit of this.groove.hits) if (hit.step === step) this.playHit(hit, time);
       if (this.bassLine.bar !== bar) this.bassLine = { bar, notes: bassForBar(bed.chapter + 1, bar, chord) };
       for (const note of this.bassLine.notes) {
@@ -543,7 +553,7 @@ export class Music {
   }
 
   private activityAt(time: number): MelodyActivity {
-    if (time < this.layersFrom || time >= this.layersUntil) return "hub";
+    if ((this.mode !== "round" && this.mode !== "final" && this.mode !== "endless") || time < this.layersFrom || time >= this.layersUntil) return "hub";
     return this.mode === "endless" ? "endless" : "round";
   }
 

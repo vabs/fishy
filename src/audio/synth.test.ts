@@ -54,6 +54,7 @@ class Context {
   createOscillator(): Node { const node = this.createGain(); this.sources.push(node); return node; }
   createBufferSource(): Node { return this.createOscillator(); }
   createPeriodicWave(): Wave { return new Wave(); }
+  async decodeAudioData(): Promise<{ duration: number }> { return { duration: 16 }; }
   createBuffer(_channels: number, length: number): { getChannelData: () => Float32Array } {
     this.buffers++;
     return { getChannelData: () => new Float32Array(length) };
@@ -138,17 +139,17 @@ describe("reward sound routing", () => {
   });
 });
 
-async function startMusic(mode: "hub" | "round" | "endless" = "hub"): Promise<{ music: Music; ctx: Context }> {
+async function startMusic(mode: "hub" | "round" | "endless" = "hub", chapters: unknown[] = []): Promise<{ music: Music; ctx: Context }> {
   vi.stubGlobal("PeriodicWave", Wave);
   vi.stubGlobal("window", { setInterval: () => 1 });
-  vi.stubGlobal("document", { baseURI: "http://localhost/" });
-  vi.stubGlobal("fetch", async () => ({ ok: true, text: async () => '{"chapters":[]}' }));
+  vi.stubGlobal("document", { baseURI: "http://localhost/", createElement: () => ({ canPlayType: () => "probably" }) });
+  vi.stubGlobal("fetch", async () => ({ ok: true, text: async () => JSON.stringify({ chapters }), arrayBuffer: async () => new ArrayBuffer(0) }));
   const ctx = new Context();
   const music = new Music();
   music.setMode(mode);
   music.start(ctx as unknown as AudioContext, new Node() as unknown as AudioNode);
   // Wait for the actual manifest loader and bed switch, without scheduling a real timer.
-  for (let i = 0; i < 10; i++) await Promise.resolve();
+  for (let i = 0; i < 30; i++) await Promise.resolve();
   return { music, ctx };
 }
 
@@ -174,6 +175,26 @@ describe("music transitions", () => {
     const count = ctx.sources.length;
     music.setUrgency(1);
     expect(ctx.sources).toHaveLength(count);
+  });
+
+  it("keeps endless fade-out tails free of claps when returning to a calm screen", async () => {
+    const { music, ctx } = await startMusic("endless");
+    music.pump();
+    ctx.currentTime = 0.3;
+    music.setMode("hub");
+    music.pump();
+    expect(ctx.nodes.some((node) => node.type === "bandpass" && node.frequency.value === 3200)).toBe(false);
+  });
+
+  it("disconnects each loop source and its trim gain when the source ends", async () => {
+    const { ctx } = await startMusic("hub", [{ files: "bed.opus", bpm: 108, loopEnd: 16 }]);
+    const source = ctx.sources.find((node) => node.loop)!;
+    expect(source).toBeDefined();
+    const trim = [...source.connections][0] as Node;
+    expect(trim.connections.size).toBe(1);
+    source.end();
+    expect(source.connections.size).toBe(0);
+    expect(trim.connections.size).toBe(0);
   });
 
   it("adds and releases the frenzy percussion without leaving a continuous source", async () => {
