@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <base href="../" />
+    <title>Fishy: renderer review</title>
+    <link rel="icon" href="data:," />
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; overflow: hidden; background: #0d3b4f; color: #fff7e6; font: 700 14px system-ui, sans-serif; }
+      canvas { position: fixed; inset: 0; touch-action: none; }
+      header { position: fixed; inset: 0 0 auto; min-height: 76px; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; gap: 16px; background: linear-gradient(#0d3b4fe6, #0d3b4f00); pointer-events: none; }
+      header strong { display: block; font-size: 25px; text-shadow: 0 2px 2px #0d3b4f; }
+      header small { color: #f3e3c3; }
+      #counter { text-align: right; }
+      footer { position: fixed; inset: auto 12px 10px; display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 11px; }
+      button { background: #f3e3c3; border: 1px solid #d9a441; border-radius: 8px; color: #3b2414; padding: 8px 12px; font: inherit; cursor: pointer; }
+      #metrics { background: #0d3b4fcc; padding: 6px 8px; border-radius: 6px; }
+      @media (max-width: 500px) { header { padding: 12px; font-size: 12px; } header strong { font-size: 22px; } footer { flex-wrap: wrap; } }
+    </style>
+  </head>
+  <body>
+    <canvas id="game" aria-label="Renderer review: move to inspect fish through the net"></canvas>
+    <header><div><small id="mode">Late round</small><strong id="clock">24.0s</strong></div><div id="counter"><small>Earnings · combo ×1.6</small><strong>+$12,480</strong></div></header>
+    <footer><span id="metrics">Preparing deterministic sea…</span><span><button id="burst">Catch burst</button> <button id="bench">Benchmark 300 fish</button></span></footer>
+    <script type="module" src="/dev/render.ts"></script>
+  </body>
+</html>
