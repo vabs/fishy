@@ -19,7 +19,12 @@ export const ENDLESS: {
   chestGap: [number, number];
   /** Most fish swimming at once: about 1.3× the median peak (61) in full-upgrade timed play. */
   maxFish: number;
-} = { frenzyEvery: 90, firstFrenzy: 45, chestGap: [60, 100], maxFish: 80 };
+  /**
+   * Extra room above `maxFish` for golden fish (including chest spills) and frenzy pour-ins, so a
+   * sea that has filled up to the cap still gets its surprises.
+   */
+  surgeRoom: number;
+} = { frenzyEvery: 90, firstFrenzy: 45, chestGap: [60, 100], maxFish: 80, surgeRoom: 40 };
 
 /** Gap between the swimming area and the screen edge, px. */
 const EDGE_MARGIN = 30;
@@ -130,6 +135,8 @@ export interface SpawnOptions {
   dir?: 1 | -1;
   /** Make it a golden fish. */
   golden?: boolean;
+  /** A frenzy pour-in: may use the endless surge room above the population cap, like golden fish. */
+  surge?: boolean;
 }
 
 /** Round summary rows that aren't a fish type. */
@@ -404,14 +411,16 @@ export class World {
 
   /**
    * Adds a fish of `kind`, or of a type picked in proportion to spawn rates. Timed rounds only
-   * enforce a type's maxOnScreen; endless also caps the swimming population. Refused spawns are
-   * discarded, including school members and capture by-products. Undefined if nothing could spawn.
+   * enforce a type's maxOnScreen; endless also caps the swimming population, with surge room above
+   * the cap for golden fish and frenzy pour-ins. Refused spawns are discarded, including school
+   * members and capture by-products. Undefined if nothing could spawn.
    */
   spawn(kind?: FishKind, options: SpawnOptions = {}): Fish | undefined {
     if (this.endless) {
       let swimming = 0;
       for (const fish of this.fish) if (!fish.captured) swimming++;
-      if (swimming >= ENDLESS.maxFish) return undefined;
+      const limit = options.golden || options.surge ? ENDLESS.maxFish + ENDLESS.surgeRoom : ENDLESS.maxFish;
+      if (swimming >= limit) return undefined;
     }
     const k = kind ?? this.pickKind();
     if (!k) return undefined;
@@ -621,7 +630,7 @@ export class World {
     // Clockwise is rightwards above the boat and leftwards below it, so fish in the two halves go
     // opposite ways round to travel with the wave.
     const dir = (y < cy) === (wave.sweep === 1) ? 1 : -1;
-    this.spawn(kind, { at: { x: cx + u * rx, y }, dir });
+    this.spawn(kind, { at: { x: cx + u * rx, y }, dir, surge: true });
   }
 
   /** Emits an event when the frenzy wave starts and when it ends. */
