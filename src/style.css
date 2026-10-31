@@ -1,3 +1,8 @@
+@import "@fontsource/lilita-one/latin-400.css";
+@import "@fontsource/nunito/latin-600.css";
+@import "@fontsource/nunito/latin-700.css";
+@import "@fontsource/nunito/latin-800.css";
+
 :root {
   --app-height: 100dvh;
   --viewport-top: 0px;
@@ -5,13 +10,26 @@
   --safe-right: env(safe-area-inset-right, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
+  --sea-deep: #0d3b4f;
+  --sea: #1f6f86;
+  --sea-light: #4fb3bf;
+  --sunset: #f4a259;
+  --sunset-deep: #e07a3f;
+  --brass: #d9a441;
+  --wood: #7a4a2a;
+  --wood-dark: #4a2b17;
+  --paper: #f3e3c3;
   --ink: #fff7e6;
+  --ink-dark: #3b2414;
+  --foam: #e8fbff;
+  --display: "Lilita One", cursive;
+  --body: "Nunito", sans-serif;
   --ink-muted: #b9d8e4;
   --panel: rgba(6, 30, 45, 0.95);
   --panel-edge: rgba(255, 255, 255, 0.12);
   --accent: #f4a259;
   --accent-ink: #2a1505;
-  --page: #124e6b;
+  --page: var(--sea-deep);
   color-scheme: dark;
 }
 
@@ -26,7 +44,8 @@ body {
   overflow: hidden;
   background: var(--page);
   color: var(--ink);
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: var(--body);
+  font-weight: 700;
 }
 
 #game {
@@ -684,3 +703,52 @@ body.playing #game {
     display: none;
   }
 }
+
+/* Shared nautical buttons. Frames hold the ornament; labels stay clear. */
+button { min-height: 44px; font-family: var(--body); touch-action: manipulation; }
+button:enabled { cursor: pointer; }
+button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid var(--sea-light); outline-offset: 4px; }
+button:disabled { cursor: default; }
+.primary-button, .secondary-button, .panel button, .dialog .dialog-button {
+  min-height: 48px;
+  padding: 11px 24px;
+  border: 2px solid #a86c28;
+  border-radius: 14px;
+  background: linear-gradient(#ffc67e, var(--sunset));
+  box-shadow: inset 0 2px #ffe5aa, 0 4px 0 var(--wood-dark), 0 7px 14px #2a150526;
+  color: var(--ink-dark);
+  font: 400 19px/1.2 var(--display);
+}
+.secondary-button, .panel button.secondary-button, .dialog .dialog-button.is-secondary {
+  border-color: #af8b58;
+  background: linear-gradient(#fff3d5, #e7cea1);
+  color: var(--ink-dark);
+  box-shadow: inset 0 2px #fff9e8, 0 4px 0 var(--wood-dark);
+}
+.primary-button:hover:enabled, .secondary-button:hover:enabled, .panel button:hover:enabled { filter: brightness(1.06); }
+button.primary-button:active:enabled, button.secondary-button:active:enabled, .panel button:active:enabled, .dialog .dialog-button:active:enabled {
+  transform: translateY(2px); box-shadow: inset 0 1px #ffe5aa, 0 2px 0 var(--wood-dark);
+}
+[hidden] { display: none !important; }
+
+.title-screen { position: fixed; inset: var(--viewport-top) 0 auto; height: var(--app-height); z-index: 10; overflow: auto; isolation: isolate; background: var(--sea-deep); }
+.title-screen::before { content: ""; position: fixed; inset: -3%; z-index: -2; background: url("../public/art/title-sea.webp") center / cover; animation: title-drift 28s ease-in-out infinite alternate; }
+.title-screen::after { content: ""; position: fixed; inset: 0; z-index: -1; background: linear-gradient(#0d3b4f08, #0d3b4f30 40%, #0d3b4fbb); }
+.title-content { display: flex; flex-direction: column; align-items: center; min-height: 100%; padding: calc(28px + var(--safe-top)) max(20px, var(--safe-right)) calc(24px + var(--safe-bottom)) max(20px, var(--safe-left)); text-align: center; }
+.title-logo { width: min(510px, 84vw); height: auto; flex: none; filter: drop-shadow(0 8px 12px #092c3f66); }
+.title-tagline { margin: 2px 0 20px; color: var(--ink); text-shadow: 0 2px 3px #0d3b4f; font-size: 16px; }
+.title-greeting { margin: 0 0 16px; padding: 5px 16px; border-radius: 20px; background: #0d3b4fbf; font-size: 13px; }
+.title-menu { display: grid; width: min(290px, 100%); gap: 15px; }
+.title-menu button { width: 100%; display: flex; gap: 10px; align-items: center; justify-content: center; min-height: 52px; }
+#title-play { min-height: 62px; font-size: 26px; }
+#title-play span { position: absolute; margin-left: 200px; font: 800 22px var(--body); }
+.title-endless-option { display: grid; gap: 9px; }
+#title-endless:disabled, #title-endless.is-locked { background: linear-gradient(#a59074, #87735b); border-color: #a09178; color: #fff6df; box-shadow: inset 0 1px #c7b28e, 0 4px var(--wood-dark); }
+#title-endless-lock { font-size: 11px; color: var(--ink); text-shadow: 0 1px 4px var(--sea-deep); }
+#title-endless:enabled:not(.is-locked) .title-lock { display: none; }
+.count-badge { padding: 3px 7px; border: 1px solid #ad8747; border-radius: 20px; background: #4a2b1712; font: 800 11px var(--body); white-space: nowrap; }
+.title-footer { margin: auto 0 0; padding-top: 28px; font-size: 12px; letter-spacing: .04em; text-shadow: 0 1px 4px var(--sea-deep); }
+@keyframes title-drift { to { transform: scale(1.05) translate(1%, -.5%); } }
+@media (max-width: 500px) { .title-content { padding-top: calc(56px + var(--safe-top)); } .title-logo { width: min(420px, 94vw); } .title-tagline { margin: 14px 0 28px; font-size: 13px; } .title-menu { gap: 17px; } }
+@media (max-height: 600px) { .title-content { padding-top: calc(12px + var(--safe-top)); } .title-logo { width: 230px; } .title-tagline { margin: 0 0 8px; font-size: 12px; } .title-greeting { margin-bottom: 10px; } .title-menu { gap: 10px; } .title-menu button, #title-play { min-height: 44px; padding-block: 8px; font-size: 18px; } .title-footer { padding-top: 14px; } }
+@media (prefers-reduced-motion: reduce) { .title-screen::before { animation: none; } }

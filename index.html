@@ -4,13 +4,30 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Fishy</title>
-    <link
-      rel="icon"
-      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐟</text></svg>"
-    />
+    <meta name="theme-color" content="#0d3b4f" />
+    <link rel="icon" type="image/png" sizes="64x64" href="%BASE_URL%art/favicon-64.png" />
+    <link rel="apple-touch-icon" sizes="512x512" href="%BASE_URL%art/icon-512.png" />
   </head>
   <body>
     <canvas id="game"></canvas>
+
+    <section id="title" class="title-screen" aria-label="Fishy main menu" hidden>
+      <div class="title-content">
+        <img class="title-logo" src="%BASE_URL%art/logo.webp" width="1600" height="640" alt="Fishy" />
+        <p class="title-tagline">A little boat. A sea of possibilities.</p>
+        <p id="title-greeting" class="title-greeting">Welcome aboard, skipper.</p>
+        <nav class="title-menu" aria-label="Main menu">
+          <button id="title-play" class="primary-button" type="button">Play <span aria-hidden="true">➜</span></button>
+          <div class="title-endless-option">
+            <button id="title-endless" class="secondary-button" type="button" disabled aria-describedby="title-endless-lock"><span class="title-lock" aria-hidden="true">⚿</span> Endless Sea</button>
+            <small id="title-endless-lock">Play your first round to unlock</small>
+          </div>
+          <button id="title-achievements" class="secondary-button" type="button">Achievements <span id="title-achievements-count" class="count-badge">0 / 22</span></button>
+          <button id="title-settings" class="secondary-button" type="button">Settings</button>
+        </nav>
+        <p class="title-footer">Catch a moment of calm.</p>
+      </div>
+    </section>
 
     <div id="hud" hidden>
       <div class="hud-group hud-meta">
