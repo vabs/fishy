@@ -1,7 +1,108 @@
+import { createRng } from "./rng";
+
 /** A short-lived visual effect owned by the renderer. */
 export interface Effect {
   /** Seconds the effect lasts. */
   life: number;
   /** Draws the effect. `t` runs from 0 (start) to 1 (end). The context is in CSS px. */
   draw(ctx: CanvasRenderingContext2D, t: number): void;
+}
+
+/** A screen-space coin's raised flight path; t is clamped to [0, 1]. */
+export function coinFlight(from: { x: number; y: number }, to: { x: number; y: number }, t: number): { x: number; y: number; scale: number } {
+  t = Math.min(1, Math.max(0, t));
+  if (t === 0) return { ...from, scale: 1 };
+  if (t === 1) return { ...to, scale: 0.15 };
+  // Brief anticipation/pop, then acceleration toward the counter.
+  const travel = t * t;
+  const lift = Math.sin(Math.PI * t) * Math.min(100, 30 + Math.hypot(to.x - from.x, to.y - from.y) * 0.18);
+  return {
+    x: from.x + (to.x - from.x) * travel,
+    y: from.y + (to.y - from.y) * travel - lift,
+    // Keep an identifiable coin during travel; shrink only as it enters the counter.
+    scale: (1 + Math.sin(Math.PI * Math.min(1, t * 3)) * 0.2) * (1 - Math.max(0, (t - 0.78) / 0.22) * 0.85),
+  };
+}
+
+/** Seeded, periodic Voronoi cells for a 512 px caustic tile. Computed only when caching light. */
+export function causticCells(): { x: number; y: number }[][] {
+  const size = 512;
+  const rng = createRng(81477);
+  const sites: { x: number; y: number }[] = [];
+  while (sites.length < 48) {
+    const candidate = { x: rng() * size, y: rng() * size };
+    // Keep tiny slivers out, but leave the larger empty patches that make light cells organic.
+    if (sites.some((p) => {
+      const dx = Math.min(Math.abs(candidate.x - p.x), size - Math.abs(candidate.x - p.x));
+      const dy = Math.min(Math.abs(candidate.y - p.y), size - Math.abs(candidate.y - p.y));
+      return Math.hypot(dx, dy) < 28;
+    })) continue;
+    sites.push(candidate);
+  }
+  const neighbours = sites.flatMap((p) => [-1, 0, 1].flatMap((x) =>
+    [-1, 0, 1].map((y) => ({ x: p.x + x * size, y: p.y + y * size })),
+  ));
+  return sites.map((site) => {
+    let cell = [
+      { x: site.x - size, y: site.y - size }, { x: site.x + size, y: site.y - size },
+      { x: site.x + size, y: site.y + size }, { x: site.x - size, y: site.y + size },
+    ];
+    for (const other of neighbours) {
+      const dx = other.x - site.x;
+      const dy = other.y - site.y;
+      if (dx === 0 && dy === 0) continue;
+      const halfway = (other.x ** 2 + other.y ** 2 - site.x ** 2 - site.y ** 2) / 2;
+      const clipped: { x: number; y: number }[] = [];
+      for (let i = 0; i < cell.length; i++) {
+        const a = cell[i]!;
+        const b = cell[(i + 1) % cell.length]!;
+        const da = a.x * dx + a.y * dy - halfway;
+        const db = b.x * dx + b.y * dy - halfway;
+        if (da <= 0) clipped.push(a);
+        if ((da <= 0) !== (db <= 0)) {
+          const t = da / (da - db);
+          clipped.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+        }
+      }
+      cell = clipped;
+    }
+    return cell;
+  });
+}
+
+/** Deterministic world shake in CSS pixels, bounded by 6 px and settled after 250 ms. */
+export function shakeOffset(amount: number, age: number): { x: number; y: number } {
+  const envelope = Math.max(0, 1 - Math.max(0, age) / 0.25) ** 2;
+  const radius = Math.min(6, Math.max(0, amount)) * envelope;
+  if (radius === 0) return { x: 0, y: 0 };
+  const x = Math.cos(age * 107);
+  const y = Math.sin(age * 113) * 0.6;
+  const bound = Math.max(1, Math.hypot(x, y));
+  return { x: x * radius / bound, y: y * radius / bound };
+}
+
+const glowSprites = new Map<string, HTMLCanvasElement>();
+
+/** Draws a soft light from a small cached sprite, rather than a gradient every frame. */
+export function drawGlow(ctx: CanvasRenderingContext2D, channels: string, x: number, y: number, radius: number, alpha: number): void {
+  let sprite = glowSprites.get(channels);
+  if (!sprite) {
+    if (typeof document === "undefined") return;
+    sprite = document.createElement("canvas");
+    sprite.width = sprite.height = 96;
+    const paint = sprite.getContext("2d");
+    if (!paint) return;
+    const gradient = paint.createRadialGradient(48, 48, 0, 48, 48, 48);
+    gradient.addColorStop(0, `rgba(${channels}, 1)`);
+    gradient.addColorStop(1, `rgba(${channels}, 0)`);
+    paint.fillStyle = gradient;
+    paint.fillRect(0, 0, 96, 96);
+    // Fixed palette colours normally keep this under ten entries.
+    if (glowSprites.size >= 32) glowSprites.clear();
+    glowSprites.set(channels, sprite);
+  }
+  const previous = ctx.globalAlpha;
+  ctx.globalAlpha = previous * Math.max(0, Math.min(1, alpha));
+  ctx.drawImage(sprite, x - radius, y - radius, radius * 2, radius * 2);
+  ctx.globalAlpha = previous;
 }

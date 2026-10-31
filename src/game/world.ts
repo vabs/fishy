@@ -285,6 +285,11 @@ export class World {
     return Math.min(1 + this.combo * this.stats.comboStep, this.stats.comboMax);
   }
 
+  /** Fraction of the current combo window left, for the renderer's draining ring. */
+  get comboProgress(): number {
+    return this.stats.comboWindow > 0 ? Math.max(0, Math.min(1, 1 - (this.elapsed - this.lastCaptureAt) / this.stats.comboWindow)) : 0;
+  }
+
   /** The current or next frenzy wave; null only in timed rounds without a wave. */
   get frenzy(): FrenzyWave | null {
     const first = this.firstWave;
