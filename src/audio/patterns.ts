@@ -251,3 +251,9 @@ export function endlessVariation(bar: number): { density: number } {
   const densities = [0.46, 0.54, 0.42, 0.5];
   return { density: densities[Math.floor(Math.max(0, bar) / 16) % densities.length]! };
 }
+
+/** Short in-key reward phrases; durations include each note's attack and release. */
+export function rewardPhrase(kind: "bounty" | "achievement"): { degree: number; offset: number; length: number }[] {
+  if (kind === "bounty") return [5, 7, 10].map((degree, i) => ({ degree, offset: i * 0.085, length: 0.16 }));
+  return [0, 2, 3, 4, 5].map((degree, i) => ({ degree, offset: i * 0.14, length: i === 4 ? 0.6 : 0.19 }));
+}

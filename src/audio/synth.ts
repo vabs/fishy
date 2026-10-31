@@ -310,3 +310,23 @@ export function risingNoise(ctx: AudioContext, dest: AudioNode, time: number, ga
     },
   };
 }
+
+/** A small, rounded brass voice: two detuned saws with a soft attack and a closing low-pass. */
+export function brass(ctx: AudioContext, dest: AudioNode, time: number, freq: number, gain: number, length: number): number {
+  const out = voice(ctx, dest);
+  const end = strike(out.gain, time, gain * 0.5, 0.035, Math.max(0.04, length - 0.035));
+  const filter = ctx.createBiquadFilter();
+  filter.type = "lowpass";
+  filter.Q.value = 0.5;
+  filter.frequency.setValueAtTime(1100, time);
+  filter.frequency.linearRampToValueAtTime(2400, time + 0.05);
+  filter.frequency.exponentialRampToValueAtTime(700, end);
+  filter.connect(out);
+  const low = oscillator(ctx, "sawtooth", freq, filter, time, end + 0.02);
+  const high = oscillator(ctx, "sawtooth", freq, filter, time, end + 0.02);
+  low.detune.value = -6;
+  high.detune.value = 6;
+  cleanUp(low, filter, out);
+  cleanUp(high);
+  return end;
+}

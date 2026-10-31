@@ -22,6 +22,10 @@ export interface GameAudio {
   onChange(listener: (settings: AudioSettings) => void): () => void;
   /** A screen was shown. `final` is whether the round being played (or just finished) is the Final Round. */
   screen(screen: Screen, context: { final: boolean; endless?: boolean; upgrades: Readonly<Record<string, number>> }): void;
+  /** A bounty was just completed. */
+  bounty(): void;
+  /** An achievement was just earned. */
+  achievement(): void;
   /** A tech tree node was bought; `upgrades` includes it. */
   purchase(nodeId: string, upgrades: Readonly<Record<string, number>>): void;
   /** One frame's drained world events, and the world they came from. */
@@ -151,6 +155,8 @@ export function createGameAudio(): GameAudio {
       music.pump();
     },
 
+    bounty: () => sfx.bounty(),
+    achievement: () => sfx.achievement(),
     preview: () => sfx.preview(),
   };
 }

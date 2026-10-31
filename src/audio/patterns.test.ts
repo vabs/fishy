@@ -8,6 +8,7 @@ import {
   bassForBar,
   frenzyForStep,
   endlessVariation,
+  rewardPhrase,
   chordForBar,
   grooveForBar,
   melodyForBar,
@@ -198,5 +199,21 @@ describe("endless arrangement", () => {
       expect(endlessVariation(section * 16)).toEqual(endlessVariation(section * 16 + 15));
       expect(endlessVariation(section * 16 + 16)).not.toEqual(endlessVariation(section * 16));
     }
+  });
+});
+
+describe("rewardPhrase", () => {
+  it("gives a bounty three rising notes within half a second", () => {
+    const notes = rewardPhrase("bounty");
+    expect(notes.map((note) => note.degree)).toEqual([5, 7, 10]);
+    expect(notes).toHaveLength(3);
+    expect(Math.max(...notes.map((note) => note.offset + note.length))).toBeLessThanOrEqual(0.5);
+  });
+
+  it("gives an achievement a five-note pentatonic fanfare resolving on the tonic", () => {
+    const notes = rewardPhrase("achievement");
+    expect(notes.map((note) => note.degree)).toEqual([0, 2, 3, 4, 5]);
+    expect(notes.at(-1)!.offset + notes.at(-1)!.length).toBeCloseTo(1.16);
+    for (const note of notes) expect(D_MAJOR_PENTATONIC.has(degreeToMidi(DEFAULT_KEY, note.degree) % 12)).toBe(true);
   });
 });

@@ -1,7 +1,8 @@
 import type { AudioEngine } from "./engine";
 import { SfxGate, type VoiceLimit } from "./gate";
 import { batchLevel, catchDegree, catchStreamLevel } from "./mapping";
-import { bass, bell, noise, pluck, pop, run } from "./synth";
+import { rewardPhrase } from "./patterns";
+import { bass, bell, brass, noise, pluck, pop, run } from "./synth";
 import { degreeToHz, type Key } from "./theory";
 
 /*
@@ -12,7 +13,7 @@ import { degreeToHz, type Key } from "./theory";
 
 type SfxKind =
   | "catch" | "current" | "bounce" | "launch" | "implode" | "burst" | "bonus" | "chime" | "frenzy" | "shimmer" | "golden"
-  | "plop" | "treasure";
+  | "plop" | "treasure" | "bounty" | "achievement";
 
 const LIMITS: Record<SfxKind, VoiceLimit> = {
   catch: { gap: 0.04, voices: 4 },
@@ -28,6 +29,8 @@ const LIMITS: Record<SfxKind, VoiceLimit> = {
   golden: { gap: 0.12, voices: 2 },
   plop: { gap: 0.2, voices: 1 },
   treasure: { gap: 0.5, voices: 1 },
+  bounty: { gap: 0.5, voices: 1 },
+  achievement: { gap: 1.2, voices: 1 },
 };
 const MAX_VOICES = 8;
 /** Catches still waiting for a voice after this long are dropped: they'd sound late. */
@@ -43,7 +46,7 @@ const FRENZY_STEP = 0.06;
 /** Peak levels, before the effects volume. */
 const LEVEL = {
   catch: 0.24, current: 0.07, bounce: 0.06, launch: 0.09, implode: 0.13, burst: 0.12, bonus: 0.07, chime: 0.11, frenzy: 0.1,
-  shimmer: 0.045, golden: 0.1, plop: 0.13, treasure: 0.1,
+  shimmer: 0.045, golden: 0.1, plop: 0.13, treasure: 0.1, bounty: 0.08, achievement: 0.09,
 };
 /** Gap between the notes of a golden shimmer, s. */
 const SHIMMER_STEP = 0.045;
@@ -236,6 +239,30 @@ export class Sfx {
     for (let i = 0; i < 9; i++) {
       const at = time + 0.38 + i * 0.055 + Math.random() * 0.025;
       bell(ctx, out, at, this.hz(pickOne([10, 11, 12, 13, 14, 15])), LEVEL.treasure * (0.9 - i * 0.07), 0.22);
+    }
+  }
+
+  /** A completed bounty: three bright notes and a small bell, about half a second. */
+  bounty(): void {
+    const voice = this.start("bounty", 0.55);
+    if (!voice) return;
+    const { ctx, time, out } = voice;
+    for (const note of rewardPhrase("bounty")) {
+      pluck(ctx, out, { time: time + note.offset, freq: this.hz(note.degree), gain: LEVEL.bounty, decay: note.length - 0.003, bright: 0.4 });
+    }
+    bell(ctx, out, time + 0.24, this.hz(10), LEVEL.bounty * 0.55, 0.25);
+  }
+
+  /** An earned achievement: five soft brass notes and a high shimmer, about 1.2 seconds. */
+  achievement(): void {
+    const voice = this.start("achievement", 1.25);
+    if (!voice) return;
+    const { ctx, time, out } = voice;
+    for (const note of rewardPhrase("achievement")) {
+      brass(ctx, out, time + note.offset, this.hz(note.degree), LEVEL.achievement, note.length);
+    }
+    for (const [i, degree] of [10, 12, 15].entries()) {
+      bell(ctx, out, time + 0.7 + i * 0.12, this.hz(degree), LEVEL.achievement * 0.3, 0.22);
     }
   }
 
