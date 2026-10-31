@@ -1,3 +1,4 @@
+import { formatCompactMoney } from "../format";
 import { bountyLabel, bountyProgress, rollBounties, type Bounty, type BountyFacts } from "../game/bounties";
 import { createRng } from "../game/rng";
 import { BASE_STATS } from "../game/stats";
@@ -40,13 +41,22 @@ export function bountyBoard(save: SaveData): SaveData {
   return setBounties(save, { round: save.round, list });
 }
 
+/** HUD progress in the bounty's own units: money for earnings, a multiplier for combos. */
+export function progressText(b: Bounty, value: number, target: number): string {
+  const shown = Math.min(value, target);
+  if (b.kind === "earn") return `${formatCompactMoney(shown)}/${formatCompactMoney(target)}`;
+  if (b.kind === "combo") return `×${(Math.floor(shown * 10 + 1e-6) / 10).toFixed(1)}/×${target.toFixed(1)}`;
+  return `${Math.floor(shown)}/${target}`;
+}
+
 /** Presentation and payout derived from the same completed flags, so rewards cannot diverge. */
 export function bountyResult(list: readonly Bounty[], facts: BountyFacts): {
   items: BountyItem[]; reward: number; completed: number; all: boolean;
 } {
   const items = list.map((b) => {
     const progress = bountyProgress(b, facts);
-    return { label: bountyLabel(b), ...progress, reward: b.reward, failed: !progress.done };
+    return { label: bountyLabel(b), ...progress, reward: b.reward, failed: !progress.done,
+      progressText: progressText(b, progress.value, progress.target) };
   });
   const done = items.filter((b) => b.done);
   return { items, reward: done.reduce((sum, b) => sum + b.reward, 0), completed: done.length,
