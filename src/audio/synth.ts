@@ -330,3 +330,21 @@ export function brass(ctx: AudioContext, dest: AudioNode, time: number, freq: nu
   cleanUp(high);
   return end;
 }
+
+/** Steel pan: a bent sine fundamental and two fast-decaying, inharmonic shell partials. */
+export function steelDrum(ctx: AudioContext, dest: AudioNode, o: PluckOptions): number {
+  const out = voice(ctx, dest);
+  out.gain.value = o.gain * 0.8;
+  const end = o.time + o.decay + 0.003;
+  for (const [ratio, level, decay] of [[1, 1, 1], [2.03, 0.35, 0.36], [3.87, 0.16, 0.19]] as const) {
+    const partial = ctx.createGain();
+    partial.connect(out);
+    const tail = strike(partial.gain, o.time, level, 0.003, o.decay * decay);
+    const osc = oscillator(ctx, "sine", o.freq * ratio, partial, o.time, tail + 0.02);
+    osc.detune.setValueAtTime(38, o.time);
+    osc.detune.exponentialRampToValueAtTime(0.1, o.time + 0.045);
+    cleanUp(osc, partial);
+    if (ratio === 1) osc.addEventListener("ended", () => out.disconnect());
+  }
+  return end;
+}

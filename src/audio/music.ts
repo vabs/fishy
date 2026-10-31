@@ -17,7 +17,7 @@ import {
   type GrooveHit,
   type MelodyNote,
 } from "./patterns";
-import { bass, bell, clap, kick, noise, pad, pluck, risingNoise, type NoiseRiser } from "./synth";
+import { bass, bell, clap, kick, noise, pad, pluck, steelDrum, risingNoise, type NoiseRiser } from "./synth";
 import {
   BEATS_PER_BAR,
   DEFAULT_BPM,
@@ -146,7 +146,7 @@ abstract class Bed {
   }
 }
 
-/** The placeholder bed, generated in code: a soft pad and a sparse marimba line, different every bar. */
+/** Generated chapter bed: warm pad and a seeded steel pan, marimba or kalimba melody. */
 class GeneratedBed extends Bed {
   private readonly style: BedStyle;
   private readonly out: GainNode;
@@ -185,11 +185,12 @@ class GeneratedBed extends Bed {
     const kalimba = style.voice === "kalimba";
     for (const note of this.melody.notes) {
       if (note.step !== step) continue;
-      pluck(ctx, out, {
+      const instrument = style.voice === "steelDrum" ? steelDrum : pluck;
+      instrument(ctx, out, {
         time,
         freq: degreeToHz(key, note.degree),
         gain: LEVEL.melody * note.velocity,
-        decay: kalimba ? 1.4 : 1.1,
+        decay: style.voice === "steelDrum" ? 0.65 : kalimba ? 1.1 : 0.85,
         overtone: kalimba ? 5.4 : 3.93,
         bright: kalimba ? 0.18 : 0.3,
       });

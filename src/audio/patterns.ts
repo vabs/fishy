@@ -1,5 +1,5 @@
 /*
- * Note patterns for the generated music: chords, the sparse marimba line, the groove and the combo
+ * Note patterns for the generated music: chords, the melody, the groove and the combo
  * arpeggio. Every bar draws its choices from its own seeded random numbers, so the music never
  * repeats a fixed loop yet any bar can be regenerated exactly. Notes are scale degrees (see
  * theory.ts), so the same patterns fit any pentatonic key. Pure, so it's tested.
@@ -49,14 +49,14 @@ export interface BedStyle {
   low: number;
   high: number;
   /** Melody timbre. */
-  voice: "marimba" | "kalimba";
+  voice: "marimba" | "kalimba" | "steelDrum";
   /** Pad brightness: its low-pass cutoff, Hz. */
   padCutoff: number;
 }
 
 export const BED_STYLES: readonly BedStyle[] = [
   {
-    // Shallows: the start of the game. Plain, open, mid register.
+    // Shallows: bright steel pan over an open, mid-register pad.
     seed: 11,
     progressions: [
       ["I", "vi", "ii", "V"],
@@ -68,7 +68,7 @@ export const BED_STYLES: readonly BedStyle[] = [
     restChance: 0.2,
     low: 0,
     high: 7,
-    voice: "marimba",
+    voice: "steelDrum",
     padCutoff: 1100,
   },
   {
