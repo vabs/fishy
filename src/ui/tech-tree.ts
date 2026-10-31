@@ -56,10 +56,10 @@ const TOUCH_MIN_SCALE = 48 / NODE_SIZE;
 
 /** Fish lanes take the fish's colour in the player's palette, published as --fish-<kind> by main.ts. */
 const LANE_TINTS: Record<LaneKey, string> = {
-  net: "#9ad8ff",
-  time: "#cdb8ff",
-  spawning: "#6fe3c8",
-  economy: "#ffd98a",
+  net: "#a5d1d1",
+  time: "#ddbed9",
+  spawning: "#aad6b0",
+  economy: "#f0ca7b",
   ...(Object.fromEntries(
     Object.entries(FISH).map(([kind, def]) => [kind, `var(--fish-${kind}, ${def.body})`]),
   ) as Record<keyof typeof FISH, string>),
@@ -212,12 +212,23 @@ export function mountTechTree(container: HTMLElement, options: { onBuy(nodeId: s
   const root = html("div", "tech");
   root.tabIndex = -1;
   const world = html("div", "tech-world");
+  // One chart covers every lane, including the outer labels, at every stage of progression.
+  const chartSize = Math.max(2400, (layout.extent + LABEL_GAP + FIT_MARGIN + ROOT_SIZE) * 2);
+  world.style.setProperty("--chart-size", `${chartSize}px`);
   const back = svg("svg", { class: "tech-svg", width: 1, height: 1, "aria-hidden": "true" });
   const ringLayer = svg("g", { class: "tech-rings" });
   const edgeLayer = svg("g", { class: "tech-edges" });
   const labelLayer = svg("g", { class: "tech-labels" });
   const boat = svg("g", { class: "tech-boat" });
   boat.innerHTML = BOAT;
+  const boatArt = svg("image", {
+    class: "tech-boat-art", x: -90, y: -45, width: 180, height: 90,
+    href: `${import.meta.env.BASE_URL}art/boat.png`,
+  });
+  // Leave the vector underneath until the painted boat has loaded successfully.
+  boatArt.addEventListener("load", () => boat.classList.add("has-art"));
+  boatArt.addEventListener("error", () => boat.classList.remove("has-art"));
+  boat.append(boatArt);
   back.append(ringLayer, edgeLayer, labelLayer, boat);
   const nodeLayer = html("div", "tech-nodes");
   world.append(back, nodeLayer);

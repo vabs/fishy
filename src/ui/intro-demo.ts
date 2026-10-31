@@ -21,6 +21,38 @@ const hasTouchInput = (): boolean =>
 /** Small tutorial canvases do not need a phone's full backing resolution. */
 const demoDpr = (): number => Math.min(window.devicePixelRatio || 1, hasTouchInput() ? 2 : Infinity);
 
+/** Paint once per demo: soft teal water, warm reflected light and a few quiet ripples. */
+function buildDemoSea(dpr: number): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(WIDTH * dpr);
+  canvas.height = Math.round(HEIGHT * dpr);
+  const c = canvas.getContext("2d");
+  if (!c) return canvas;
+  c.scale(dpr, dpr);
+  const water = c.createLinearGradient(0, 0, WIDTH, HEIGHT);
+  water.addColorStop(0, "#4aabb0");
+  water.addColorStop(0.45, "#23798a");
+  water.addColorStop(1, "#0d3b4f");
+  c.fillStyle = water;
+  c.fillRect(0, 0, WIDTH, HEIGHT);
+  const sunlight = c.createRadialGradient(30, 0, 0, 30, 0, 240);
+  sunlight.addColorStop(0, "#f4a25930");
+  sunlight.addColorStop(1, "#f4a25900");
+  c.fillStyle = sunlight;
+  c.fillRect(0, 0, WIDTH, HEIGHT);
+  c.lineWidth = 1.5;
+  c.strokeStyle = "#e8fbff12";
+  for (let i = 0; i < 12; i++) {
+    const y = i * 18 - 8;
+    const bend = Math.sin(i * 1.7) * 14;
+    c.beginPath();
+    c.moveTo(-20, y);
+    c.bezierCurveTo(90, y + bend + 12, 230, y + bend - 12, WIDTH + 20, y + 6);
+    c.stroke();
+  }
+  return canvas;
+}
+
 interface DemoFish {
   kind: FishKind;
   x: number;
@@ -41,13 +73,14 @@ interface Floater {
 }
 
 /** Starts the demo on `canvas` and returns a function that stops it. */
-export function startNetDemo(canvas: HTMLCanvasElement): () => void {
+export function startNetDemo(canvas: HTMLCanvasElement, still = false): () => void {
   const ctx = canvas.getContext("2d");
   if (!ctx) return () => {};
   const dpr = demoDpr();
   const touch = hasTouchInput();
   canvas.width = Math.round(WIDTH * dpr);
   canvas.height = Math.round(HEIGHT * dpr);
+  const sea = buildDemoSea(dpr);
 
   const sprites = new Map<FishKind, FishSprites>();
   const sprite = (kind: FishKind): FishSprites => {
@@ -132,11 +165,7 @@ export function startNetDemo(canvas: HTMLCanvasElement): () => void {
   function draw(): void {
     const c = ctx!;
     c.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const water = c.createRadialGradient(WIDTH / 2, HEIGHT / 2, 0, WIDTH / 2, HEIGHT / 2, WIDTH / 1.6);
-    water.addColorStop(0, "#2b8cab");
-    water.addColorStop(1, "#124e6b");
-    c.fillStyle = water;
-    c.fillRect(0, 0, WIDTH, HEIGHT);
+    c.drawImage(sea, 0, 0, WIDTH, HEIGHT);
 
     const live = fish.filter((f) => f.away <= 0);
     for (const f of live) drawFish(f, "silhouette");
@@ -146,7 +175,7 @@ export function startNetDemo(canvas: HTMLCanvasElement): () => void {
     c.beginPath();
     c.arc(p.x, p.y, NET_RADIUS, 0, TAU);
     c.clip();
-    c.fillStyle = "rgba(210, 245, 255, 0.14)";
+    c.fillStyle = "#fff7e61c";
     c.fillRect(p.x - NET_RADIUS, p.y - NET_RADIUS, NET_RADIUS * 2, NET_RADIUS * 2);
     for (const f of live) drawFish(f, f.flash > 0 ? "flash" : "full");
     c.restore();
@@ -157,23 +186,31 @@ export function startNetDemo(canvas: HTMLCanvasElement): () => void {
       const top = f.y - FISH[f.kind].size * 0.45 - 6;
       c.fillStyle = "rgba(0, 0, 0, 0.45)";
       c.fillRect(f.x - w / 2, top, w, 3);
-      c.fillStyle = "#7ee081";
+      c.fillStyle = "#a8d39b";
       c.fillRect(f.x - w / 2, top, (w * f.hp) / f.maxHp, 3);
     }
 
-    c.lineWidth = 2;
-    c.strokeStyle = "rgba(255, 255, 255, 0.85)";
+    c.lineWidth = 5;
+    c.strokeStyle = "#77563170";
     c.beginPath();
     c.arc(p.x, p.y, NET_RADIUS, 0, TAU);
     c.stroke();
     c.lineWidth = 3;
-    c.strokeStyle = "rgba(255, 255, 255, 0.4)";
+    c.strokeStyle = "#f3e3c3";
+    c.stroke();
+    c.lineWidth = 1;
+    c.strokeStyle = "#fff7e6";
+    c.setLineDash([2, 5]);
+    c.stroke();
+    c.setLineDash([]);
+    c.lineWidth = 3;
+    c.strokeStyle = "#d9a441b3";
     c.beginPath();
     c.arc(p.x, p.y, NET_RADIUS + 5, -Math.PI / 2, -Math.PI / 2 + (tickTimer / TICK_SECONDS) * TAU);
     c.stroke();
     // Show the touch contact below the net so the lesson matches the playing controls.
-    c.fillStyle = "#ffffff";
-    c.strokeStyle = "#0b2a3d";
+    c.fillStyle = "#fff7e6";
+    c.strokeStyle = "#0d3b4f";
     c.lineWidth = 1;
     c.beginPath();
     if (touch) {
@@ -188,9 +225,9 @@ export function startNetDemo(canvas: HTMLCanvasElement): () => void {
     c.fill();
     c.stroke();
 
-    c.font = "bold 14px system-ui, sans-serif";
+    c.font = '800 14px "Nunito", sans-serif';
     c.textAlign = "center";
-    c.fillStyle = "#fff3c4";
+    c.fillStyle = "#fff7e6";
     for (const fl of floaters) {
       const t = fl.age / FLOATER_SECONDS;
       c.globalAlpha = 1 - t * t;
@@ -199,7 +236,7 @@ export function startNetDemo(canvas: HTMLCanvasElement): () => void {
     c.globalAlpha = 1;
   }
 
-  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+  if (still || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
     // A single still frame, a couple of seconds in.
     for (let i = 0; i < 140; i++) step(1 / 60);
     draw();
@@ -225,23 +262,20 @@ const PARADE: FishKind[] = ["normal", "uncommon", "rare", "electric", "epic", "g
  * The send-off slide: the boat with one of every fish type circling it in full colour, a peek at
  * what's to come. Returns a function that stops it.
  */
-export function startParadeDemo(canvas: HTMLCanvasElement): () => void {
+export function startParadeDemo(canvas: HTMLCanvasElement, still = false): () => void {
   const ctx = canvas.getContext("2d");
   if (!ctx) return () => {};
   const dpr = demoDpr();
   canvas.width = Math.round(WIDTH * dpr);
   canvas.height = Math.round(HEIGHT * dpr);
+  const sea = buildDemoSea(dpr);
   const sprites = PARADE.map((kind) => buildSprites(kind, dpr));
   let frame = 0;
 
   function draw(time: number): void {
     const c = ctx!;
     c.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const water = c.createRadialGradient(WIDTH / 2, HEIGHT / 2, 0, WIDTH / 2, HEIGHT / 2, WIDTH / 1.6);
-    water.addColorStop(0, "#2b8cab");
-    water.addColorStop(1, "#124e6b");
-    c.fillStyle = water;
-    c.fillRect(0, 0, WIDTH, HEIGHT);
+    c.drawImage(sea, 0, 0, WIDTH, HEIGHT);
 
     // Fish behind the boat (top half of the ellipse) first, then the boat, then the rest.
     const placed = sprites.map((s, i) => {
@@ -266,7 +300,7 @@ export function startParadeDemo(canvas: HTMLCanvasElement): () => void {
     c.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
-  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+  if (still || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
     draw(1);
     return () => {};
   }
@@ -279,13 +313,13 @@ export function startParadeDemo(canvas: HTMLCanvasElement): () => void {
   return () => cancelAnimationFrame(frame);
 }
 
-/** The same rowing boat as in a round. */
+/** A warm wooden boat, kept as a few cheap vector shapes for the tutorial. */
 function drawBoat(c: CanvasRenderingContext2D, x: number, y: number, tilt: number): void {
   c.save();
   c.translate(x, y);
   c.rotate(tilt);
-  c.fillStyle = "#8a5a32";
-  c.strokeStyle = "#5b3a1f";
+  c.fillStyle = "#7a4a2a";
+  c.strokeStyle = "#4a2b17";
   c.lineWidth = 3;
   c.beginPath();
   c.moveTo(-40, -15);
@@ -294,14 +328,22 @@ function drawBoat(c: CanvasRenderingContext2D, x: number, y: number, tilt: numbe
   c.closePath();
   c.fill();
   c.stroke();
-  c.fillStyle = "#b07a48";
+  c.fillStyle = "#c58b50";
   c.beginPath();
   c.moveTo(-34, -10);
   c.quadraticCurveTo(12, -17, 34, 0);
   c.quadraticCurveTo(12, 17, -34, 10);
   c.closePath();
   c.fill();
-  c.fillStyle = "#6e4526";
+  c.strokeStyle = "#fff0c54d";
+  c.lineWidth = 1;
+  c.beginPath();
+  c.moveTo(-30, -5);
+  c.lineTo(28, -5);
+  c.moveTo(-30, 5);
+  c.lineTo(28, 5);
+  c.stroke();
+  c.fillStyle = "#4a2b17";
   c.fillRect(-18, -12, 5, 24);
   c.fillRect(6, -12, 5, 24);
   c.restore();

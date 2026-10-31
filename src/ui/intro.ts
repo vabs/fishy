@@ -11,6 +11,8 @@ export interface IntroOptions {
   playerName: string;
   /** "first" ends on "Let's play"; "replay" (from the hub) ends on "Back to the game". */
   mode: "first" | "replay";
+  /** Still demo frames for the visual gallery. System reduced motion is always respected. */
+  staticDemo?: boolean;
 }
 
 const SLIDES = 3;
@@ -40,7 +42,7 @@ const TREE = `
 </svg>`;
 
 /** Shows the slides. Resolves when the player finishes or skips. */
-export function showIntro({ playerName, mode }: IntroOptions): Promise<void> {
+export function showIntro({ playerName, mode, staticDemo = false }: IntroOptions): Promise<void> {
   const id = `intro-${++shown}`;
   const touch = window.matchMedia("(any-pointer: coarse)").matches || navigator.maxTouchPoints > 0;
   const netInstructions = touch
@@ -103,8 +105,8 @@ export function showIntro({ playerName, mode }: IntroOptions): Promise<void> {
     dotsRoot.append(dot);
     return dot;
   });
-  const stopNet = startNetDemo(dialog.querySelector<HTMLCanvasElement>(".intro-demo:not(.intro-parade)")!);
-  const stopParade = startParadeDemo(dialog.querySelector<HTMLCanvasElement>(".intro-parade")!);
+  const stopNet = startNetDemo(dialog.querySelector<HTMLCanvasElement>(".intro-demo:not(.intro-parade)")!, staticDemo);
+  const stopParade = startParadeDemo(dialog.querySelector<HTMLCanvasElement>(".intro-parade")!, staticDemo);
   let current = 0;
 
   function go(index: number): void {

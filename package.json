@@ -8,22 +8,26 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "npm run typecheck && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && npm run typecheck:ui",
     "test": "vitest run",
     "test:watch": "vitest",
     "screenshots": "node scripts/screenshots.mjs",
     "e2e": "node scripts/e2e.mjs",
-    "e2e:mobile": "node scripts/mobile-e2e.mjs"
+    "e2e:mobile": "node scripts/mobile-e2e.mjs",
+    "typecheck:ui": "tsc --noEmit --ignoreConfig --target ES2023 --module ESNext --moduleResolution Bundler --lib ES2023,DOM,DOM.Iterable --types vite/client --strict --noUncheckedIndexedAccess --skipLibCheck dev/ui.ts"
   },
   "devDependencies": {
+    "happy-dom": "^21.0.4",
     "playwright-core": "^1.64.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.4",
     "vitest": "^5.0.4"
   },
   "dependencies": {
+    "@fontsource/lilita-one": "^5.3.0",
+    "@fontsource/nunito": "^5.3.0",
     "zod": "^4.6.7"
   }
 }

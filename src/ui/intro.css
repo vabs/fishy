@@ -43,7 +43,12 @@
 }
 
 .intro-tree {
-  background: radial-gradient(ellipse at 50% 50%, #0d4561 0%, #093248 55%, #051c2a 100%);
+  background: radial-gradient(
+    ellipse at 50% 50%,
+    #0d4561 0%,
+    #093248 55%,
+    #051c2a 100%
+  );
 }
 
 .intro-tree-edges path {
@@ -113,7 +118,9 @@
 
 .intro-price text {
   fill: var(--accent-ink);
-  font: 700 10px system-ui, sans-serif;
+  font:
+    700 10px system-ui,
+    sans-serif;
   text-anchor: middle;
 }
 
@@ -228,4 +235,59 @@
   .intro-dots {
     margin: 2px 0;
   }
+}
+
+.intro-tree {
+  background: #ecd5a9 url("/art/chart.webp") center / cover;
+  border: 1px solid #b59564;
+}
+.intro-tree-edges path {
+  stroke: #72563f99;
+  stroke-dasharray: 4 4;
+}
+.intro-tree-hull {
+  fill: #7a4a2a;
+  stroke: #4a2b17;
+}
+.intro-tree-deck {
+  fill: #d9a441;
+}
+.intro-tree .intro-tree-hull,
+.intro-tree .intro-tree-deck {
+  opacity: 1;
+}
+.intro-node {
+  fill: #16495b;
+  stroke: #af8338;
+  stroke-width: 3;
+}
+.intro-node.is-owned {
+  fill: #1f6f86;
+  stroke: #e9ba62;
+}
+.intro-price rect {
+  fill: #f3e3c3;
+  stroke: #a77f44;
+}
+.intro-price text {
+  fill: #3b2414;
+  font-family: var(--body);
+}
+.intro-dot {
+  min-width: 44px;
+  min-height: 44px;
+}
+.intro-dot::before {
+  background: #ab9271;
+}
+.intro-dot[aria-current="step"]::before {
+  background: #1f6f86;
+  outline: 1px solid #1f6f86;
+  outline-offset: 3px;
+}
+.intro-dot:focus-visible {
+  outline-color: #1f6f86;
+}
+.intro-demo {
+  border: 2px solid #bc9757;
 }

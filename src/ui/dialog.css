@@ -4,13 +4,18 @@
   --error: #ffa48f;
   position: fixed;
   inset: auto;
-  top: calc(var(--viewport-top) + var(--safe-top) + (var(--app-height) - var(--safe-top) - var(--safe-bottom)) / 2);
+  top: calc(
+    var(--viewport-top) + var(--safe-top) +
+      (var(--app-height) - var(--safe-top) - var(--safe-bottom)) / 2
+  );
   left: 50%;
   transform: translate(-50%, -50%);
   margin: 0;
   width: min(380px, calc(100vw - 32px));
   max-width: calc(100vw - var(--safe-left) - var(--safe-right) - 24px);
-  max-height: calc(var(--app-height) - var(--safe-top) - var(--safe-bottom) - 24px);
+  max-height: calc(
+    var(--app-height) - var(--safe-top) - var(--safe-bottom) - 24px
+  );
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 28px;
@@ -169,4 +174,53 @@
   .dialog p {
     margin-bottom: 12px;
   }
+}
+
+/* Paper dialogs sit above the sea without dimming their own text. */
+.dialog {
+  --ink: #3b2414;
+  --ink-muted: #705137;
+  --panel-edge: #9c754a55;
+  --error: #9d3b24;
+  border: 10px solid #b18d5c;
+  border-image: url("/art/rope-frame.png") 64 / 12px / 0 stretch;
+  border-radius: 16px;
+  background: #f3e3c3 url("/art/paper.webp") center / 650px;
+  color: #3b2414;
+  color-scheme: light;
+  font-family: var(--body, "Nunito", sans-serif);
+  box-shadow: 0 20px 60px #082b3f70;
+}
+.dialog h2 {
+  font: 400 30px/1.15 var(--display, "Lilita One", cursive);
+}
+.dialog::backdrop {
+  background: #082b3f99;
+  backdrop-filter: blur(3px);
+}
+.dialog-field input {
+  min-height: 48px;
+  border: 1px solid #ad8959;
+  background: #fff7e680;
+  color: #3b2414;
+}
+.dialog-field input:focus-visible,
+.dialog .dialog-button:focus-visible {
+  outline: 3px solid #1f6f86;
+  outline-offset: 3px;
+}
+.dialog .dialog-button {
+  min-height: 48px;
+  border: 1px solid #a86c28;
+  border-radius: 12px;
+  background: linear-gradient(#ffd08b, #f4a259);
+  color: #3b2414;
+  box-shadow: 0 3px #805125;
+  font: 400 19px/1.2 var(--display);
+}
+.dialog .dialog-button.is-secondary {
+  background: #ead9b6;
+  color: #3b2414;
+  border: 1px solid #ad8959;
+  box-shadow: 0 3px #9a774b;
 }

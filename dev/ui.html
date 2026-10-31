@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#0d3b4f" />
+    <link rel="icon" href="../art/favicon-64.png" />
+    <title>Fishy · UI gallery</title>
+  </head>
+  <body>
+    <main id="gallery-stage"></main>
+    <details class="gallery-tools">
+      <summary aria-label="Choose a UI gallery scene">
+        Scenes <span id="gallery-current">title</span>
+      </summary>
+      <nav id="gallery-nav" aria-label="UI gallery scenes"></nav>
+      <p>Fixed sample data · no save writes</p>
+      <label
+        ><input id="gallery-palette" type="checkbox" /> Colour-blind
+        palette</label
+      >
+    </details>
+    <script type="module" src="./ui.ts"></script>
+  </body>
+</html>
