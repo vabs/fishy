@@ -752,3 +752,66 @@ button.primary-button:active:enabled, button.secondary-button:active:enabled, .p
 @media (max-width: 500px) { .title-content { padding-top: calc(56px + var(--safe-top)); } .title-logo { width: min(420px, 94vw); } .title-tagline { margin: 14px 0 28px; font-size: 13px; } .title-menu { gap: 17px; } }
 @media (max-height: 600px) { .title-content { padding-top: calc(12px + var(--safe-top)); } .title-logo { width: 230px; } .title-tagline { margin: 0 0 8px; font-size: 12px; } .title-greeting { margin-bottom: 10px; } .title-menu { gap: 10px; } .title-menu button, #title-play { min-height: 44px; padding-block: 8px; font-size: 18px; } .title-footer { padding-top: 14px; } }
 @media (prefers-reduced-motion: reduce) { .title-screen::before { animation: none; } }
+
+/* Harbour rail and the ship's settings drawer. */
+.hub-bar {
+  gap: 20px; padding-block: calc(16px + var(--safe-top)) 16px;
+  border-bottom: 4px solid var(--brass);
+  background: linear-gradient(#4a2b1780, #4a2b17ae), url("../public/art/wood.webp") center / auto 128px;
+  box-shadow: 0 4px 0 #4a2b17, 0 8px 18px #3b24143b;
+}
+.hub-account { gap: 16px; overflow: visible; }
+.hub-player { max-width: 180px; }
+.hub-name { font-size: 16px; color: var(--ink); }
+.hub-muted { color: #f2debb; }
+.hub-money { flex: none; padding: 7px 17px; border: 2px solid #7d531e; border-radius: 10px; background: linear-gradient(#f2cf7c, #d9a441); color: var(--ink-dark); box-shadow: inset 0 1px #fff0ba, 0 3px #3b241480; font: 400 28px var(--display); }
+.hub-home { flex: none; }
+#start-button { min-height: 56px; border: 2px solid #a86c28; border-radius: 14px; background: linear-gradient(#ffd08b, var(--sunset)); box-shadow: inset 0 2px #ffedb6, 0 4px var(--wood-dark), 0 7px 16px #27150955; color: var(--ink-dark); font: 400 22px var(--display); }
+#start-button.is-final { outline: 3px double #fff0c4; outline-offset: 6px; }
+#start-button.has-frenzy::after { background: var(--sea-deep); color: var(--ink); border: 1px solid var(--brass); font: 800 10px/18px var(--body); letter-spacing: .09em; }
+.icon-button { min-width: 44px; height: 44px; border: 2px solid #bc975a; border-radius: 12px; background: linear-gradient(#90613c, #61391f); color: var(--ink); box-shadow: inset 0 1px #e0bb7c66, 0 3px #3b2414; }
+.icon-button:hover { border-color: #ffe4a8; color: var(--ink); }
+.icon-button:active:enabled { transform: translateY(2px); box-shadow: 0 1px #3b2414; }
+.hub-tools {
+  --ink: var(--ink-dark); --ink-muted: #725338; --panel-edge: #9c754a55;
+  padding: 22px; gap: 12px; border: 10px solid #c19961;
+  border-image: url("../public/art/rope-frame.png") 64 / 12px / 0 stretch;
+  border-radius: 16px; background: var(--paper) url("../public/art/paper.webp") center / 600px;
+  color: var(--ink-dark); box-shadow: 0 15px 45px #24140866;
+}
+.settings-heading { font: 400 28px var(--display); }
+.settings-section { padding-top: 8px; border-top: 1px solid #8e684542; color: #725338; letter-spacing: .14em; font-size: 10px; }
+.hub-tools .settings-help { border: 1px solid #b59464; background: #fff5dd80; color: var(--ink-dark); font: 800 14px var(--body); box-shadow: 0 2px #b59565; }
+.hub-tools-toggle { font-family: var(--body); }
+.hub-tools .audio-controls .audio-button, .hub-tools .display-toggle, .hub-tools .save-controls-button, .hub-haptics button {
+  min-height: 44px; border: 1px solid #ad8959; border-radius: 10px; background: #fff7e670; color: var(--ink-dark); box-shadow: 0 2px #ba9b70;
+}
+.hub-tools .display-toggle[aria-pressed="true"], .hub-haptics button[aria-pressed="true"] { border-color: var(--sea); background: #1f6f8615; color: #174d5e; }
+.hub-tools .audio-slider input { min-height: 44px; accent-color: var(--sea); }
+.hub-tools .save-controls-message.is-error { color: #9a3e25; }
+.hub-tools .save-controls-message:not(:empty) { background: #fff7e640; }
+.hub-tools .audio-panel-note { font-size: 11px; }
+.hub-haptics:empty { display: none; }
+.hub-haptics button { width: 100%; }
+#hub-bounties { flex: none; z-index: 3; }
+@media (max-width: 1100px) {
+  .hub-account { flex-direction: row; flex-wrap: wrap; gap: 6px 12px; }
+  .hub-player { max-width: 120px; }
+  .hub-money { font-size: 22px; }
+}
+@media (max-width: 760px) {
+  .hub-bar { grid-template-columns: minmax(0,1fr) auto 44px; gap: 10px; padding: calc(12px + var(--safe-top)) calc(10px + var(--safe-right)) 13px calc(10px + var(--safe-left)); }
+  .hub-account { display: grid; grid-template-columns: 1fr; gap: 2px; }
+  .hub-player { max-width: 100%; }
+  .hub-name { font-size: 12px; }
+  .hub-money { width: fit-content; font-size: 19px; padding: 2px 9px; border-radius: 7px; }
+  .hub-home { position: fixed; left: calc(12px + var(--safe-left)); bottom: calc(12px + var(--safe-bottom)); z-index: 4; width: 44px; height: 44px; min-width: 44px; }
+  #start-button { min-width: 140px; min-height: 52px; padding-inline: 14px; font-size: 19px; }
+  .hub-tools-toggle { width: 44px; min-width: 44px; height: 48px; }
+  .hub-tools { right: calc(8px + var(--safe-right)); max-height: calc(var(--app-height) - var(--safe-top) - var(--safe-bottom) - 125px); padding: 16px; }
+}
+@media (max-height: 500px) {
+  .hub-bar { padding-top: calc(8px + var(--safe-top)); padding-bottom: 9px; }
+  .hub-account { flex-direction: row; }
+  .hub-tools { position: fixed; top: calc(8px + var(--safe-top)); bottom: calc(8px + var(--safe-bottom)); max-height: none; }
+}

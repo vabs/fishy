@@ -56,10 +56,10 @@ const TOUCH_MIN_SCALE = 48 / NODE_SIZE;
 
 /** Fish lanes take the fish's colour in the player's palette, published as --fish-<kind> by main.ts. */
 const LANE_TINTS: Record<LaneKey, string> = {
-  net: "#9ad8ff",
-  time: "#cdb8ff",
-  spawning: "#6fe3c8",
-  economy: "#ffd98a",
+  net: "#24617a",
+  time: "#76516b",
+  spawning: "#276958",
+  economy: "#8a541a",
   ...(Object.fromEntries(
     Object.entries(FISH).map(([kind, def]) => [kind, `var(--fish-${kind}, ${def.body})`]),
   ) as Record<keyof typeof FISH, string>),
@@ -218,6 +218,14 @@ export function mountTechTree(container: HTMLElement, options: { onBuy(nodeId: s
   const labelLayer = svg("g", { class: "tech-labels" });
   const boat = svg("g", { class: "tech-boat" });
   boat.innerHTML = BOAT;
+  const boatArt = svg("image", {
+    class: "tech-boat-art", x: -90, y: -45, width: 180, height: 90,
+    href: `${import.meta.env.BASE_URL}art/boat.png`,
+  });
+  // Leave the vector underneath until the painted boat has loaded successfully.
+  boatArt.addEventListener("load", () => boat.classList.add("has-art"));
+  boatArt.addEventListener("error", () => boat.classList.remove("has-art"));
+  boat.append(boatArt);
   back.append(ringLayer, edgeLayer, labelLayer, boat);
   const nodeLayer = html("div", "tech-nodes");
   world.append(back, nodeLayer);

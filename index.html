@@ -62,6 +62,7 @@
     <section id="hub" hidden>
       <header class="hub-bar">
         <div class="hub-account">
+          <button id="hub-home" type="button" class="icon-button hub-home" aria-label="Main menu" title="Main menu"><span aria-hidden="true">⌂</span></button>
           <div class="hub-player">
             <span id="hub-name" class="hub-name"></span>
             <span id="hub-round" class="hub-muted"></span>
@@ -80,10 +81,12 @@
           <div id="hub-audio" class="hub-audio"></div>
           <span class="settings-section">Display</span>
           <div id="hub-display" class="hub-display"></div>
+          <div id="hub-haptics" class="hub-haptics"></div>
           <span class="settings-section">Progress</span>
           <div id="hub-save" class="hub-save"></div>
         </div>
       </header>
+      <div id="hub-bounties" class="bounties is-hub" aria-label="Next round’s bounties" hidden></div>
       <div id="hub-tree" class="hub-tree"></div>
     </section>
 
