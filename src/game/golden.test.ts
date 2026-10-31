@@ -273,3 +273,33 @@ describe("Golden fish keep their type's behaviour", () => {
     expect(world.caughtBy).toEqual({});
   });
 });
+
+describe("Guaranteed golden fish", () => {
+  it("supplies a golden by 35% if the natural clock has not spawned one", () => {
+    const stats = quietStats(s => { s.roundSeconds = 20; s.goldenRate = 0.00001; s.chestChance = 0; });
+    const world = new World(stats, createRng(42), 800, 600, { round: 2, final: false, guarantee: { golden: true } });
+    expect(count(run(world, 7 - STEP), "golden")).toBe(0);
+    expect(count(run(world, 2 * STEP), "golden")).toBe(1);
+    expect(count(run(world, 10), "golden")).toBe(0);
+  });
+
+  it("does not add a fallback after a natural golden already appeared and escaped", () => {
+    const stats = quietStats(s => { s.roundSeconds = 20; s.goldenRate = 1; s.goldenSeconds = 0.1; s.chestChance = 0; });
+    const play = (guaranteed: boolean) => {
+      const world = new World(stats, createRng(42), 800, 600,
+        { round: 2, final: false, ...(guaranteed ? { guarantee: { golden: true } } : {}) });
+      const events = run(world, 10);
+      return { events, fish: world.fish, next: world.rng() };
+    };
+    expect(play(true)).toEqual(play(false));
+  });
+
+  it("respects the normal round and rate gates", () => {
+    for (const [round, goldenRate] of [[1, 1], [2, 0]]) {
+      const stats = quietStats(s => { s.roundSeconds = 20; s.goldenRate = goldenRate!; s.chestChance = 0; });
+      const world = new World(stats, createRng(42), 800, 600,
+        { round: round!, final: false, guarantee: { golden: true } });
+      expect(count(run(world, 10), "golden")).toBe(0);
+    }
+  });
+});

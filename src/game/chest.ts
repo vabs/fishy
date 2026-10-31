@@ -52,11 +52,14 @@ export interface Chest {
 
 /**
  * When this round's chest appears, in seconds of round time, or null if the round has none. Draws
- * nothing before round `CHEST.fromRound` unless it's the Final Round.
+ * nothing before round `CHEST.fromRound` unless it's the Final Round. A guarantee bypasses the
+ * chance roll and brings it in by 40% of the base length.
  */
 export function chestTime(round: RoundOptions, stats: Stats, rng: Rng): number | null {
-  if (!round.final && (round.round < CHEST.fromRound || rng() >= stats.chestChance)) return null;
-  return stats.roundSeconds * range(rng, CHEST.appearFrom, CHEST.appearTo);
+  if (!round.final && round.round < CHEST.fromRound) return null;
+  const guaranteed = round.guarantee?.chest;
+  if (!round.final && !guaranteed && rng() >= stats.chestChance) return null;
+  return stats.roundSeconds * range(rng, CHEST.appearFrom, guaranteed ? 0.4 : CHEST.appearTo);
 }
 
 /** A chest just outside a random edge of a `width` × `height` sea, heading for the opposite edge. */

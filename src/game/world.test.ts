@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { FISH } from "./fish";
 import { createRng } from "./rng";
 import { BASE_STATS, type Stats } from "./stats";
-import { STEP, World, isFrenzyRound, type Fish, type RoundOptions, type WorldEvent } from "./world";
+import { TECH_NODES, applyUpgrades } from "./tech";
+import { ENDLESS, STEP, World, isFrenzyRound, type Fish, type RoundOptions, type WorldEvent } from "./world";
 
 function makeWorld(overrides: Partial<Stats> = {}, round?: RoundOptions): World {
   // No timed spawns unless a test asks for them, so fish counts stay predictable.
@@ -404,5 +405,301 @@ describe("Feeding Frenzy", () => {
     expect(world.frenzyEarned).toBeLessThan(world.earned);
     const rows = Object.values(world.earnedBy).reduce<number>((sum, n) => sum + (n ?? 0), 0);
     expect(rows).toBeCloseTo(world.earned);
+  });
+});
+
+describe("Round facts", () => {
+  it("retains the highest combo after the combo expires", () => {
+    const world = makeWorld({ startFish: 3, comboWindow: 0.5, comboStep: 0.5, comboMax: 1.75 });
+    expect(world.maxComboMult).toBe(1);
+    expect(world.bestTickCatches).toBe(0);
+    expect(world.bestStarHits).toBe(0);
+    for (const fish of [...world.fish]) world.capture(fish, "electric");
+    run(world, STEP);
+    expect(world.maxComboMult).toBe(1.75);
+    run(world, 1);
+    world.capture(world.spawn("normal")!, "net");
+    run(world, STEP);
+    expect(world.comboMult).toBe(1);
+    expect(world.maxComboMult).toBe(1.75);
+  });
+
+  it("counts lethal net hits per tick, excluding surviving hits and ability captures", () => {
+    const world = makeWorld({ startFish: 0, netRadius: 40, netDamage: 10, tickSeconds: STEP });
+    const eel = world.spawn("electric", { at: { x: 600, y: 300 } })!;
+    eel.speedMult = 0;
+    const nearby = world.spawn("normal", { at: { x: 670, y: 300 } })!;
+    nearby.hp = 1;
+    nearby.speedMult = 0;
+    const sturdy = world.spawn("normal", { at: { x: 600, y: 300 } })!;
+    sturdy.hp = 100;
+    sturdy.speedMult = 0;
+    world.pointer = { x: 600, y: 300 };
+    run(world, 2 * STEP);
+    expect(world.caught.electric).toBe(1);
+    expect(world.caught.normal).toBe(1);
+    expect(sturdy.captured).toBe(false);
+    expect(world.bestTickCatches).toBe(1);
+    for (let i = 0; i < 3; i++) world.spawn("normal", { at: world.pointer });
+    for (let i = 0; i < 2; i++) {
+      const fish = world.spawn("normal", { at: world.pointer })!;
+      fish.hp = 15;
+      fish.speedMult = 0;
+    }
+    // Three catches on the first tick, two on the second: their hauls must not be combined.
+    world.update(2 * STEP);
+    expect(world.totalCaught).toBe(7);
+    expect(world.bestTickCatches).toBe(3);
+    expect(world.drainEvents().filter(e => e.type === "capture" && e.source === "electric")).toHaveLength(1);
+  });
+
+  it("attributes a large haul to its tick even when captures wait for the next step", () => {
+    const world = makeWorld({ startFish: 201, netRadius: 10_000, netDamage: 10, tickSeconds: STEP });
+    world.pointer = { x: 400, y: 300 };
+    run(world, STEP);
+    expect(world.totalCaught).toBe(200);
+    expect(world.bestTickCatches).toBe(201);
+    run(world, STEP);
+    expect(world.totalCaught).toBe(201);
+    expect(world.bestTickCatches).toBe(201);
+  });
+});
+
+/** Every upgrade at its real maximum, including fish and ability unlocks. */
+function fullStats(): Stats {
+  return applyUpgrades(BASE_STATS, Object.fromEntries(TECH_NODES.map(node => [node.id, node.maxLevel])));
+}
+
+describe("Timed seed compatibility", () => {
+  // Recorded on main at 3b489ee before changing the simulation. The next RNG value also catches
+  // extra draws that happen not to change this round's catches.
+  it.each([
+    { seed: 7, round: 1, final: false, full: false, earned: 0, caught: {}, next: 0.554895979585126 },
+    { seed: 42, round: 4, final: false, full: false, earned: 1, caught: { normal: 1 }, next: 0.39465633244253695 },
+    { seed: 19, round: 5, final: false, full: true, earned: 3597198.419999953,
+      caught: { uncommon: 1286, normal: 985, electric: 201, star: 96, epic: 355, monster: 37, rare: 252, goober: 42 },
+      next: 0.12441657553426921 },
+    { seed: 123, round: 99, final: true, full: true, earned: 3503005.199999957,
+      caught: { uncommon: 1217, normal: 949, star: 100, electric: 179, epic: 309, rare: 228, monster: 40, goober: 34 },
+      next: 0.5533206530380994 },
+  ])("preserves main's round $round with seed $seed", fixture => {
+    for (const guarantee of [undefined, {}, { chest: false, golden: false }]) {
+      const stats = fixture.full ? fullStats() : BASE_STATS;
+      const world = new World(stats, createRng(fixture.seed), 1280, 800,
+        { round: fixture.round, final: fixture.final, ...(guarantee ? { guarantee } : {}) });
+      while (!world.over && world.elapsed < 240) {
+        world.pointer = { x: 640 + Math.sin(world.elapsed) * 400, y: 400 + Math.cos(world.elapsed * 0.7) * 250 };
+        world.update(STEP);
+        world.drainEvents();
+      }
+      expect(world.over).toBe(true);
+      expect(world.earned).toBe(fixture.earned);
+      expect(world.caught).toEqual(fixture.caught);
+      expect(world.rng()).toBe(fixture.next);
+    }
+  });
+});
+
+describe("Endless sessions", () => {
+  const options: RoundOptions = { round: 1, final: false, endless: true };
+
+  it("keeps an infinite clock until finish, then freezes the simulation", () => {
+    const world = makeWorld({ startFish: 1, roundSeconds: 1 }, options);
+    expect(world.endless).toBe(true);
+    expect(world.timeLeft).toBe(Infinity);
+    run(world, 10);
+    expect(world.over).toBe(false);
+    expect(world.elapsed).toBeCloseTo(10);
+    expect(world.timeLeft).toBe(Infinity);
+    world.finish();
+    world.finish();
+    expect(world.over).toBe(true);
+    const positions = world.fish.map(f => [f.x, f.y]);
+    run(world, 1);
+    expect(world.elapsed).toBeCloseTo(10);
+    expect(world.fish.map(f => [f.x, f.y])).toEqual(positions);
+  });
+
+  it("ignores finish in timed rounds", () => {
+    const world = makeWorld({ roundSeconds: 1 });
+    expect(world.endless).toBe(false);
+    world.finish();
+    expect(world.over).toBe(false);
+    run(world, 2);
+    expect(world.over).toBe(true);
+  });
+
+  it("suppresses capture time bonuses, including golden captures", () => {
+    const world = makeWorld({ startFish: 1, timeBonusChance: 1, timeBonusSeconds: 5 }, options);
+    const golden = world.spawnGolden()!;
+    world.capture(world.fish[0]!, "net");
+    world.capture(golden, "star");
+    run(world, STEP);
+    expect(world.totalCaught).toBe(2);
+    expect(world.bonusCount.golden).toBe(1);
+    expect(world.timeLeft).toBe(Infinity);
+    expect(world.drainEvents().some(e => e.type === "time-bonus")).toBe(false);
+  });
+
+  it("allows normal golden arrivals even in round 1", () => {
+    const world = makeWorld({ startFish: 0, goldenRate: 1 }, options);
+    run(world, 4);
+    expect(world.drainEvents().filter(e => e.type === "golden").length).toBeGreaterThanOrEqual(4);
+    const disabled = makeWorld({ startFish: 0, goldenRate: 0 }, options);
+    run(disabled, 4);
+    expect(disabled.drainEvents().some(e => e.type === "golden")).toBe(false);
+  });
+});
+
+describe("Endless frenzy waves", () => {
+  function quietEndless(): World {
+    return makeWorld({ startFish: 0, goldenRate: 0, chestChance: 0, frenzySeconds: 6 },
+      { round: 1, final: false, endless: true });
+  }
+
+  it("exposes the current or next wave and alternates its sweep", () => {
+    const world = quietEndless();
+    const first = world.frenzy!;
+    expect(first).toMatchObject({ start: 45, end: 51 });
+    run(world, 45 - STEP);
+    expect(world.frenzyActive).toBe(false);
+    expect(world.frenzyFront).toBeNull();
+    world.update(STEP);
+    expect(world.frenzyActive).toBe(true);
+    expect(world.frenzyLeft).toBeCloseTo(6);
+    const { cx, rx } = world.swimArea();
+    expect(world.frenzyFront).toBeCloseTo(cx - first.sweep * rx);
+    run(world, 6);
+    expect(world.frenzyActive).toBe(false);
+    expect(world.frenzyLeft).toBe(0);
+    expect(world.frenzy).toMatchObject({ start: 135, end: 141, sweep: -first.sweep });
+    run(world, 84);
+    expect(world.frenzyActive).toBe(true);
+    expect(world.frenzyFront).toBeCloseTo(cx + first.sweep * rx);
+    world.capture(world.spawn("normal")!, "net");
+    world.update(STEP);
+    expect(world.frenzyCaught).toBe(1);
+    expect(world.frenzyEarned).toBe(1.5);
+  });
+
+  it("announces every start and end on schedule for over an hour without drifting", () => {
+    const world = quietEndless();
+    const transitions: { phase: string; at: number }[] = [];
+    const seconds = 3660;
+    for (let i = 0; i < seconds / STEP; i++) {
+      world.update(STEP);
+      for (const event of world.drainEvents()) {
+        if (event.type === "frenzy") transitions.push({ phase: event.phase, at: world.elapsed });
+      }
+    }
+    expect(transitions).toHaveLength(82);
+    for (let wave = 0; wave < 41; wave++) {
+      expect(transitions[2 * wave]!.phase).toBe("start");
+      expect(transitions[2 * wave]!.at).toBeCloseTo(45 + wave * 90, 8);
+      expect(transitions[2 * wave + 1]!.phase).toBe("end");
+      expect(transitions[2 * wave + 1]!.at).toBeCloseTo(51 + wave * 90, 8);
+    }
+    expect(world.elapsed).toBeCloseTo(seconds, 10);
+    expect(world.frenzy).toMatchObject({ start: 3735, end: 3741 });
+    expect(world.drainEvents()).toEqual([]);
+  });
+
+  it("boosts spawns again during later waves", () => {
+    const world = quietEndless();
+    world.stats.spawnRateMult = 1;
+    world.stats.frenzySpawnMult = 4;
+    world.stats.fish = { ...BASE_STATS.fish, normal: { rate: 1, rateMult: 1, valueMult: 1 } };
+    // Remove the previous spawns so this checks the wave independently of the fish cap.
+    run(world, 134, () => { world.fish.length = 0; world.drainEvents(); });
+    world.fish.length = 0;
+    run(world, 1);
+    const before = world.fish.length;
+    run(world, 6);
+    expect(world.fish.length - before).toBeGreaterThanOrEqual(23);
+    expect(world.fish.length - before).toBeLessThanOrEqual(25);
+  });
+});
+
+describe("Endless population and stability", () => {
+  const options: RoundOptions = { round: 1, final: false, endless: true };
+
+  it("caps starting fish, schools, direct and golden spawns", () => {
+    const stats = fullStats();
+    Object.assign(stats, { startFish: ENDLESS.maxFish * 2, spawnRateMult: 0, goldenRate: 0 });
+    const world = new World(stats, createRng(42), 1280, 800, options);
+    expect(world.fish).toHaveLength(ENDLESS.maxFish);
+    expect(world.spawn("normal")).toBeUndefined();
+    expect(world.spawnGolden()).toBeUndefined();
+    world.fish.length = ENDLESS.maxFish - 1;
+    world.spawn("uncommon");
+    expect(world.fish).toHaveLength(ENDLESS.maxFish);
+  });
+
+  it("caps Goober bursts and twins, and discards skipped spawns without a backlog", () => {
+    const stats = fullStats();
+    Object.assign(stats, { startFish: 0, spawnRateMult: 0, goldenRate: 0, twinChance: 1 });
+    const world = new World(stats, createRng(42), 1280, 800, options);
+    const goober = world.spawn("goober")!;
+    for (let i = 1; i < ENDLESS.maxFish; i++) world.spawn("normal");
+    world.capture(goober, "net");
+    world.update(STEP);
+    expect(world.fish).toHaveLength(ENDLESS.maxFish);
+    expect(world.fish.filter(f => f.credit === "goober")).toHaveLength(1);
+    world.stats.spawnRateMult = 1;
+    run(world, 5, () => { world.drainEvents(); });
+    world.stats.spawnRateMult = 0;
+    world.fish.length = 0;
+    run(world, 1);
+    expect(world.fish).toHaveLength(0);
+  });
+
+  it("runs ten minutes fully upgraded with finite positions and bounded live state", { timeout: 10_000 }, () => {
+    const stats = fullStats();
+    const world = new World(stats, createRng(19), 1280, 800, options);
+    const state = world as unknown as { spawnTimers: Map<string, number>; captureQueue: unknown[] };
+    let peakFish = world.fish.length;
+    let peakShots = 0;
+    let peakQueue = 0;
+    let peakCooldowns = 0;
+    let peakEvents = 0;
+    let finite = true;
+    let timeBonus = false;
+    for (let i = 0; i < 600 / STEP; i++) {
+      // First leave the net idle to exercise the cap, then catch normally to exercise abilities.
+      if (world.elapsed >= 120) world.pointer = {
+        x: 640 + Math.sin(world.elapsed) * 400, y: 400 + Math.cos(world.elapsed * 0.7) * 250,
+      };
+      world.update(STEP);
+      peakFish = Math.max(peakFish, world.fish.filter(f => !f.captured).length);
+      peakShots = Math.max(peakShots, world.shots.length);
+      peakQueue = Math.max(peakQueue, state.captureQueue.length);
+      for (const fish of world.fish) finite &&= Number.isFinite(fish.x) && Number.isFinite(fish.y);
+      for (const shot of world.shots) {
+        finite &&= Number.isFinite(shot.x) && Number.isFinite(shot.y);
+        peakCooldowns = Math.max(peakCooldowns, shot.cooldowns.size);
+      }
+      const events = world.drainEvents();
+      peakEvents = Math.max(peakEvents, events.length);
+      timeBonus ||= events.some(e => e.type === "time-bonus");
+    }
+    expect(world.elapsed).toBe(600);
+    expect(world.over).toBe(false);
+    expect(world.timeLeft).toBe(Infinity);
+    expect(peakFish).toBe(ENDLESS.maxFish);
+    expect(world.totalCaught).toBeGreaterThan(1000);
+    expect(world.bonusCount.treasure).toBeGreaterThan(0);
+    expect(world.bestStarHits).toBeGreaterThan(0);
+    expect(peakShots).toBeLessThan(ENDLESS.maxFish * stats.ability.star.count);
+    expect(peakQueue).toBeLessThanOrEqual(ENDLESS.maxFish);
+    expect(peakCooldowns).toBeLessThanOrEqual(ENDLESS.maxFish);
+    expect(peakEvents).toBeLessThan(2000);
+    expect(finite).toBe(true);
+    expect(timeBonus).toBe(false);
+    expect(state.spawnTimers.size).toBeLessThanOrEqual(8);
+    for (const progress of state.spawnTimers.values()) {
+      expect(progress).toBeGreaterThanOrEqual(0);
+      expect(progress).toBeLessThan(1);
+    }
+    expect(world.drainEvents()).toEqual([]);
   });
 });

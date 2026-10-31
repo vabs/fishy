@@ -295,3 +295,36 @@ describe("Star shots", () => {
     expect(play()).toEqual(play());
   });
 });
+
+describe("Star round facts", () => {
+  it("counts repeat damage after cooldown as another hit in the same flight", () => {
+    const world = makeWorld();
+    const fish = target(world, 300, 200);
+    const shot = addShot(world, 300, 200, 0, 0);
+    run(world, 0.25);
+    expect(world.bestStarHits).toBe(1);
+    run(world, STEP);
+    expect(fish.hits).toBe(2);
+    expect(shot.hits).toBe(2);
+    expect(world.bestStarHits).toBe(2);
+  });
+
+  it("accumulates damage hits across a flight and keeps the best individual shot", () => {
+    const world = makeWorld();
+    target(world, 300, 200);
+    target(world, 600, 200);
+    const shot = addShot(world, 100, 200, 500, 0);
+    expect(world.bestStarHits).toBe(0);
+    run(world, 1.2);
+    expect(world.bestStarHits).toBe(2);
+    expect(shot.hits).toBe(2);
+    // A separate shot cannot inflate the first shot's record.
+    const other = addShot(world, 600, 200, 0, 0);
+    star.update!(world, STEP);
+    expect(other.hits).toBe(1);
+    expect(world.bestStarHits).toBe(2);
+    world.shots.length = 0;
+    run(world, STEP);
+    expect(world.bestStarHits).toBe(2);
+  });
+});
