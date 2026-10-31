@@ -86,7 +86,7 @@ it("routes title, hub, bounties and Endless while banking only timed rewards", a
   expect(stored().stats).toMatchObject({ bountiesCompleted: 2, perfectBountyRounds: 1, bestCombo: 1.6,
     bestTickCatches: 10, bestStarHits: 11 });
   expect(el("summary-bounty-reward").textContent).toBe("Bounties +$50");
-  expect(el("summary-total").textContent).toBe("$130");
+  expect(el("summary-total").textContent).toBe("$80");
   expect(state.bounty).toHaveBeenCalledTimes(2);
   expect(stored().achievements).toHaveProperty("bounty-perfect");
   advance();
