@@ -89,7 +89,9 @@ export function createGameAudio(): GameAudio {
     onChange: (listener) => engine.onChange(listener),
 
     screen(screen, { final, endless = false, upgrades }) {
-      if (screen !== "round" && roundActive) {
+      // Only a finished round (or endless session) gets the stinger. Pausing shows the hub mix
+      // and must stay silent, so it leaves the round active.
+      if (screen === "summary" && roundActive) {
         music.stinger(roundFinal);
         roundActive = false;
       }
