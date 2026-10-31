@@ -8,6 +8,8 @@ export interface BountyItem {
   done: boolean;
   reward: number;
   failed?: boolean;
+  /** HUD progress, e.g. "$2,567/$31K" or "×1.4/×1.5"; defaults to whole numbers. */
+  progressText?: string;
 }
 
 type Variant = "hub" | "hud" | "summary";
@@ -99,7 +101,7 @@ export function renderBounties(
             ? "✕"
             : "○";
     row.label.textContent = item.label;
-    row.progress.textContent = `${Number(Math.min(item.value, item.target).toFixed(1))}/${item.target}`;
+    row.progress.textContent = item.progressText ?? `${Math.floor(Math.min(item.value, item.target))}/${item.target}`;
     row.progress.hidden = variant !== "hud";
     row.reward.textContent =
       variant === "summary" && !done

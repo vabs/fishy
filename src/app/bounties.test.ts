@@ -4,7 +4,7 @@ import { BASE_STATS } from "../game/stats";
 import { createRng } from "../game/rng";
 import { World } from "../game/world";
 import { TECH_NODES } from "../game/tech";
-import { bountyFacts, bountyBoard, bountyResult } from "./bounties";
+import { bountyFacts, bountyBoard, bountyResult, progressText } from "./bounties";
 
 describe("bounty wiring", () => {
   it("adapts the world's capture and bonus records", () => {
@@ -73,5 +73,12 @@ describe("bounty wiring", () => {
     world.bonusCount.treasure = 1;
     expect(bountyResult(list, bountyFacts(world)).all).toBe(true);
     expect(bountyResult([], bountyFacts(world))).toMatchObject({ reward: 0, completed: 0, all: false });
+  });
+
+  it("shows HUD progress in each bounty's own units", () => {
+    expect(progressText({ id: "e", kind: "earn", target: 31162, reward: 1 }, 2567.3, 31162)).toBe("$2,567/$31.2K");
+    expect(progressText({ id: "c", kind: "combo", target: 1.5, reward: 1 }, 1.4000000001, 1.5)).toBe("×1.4/×1.5");
+    expect(progressText({ id: "h", kind: "haul", target: 8, reward: 1 }, 12, 8)).toBe("8/8");
+    expect(progressText({ id: "k", kind: "catch", fish: "rare", target: 5, reward: 1 }, 3, 5)).toBe("3/5");
   });
 });

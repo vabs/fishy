@@ -424,7 +424,8 @@ function endRound(finished: World): void {
     ? `Feeding Frenzy: +${formatMoney(finished.frenzyEarned)} from ${finished.frenzyCaught.toLocaleString("en-US")} fish`
     : "";
   summary.fish.textContent = finished.totalCaught.toLocaleString("en-US");
-  summary.total.textContent = formatMoney(total);
+  // The table adds up its own rows; bounty money shows in the headline and the Bounties chip.
+  summary.total.textContent = formatMoney(finished.earned);
   const rows = summaryRows(finished);
   summary.rows.replaceChildren(...rows.map(summaryRow));
   summary.table.hidden = rows.length === 0;
@@ -657,6 +658,11 @@ function placeFrenzyBanner(): void {
   frenzyBanner.root.style.top = `${hud.root.getBoundingClientRect().bottom + 6}px`;
 }
 
+/** True once per whole minute of a trip, so endless achievement checks stay cheap. */
+function crossedMinute(before: number, after: number): boolean {
+  return Math.floor(Math.max(0, before) / 60) !== Math.floor(after / 60);
+}
+
 function frame(now: number): void {
   const dt = Math.min((now - lastFrame) / 1000, MAX_FRAME_SECONDS);
   lastFrame = now;
@@ -672,6 +678,10 @@ function frame(now: number): void {
         endRound(world);
         break;
       }
+    }
+    // Lost at Sea and Sea Legs unlock the moment a trip reaches them, not only when it ends.
+    if (world.endless && !world.over && crossedMinute(world.elapsed - dt, world.elapsed)) {
+      checkAchievements({ endlessSessionMs: Math.round(world.elapsed * 1000) });
     }
   }
   if (world) {
