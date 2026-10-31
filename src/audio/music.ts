@@ -432,6 +432,8 @@ export class Music {
       glide(buses.combo.gain, now, 1, downbeat - 0.02, downbeat);
       this.layersFrom = downbeat;
       this.layersUntil = Infinity;
+      // Silent steps may already have been scanned in the hub's lookahead. Revisit the entry bar.
+      this.layerStep = Math.min(this.layerStep, stepIndexAt(bed.clock, downbeat));
     } else {
       // The layers drop over a beat; the filter closes (or opens, for the end screen) over a bar.
       const beat = beatLength(bed.clock);
@@ -463,8 +465,7 @@ export class Music {
     if (previous) {
       bed.setStem("combo", this.comboLevel, now);
       bed.setStem("groove", this.mode === "endless" ? 0 : 1, now);
-    }
-    else this.applyMode(true);
+    } else this.applyMode(true);
     this.keepLoaded(chapter);
   }
 

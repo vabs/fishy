@@ -1,4 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { AudioEngine } from "./engine";
+import { Music } from "./music";
+import { Sfx } from "./sfx";
 import { bass, bell, brass, clap, kick, noise, pad, pluck, pop, risingNoise, run, steelDrum } from "./synth";
 
 // Only the Web Audio platform is doubled: the real instrument graphs and envelopes run here.
@@ -41,6 +44,7 @@ class Node {
 class Wave {}
 class Context {
   currentTime = 0;
+  state = "running";
   sampleRate = 8000;
   nodes: Node[] = [];
   sources: Node[] = [];
@@ -103,5 +107,83 @@ describe("instrument lifecycle", () => {
     expect(ctx.buffers).toBe(1);
     expect(ctx.sources.at(-1)!.stopAt).toBeCloseTo(1.025);
     ctx.finish();
+  });
+});
+
+describe("reward sound routing", () => {
+  it("rate-limits each reward, follows the current key and routes through the effects bus", () => {
+    vi.stubGlobal("PeriodicWave", Wave);
+    const ctx = new Context();
+    const out = new Node();
+    const engine = { running: true, ctx, sfx: out } as unknown as AudioEngine;
+    const sfx = new Sfx(engine, () => ({ tonic: 0, mode: "minor" }));
+    sfx.bounty();
+    const bountySources = ctx.sources.length;
+    expect(bountySources).toBeGreaterThan(0);
+    expect(ctx.sources[0]!.frequency.value).toBeCloseTo(523.251, 2); // C5 in the supplied key.
+    sfx.bounty();
+    expect(ctx.sources).toHaveLength(bountySources);
+    sfx.achievement();
+    const bothSources = ctx.sources.length;
+    expect(bothSources).toBeGreaterThan(bountySources);
+    expect(ctx.sources[bountySources]!.frequency.value).toBeCloseTo(261.626, 2); // C4.
+    sfx.achievement();
+    expect(ctx.sources).toHaveLength(bothSources);
+    expect(ctx.nodes.some((node) => node.connections.has(out))).toBe(true);
+    ctx.currentTime = 1.3;
+    sfx.achievement();
+    sfx.bounty();
+    expect(ctx.sources.length).toBeGreaterThan(bothSources);
+    ctx.finish();
+  });
+});
+
+async function startMusic(mode: "hub" | "round" | "endless" = "hub"): Promise<{ music: Music; ctx: Context }> {
+  vi.stubGlobal("PeriodicWave", Wave);
+  vi.stubGlobal("window", { setInterval: () => 1 });
+  vi.stubGlobal("document", { baseURI: "http://localhost/" });
+  vi.stubGlobal("fetch", async () => ({ ok: true, text: async () => '{"chapters":[]}' }));
+  const ctx = new Context();
+  const music = new Music();
+  music.setMode(mode);
+  music.start(ctx as unknown as AudioContext, new Node() as unknown as AudioNode);
+  // Wait for the actual manifest loader and bed switch, without scheduling a real timer.
+  for (let i = 0; i < 10; i++) await Promise.resolve();
+  return { music, ctx };
+}
+
+describe("music transitions", () => {
+  it("keeps the first downbeat when round entry falls inside the lookahead", async () => {
+    const { music, ctx } = await startMusic();
+    music.pump(); // In the hub, scan the first .3 s without scheduling any drums.
+    music.setMode("round"); // The bed's first downbeat at .1 s is still in that lookahead.
+    music.pump();
+    const kicks = ctx.sources.filter((source) => source.type === "sine" && source.frequency.value === 48);
+    expect(kicks.some((source) => Math.abs(source.startAt - 0.1) < 1e-6)).toBe(true);
+  });
+
+  it("stops the countdown source when leaving a round and never starts one in endless", async () => {
+    const { music, ctx } = await startMusic("round");
+    music.setUrgency(0.5);
+    const riser = ctx.sources.find((source) => source.loop)!;
+    expect(riser).toBeDefined();
+    ctx.currentTime = 0.2;
+    music.setMode("hub");
+    expect(riser.stopAt).toBeCloseTo(0.225);
+    music.setMode("endless");
+    const count = ctx.sources.length;
+    music.setUrgency(1);
+    expect(ctx.sources).toHaveLength(count);
+  });
+
+  it("adds and releases the frenzy percussion without leaving a continuous source", async () => {
+    const { music, ctx } = await startMusic("round");
+    music.setFrenzy(true);
+    music.pump();
+    const firstCount = ctx.sources.length;
+    expect(firstCount).toBeGreaterThan(0);
+    music.setFrenzy(false);
+    music.setMode("title");
+    for (const source of ctx.sources) expect(Number.isFinite(source.stopAt)).toBe(true);
   });
 });
