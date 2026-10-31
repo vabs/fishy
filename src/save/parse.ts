@@ -1,5 +1,6 @@
 // zod/mini: same validation as "zod" for these simple types, at a fraction of the bundle size.
 import * as z from "zod/mini";
+import { FISH_KINDS } from "../game/fish";
 import { MIGRATIONS, migrate, type Migrations, type RawSave } from "./migrations";
 import { SAVE_ERRORS, SAVE_VERSION, repairName, type NodeInfo, type SaveData } from "./model";
 
@@ -9,7 +10,7 @@ export type SaveResult = { ok: true; save: SaveData } | { ok: false; error: stri
  * The shape of a current-version save. Deliberately loose on values (any number, any string):
  * out-of-range values are repaired afterwards rather than rejecting the whole save.
  */
-const saveSchema: z.ZodMiniType<SaveData> = z.object({
+const saveSchema = z.object({
   version: z.literal(SAVE_VERSION),
   playerName: z.string(),
   money: z.number(),
@@ -20,7 +21,22 @@ const saveSchema: z.ZodMiniType<SaveData> = z.object({
     fishByType: z.record(z.string(), z.number()),
     bestRoundEarnings: z.number(),
     playTimeMs: z.number(),
+    lastRoundEarnings: z.number(),
+    goldenCaught: z.number(),
+    chestsOpened: z.number(),
+    bestCombo: z.number(),
+    bestTickCatches: z.number(),
+    bestStarHits: z.number(),
+    bountiesCompleted: z.number(),
+    perfectBountyRounds: z.number(),
   }),
+  endless: z.object({
+    sessions: z.number(), totalFish: z.number(), timeMs: z.number(), bestEarnings: z.number(),
+    bestFish: z.number(), longestMs: z.number(), bestCombo: z.number(),
+  }),
+  // Invalid individual badges and challenges are discarded without losing the campaign.
+  achievements: z.unknown(),
+  bounties: z.unknown(),
   finalRoundDone: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -30,6 +46,41 @@ const BYTE_ORDER_MARK = 0xfeff;
 
 /** Upper bound for every stored number, so arithmetic on them stays exact. */
 const MAX_NUMBER = Number.MAX_SAFE_INTEGER;
+
+const bountySchema = z.object({
+  id: z.string().check(z.minLength(1)),
+  kind: z.enum(["catch", "combo", "golden", "chest", "haul", "earn", "frenzy"]),
+  fish: z.optional(z.enum(FISH_KINDS)),
+  target: z.number().check(z.gt(0), z.lte(MAX_NUMBER)),
+  reward: z.number().check(z.gte(0), z.lte(MAX_NUMBER)),
+});
+const boardSchema = z.object({ round: z.number().check(z.int(), z.gte(1)), list: z.array(z.unknown()) });
+const achievementTimesSchema = z.record(z.string(), z.unknown());
+const isoTimeSchema = z.iso.datetime({ offset: true });
+
+function repairBounties(value: unknown): SaveData["bounties"] {
+  if (value === null) return null;
+  const board = boardSchema.safeParse(value);
+  if (!board.success) return null;
+  return {
+    round: board.data.round,
+    list: board.data.list.flatMap((entry) => {
+      const bounty = bountySchema.safeParse(entry);
+      if (!bounty.success || (bounty.data.kind === "catch" && !bounty.data.fish)) return [];
+      return [bounty.data];
+    }),
+  };
+}
+
+/** Unknown achievement ids are harmless and preserved; only valid ISO timestamp strings survive. */
+function repairAchievements(value: unknown): Record<string, string> {
+  const times = achievementTimesSchema.safeParse(value);
+  if (!times.success) return {};
+  return Object.fromEntries(Object.entries(times.data).flatMap(([id, time]) => {
+    const iso = isoTimeSchema.safeParse(time);
+    return iso.success ? [[id, iso.data]] : [];
+  }));
+}
 
 function clamp(value: number, min: number, max: number): number {
   return Number.isNaN(value) ? min : Math.min(Math.max(value, min), max);
@@ -55,7 +106,7 @@ function isRawSave(value: unknown): value is RawSave {
 }
 
 /** Brings every number into a sane non-negative range, and repairs the name and timestamps. */
-function repair(save: SaveData, playerName: string, now: Date): SaveData {
+function repair(save: z.infer<typeof saveSchema>, playerName: string, now: Date): SaveData {
   return {
     ...save,
     playerName,
@@ -67,7 +118,26 @@ function repair(save: SaveData, playerName: string, now: Date): SaveData {
       fishByType: mapValues(save.stats.fishByType, count),
       bestRoundEarnings: amount(save.stats.bestRoundEarnings),
       playTimeMs: amount(save.stats.playTimeMs),
+      lastRoundEarnings: amount(save.stats.lastRoundEarnings),
+      goldenCaught: count(save.stats.goldenCaught),
+      chestsOpened: count(save.stats.chestsOpened),
+      bestCombo: amount(save.stats.bestCombo),
+      bestTickCatches: count(save.stats.bestTickCatches),
+      bestStarHits: count(save.stats.bestStarHits),
+      bountiesCompleted: count(save.stats.bountiesCompleted),
+      perfectBountyRounds: count(save.stats.perfectBountyRounds),
     },
+    endless: {
+      sessions: count(save.endless.sessions),
+      totalFish: count(save.endless.totalFish),
+      timeMs: amount(save.endless.timeMs),
+      bestEarnings: amount(save.endless.bestEarnings),
+      bestFish: count(save.endless.bestFish),
+      longestMs: amount(save.endless.longestMs),
+      bestCombo: amount(save.endless.bestCombo),
+    },
+    achievements: repairAchievements(save.achievements),
+    bounties: repairBounties(save.bounties),
     createdAt: isoOr(save.createdAt, now),
     updatedAt: isoOr(save.updatedAt, now),
   };

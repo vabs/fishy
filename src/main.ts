@@ -242,6 +242,8 @@ function endRound(finished: World): void {
     earned: finished.earned,
     caught: finished.caught,
     durationMs: Math.round(finished.elapsed * 1000),
+    goldenCaught: finished.bonusCount.golden,
+    chestsOpened: finished.bonusCount.treasure,
   });
   setSave(finalRound ? { ...recorded, finalRoundDone: true } : recorded);
 

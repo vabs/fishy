@@ -6,11 +6,15 @@ export {
   SAVE_VERSION,
   createSave,
   recordRound,
+  recordEndless,
   resetProgress,
+  setBounties,
   validateName,
   type NameResult,
   type NodeInfo,
   type RoundResult,
+  type EndlessResult,
+  type EndlessRecords,
   type SaveData,
 } from "./model";
 export { parseSave, sanitizeUpgrades, type SaveResult } from "./parse";
