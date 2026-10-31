@@ -1,5 +1,5 @@
 import { getPalette, onPaletteChange, setPalette } from "../game/palette";
-import { writeDisplaySettings } from "./display-settings";
+import { loadDisplaySettings, writeDisplaySettings, type DisplaySettings } from "./display-settings";
 import "./display-controls.css";
 
 /** An eye with a half-filled iris. */
@@ -13,7 +13,8 @@ const ICON = `<svg viewBox="0 0 24 24" aria-hidden="true">
  * The colour-blind palette switch: an icon button in the hub bar, a labelled row in the compact
  * tools menu. Switching redraws every fish straight away and stores the choice apart from the save.
  */
-export function mountDisplayControls(container: HTMLElement): void {
+export function mountDisplayControls(container: HTMLElement, hapticsContainer?: HTMLElement): { readonly settings: Readonly<DisplaySettings> } {
+  const settings = loadDisplaySettings();
   const button = document.createElement("button");
   button.type = "button";
   button.className = "display-toggle";
@@ -25,7 +26,8 @@ export function mountDisplayControls(container: HTMLElement): void {
     const colorBlind = getPalette() !== "colorBlind";
     setPalette(colorBlind ? "colorBlind" : "standard");
     // A refused write only means the choice lasts for this visit.
-    writeDisplaySettings({ colorBlind });
+    settings.colorBlind = colorBlind;
+    writeDisplaySettings(settings);
   });
 
   const render = (): void => {
@@ -37,4 +39,28 @@ export function mountDisplayControls(container: HTMLElement): void {
   render();
   onPaletteChange(render);
   container.append(button);
+  if (hapticsContainer) {
+    hapticsContainer.hidden = typeof navigator.vibrate !== "function";
+    if (!hapticsContainer.hidden) {
+      const haptics = document.createElement("button");
+      haptics.type = "button";
+      haptics.className = "display-toggle";
+      haptics.dataset.action = "haptics";
+      haptics.innerHTML = '<span aria-hidden="true">≈</span><span class="display-toggle-label">Haptics</span><span class="display-toggle-state" aria-hidden="true"></span>';
+      const renderHaptics = (): void => {
+        haptics.setAttribute("aria-pressed", String(settings.haptics));
+        haptics.title = `Haptics: ${settings.haptics ? "on" : "off"}`;
+        haptics.querySelector(".display-toggle-state")!.textContent = settings.haptics ? "On" : "Off";
+      };
+      haptics.addEventListener("click", () => {
+        settings.haptics = !settings.haptics;
+        settings.colorBlind = getPalette() === "colorBlind";
+        writeDisplaySettings(settings);
+        renderHaptics();
+      });
+      renderHaptics();
+      hapticsContainer.append(haptics);
+    }
+  }
+  return { get settings() { return settings; } };
 }
