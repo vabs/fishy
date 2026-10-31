@@ -166,7 +166,7 @@ export function melodyForBar(style: BedStyle, bar: number, activity: MelodyActiv
   for (let eighth = 0; eighth < 8; eighth++) {
     if (activity === "hub" && eighth % 2 === 1) continue;
     const onBeat = eighth % 2 === 0;
-    const density = activity === "hub" ? style.density : 0.78;
+    const density = activity === "hub" ? style.density : activity === "endless" ? endlessVariation(bar).density : 0.78;
     const chance = density * (eighth === 0 ? 1.5 : onBeat ? 1 : 0.5);
     if (rng() >= chance) continue;
     degree = Math.min(style.high, Math.max(style.low, degree + pick(rng, MOVES)));
@@ -185,12 +185,12 @@ export interface GrooveHit {
 }
 
 /** Straight four-on-the-floor drums with backbeats, off-beat open hats and accented sixteenths. */
-export function grooveForBar(seed: number, bar: number): GrooveHit[] {
+export function grooveForBar(seed: number, bar: number, endless = false): GrooveHit[] {
   const rng = barRng(seed ^ 0x27d4eb2f, bar);
   const hits: GrooveHit[] = [];
   for (let step = 0; step < PATTERN_STEPS; step++) {
     if (step % 4 === 0) hits.push({ step, sound: "kick", velocity: step === 0 ? 1 : 0.88 });
-    if (step === 4 || step === 12) hits.push({ step, sound: "clap", velocity: 0.8 + rng() * 0.2 });
+    if (!endless && (step === 4 || step === 12)) hits.push({ step, sound: "clap", velocity: 0.8 + rng() * 0.2 });
     if (step % 4 === 2) hits.push({ step, sound: "openHat", velocity: 0.7 + rng() * 0.2 });
     hits.push({ step, sound: "shaker", velocity: (step % 4 === 2 ? 0.55 : step % 2 === 0 ? 0.35 : 0.18) + rng() * 0.12 });
   }
@@ -244,4 +244,10 @@ export function frenzyForStep(chord: Chord | null, step: number, active: boolean
   if (!active) return null;
   const note = arpForStep(chord, step, 1)!;
   return { degree: note.degree + SCALE_SIZE, velocity: note.velocity * 0.65, percussion: step % 4 === 2 ? 1 : step % 2 === 0 ? 0.65 : 0.35 };
+}
+
+/** A restrained density change every sixteen bars keeps long sessions moving without a buildup. */
+export function endlessVariation(bar: number): { density: number } {
+  const densities = [0.46, 0.54, 0.42, 0.5];
+  return { density: densities[Math.floor(Math.max(0, bar) / 16) % densities.length]! };
 }

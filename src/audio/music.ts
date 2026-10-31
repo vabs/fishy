@@ -1,4 +1,4 @@
-import { urgencyHatForStep } from "./dynamics";
+import { mixForMode, urgencyHatForStep, type MusicMode } from "./dynamics";
 import { fetchManifest, loadTrack, type LoadedTrack, type LoopBuffer } from "./loader";
 import type { LayerName, MusicManifest } from "./manifest";
 import {
@@ -51,7 +51,7 @@ import {
  * sample-accurate however busy the main thread is.
  */
 
-export type MusicMode = "hub" | "round" | "final" | "end";
+export type { MusicMode } from "./dynamics";
 
 /** How far ahead notes are scheduled, s: enough to ride out a slow frame, short enough for the combo layer to react. */
 const LOOKAHEAD = 0.3;
@@ -61,9 +61,7 @@ const LATE = 0.02;
 
 /** The hub hears the music from under water: low-passed and 6 dB down. */
 const HUB_CUTOFF = 700;
-const OPEN_CUTOFF = 16000;
 const HUB_LEVEL = 0.5;
-const END_LEVEL = 0.85;
 /** Chapter change, s. */
 const CROSSFADE = 3;
 /** Fade-in when the music first starts, s. */
@@ -308,7 +306,9 @@ export class Music {
   setMode(mode: MusicMode): void {
     if (mode === this.mode) return;
     this.mode = mode;
-    if (mode !== "round" && mode !== "final") {
+    this.groove.bar = -1;
+    if (mode === "endless") this.setUrgency(0);
+    if (mode !== "round" && mode !== "final" && mode !== "endless") {
       this.combo = 0;
       this.setUrgency(0);
       this.setFrenzy(false);
@@ -332,7 +332,7 @@ export class Music {
 
   /** A wave adds a bright octave lead and a separate tambourine layer. */
   setFrenzy(active: boolean): void {
-    const next = active && (this.mode === "round" || this.mode === "final");
+    const next = active && (this.mode === "round" || this.mode === "final" || this.mode === "endless");
     if (next === this.frenzy) return;
     this.frenzy = next;
     if (!this.ctx || !this.buses) return;
@@ -401,7 +401,7 @@ export class Music {
   private get comboLevel(): number {
     const level = Math.min(1, this.combo + this.urgency * 0.3);
     if (this.mode === "final") return Math.max(level, FINAL_COMBO_FLOOR);
-    return this.mode === "round" ? level : 0;
+    return this.mode === "round" || this.mode === "endless" ? level : 0;
   }
 
   private applyMode(instant: boolean): void {
@@ -410,14 +410,15 @@ export class Music {
     if (!ctx || !bed) return;
     const now = ctx.currentTime;
     const { filter, buses } = this;
-    const playing = this.mode === "round" || this.mode === "final";
-    const cutoff = this.mode === "hub" ? HUB_CUTOFF : OPEN_CUTOFF;
-    const level = this.mode === "hub" ? HUB_LEVEL : this.mode === "end" ? END_LEVEL : 1;
+    const mix = mixForMode(this.mode);
+    const playing = mix.groove > 0;
+    const cutoff = mix.cutoff;
+    const level = mix.bed;
     const layers = playing ? 1 : 0;
     if (instant) {
       filter.frequency.setValueAtTime(cutoff, now);
       buses.bed.gain.setValueAtTime(level, now);
-      buses.groove.gain.setValueAtTime(layers, now);
+      buses.groove.gain.setValueAtTime(mix.groove, now);
       buses.combo.gain.setValueAtTime(layers, now);
       this.layersFrom = playing ? now : Infinity;
       this.layersUntil = Infinity;
@@ -426,7 +427,7 @@ export class Music {
       const downbeat = nextDownbeat(bed.clock, now + 0.05);
       glide(filter.frequency, now, cutoff, now, downbeat, true);
       glide(buses.bed.gain, now, level, now, downbeat);
-      glide(buses.groove.gain, now, 1, downbeat - 0.02, downbeat);
+      glide(buses.groove.gain, now, mix.groove, downbeat - 0.02, downbeat);
       glide(buses.combo.gain, now, 1, downbeat - 0.02, downbeat);
       this.layersFrom = downbeat;
       this.layersUntil = Infinity;
@@ -441,6 +442,7 @@ export class Music {
       glide(buses.bed.gain, now, level, now, now + bar);
     }
     bed.setStem("combo", this.comboLevel, now);
+    bed.setStem("groove", this.mode === "endless" ? 0 : 1, now);
   }
 
   private async switchBed(): Promise<void> {
@@ -457,7 +459,10 @@ export class Music {
     previous?.fadeOut(start, CROSSFADE);
     this.beds.push(bed);
     this.current = bed;
-    if (previous) bed.setStem("combo", this.comboLevel, now);
+    if (previous) {
+      bed.setStem("combo", this.comboLevel, now);
+      bed.setStem("groove", this.mode === "endless" ? 0 : 1, now);
+    }
     else this.applyMode(true);
     this.keepLoaded(chapter);
   }
@@ -511,8 +516,8 @@ export class Music {
     if (roll !== null) {
       noise(ctx, this.buses.urgency, { time, gain: 0.025 * roll, attack: 0.001, decay: 0.035, filter: "highpass", from: 7500, q: 0.5 });
     }
-    if (!bed.hasStem("groove")) {
-      if (this.groove.bar !== bar) this.groove = { bar, hits: grooveForBar(bed.chapter + 1, bar) };
+    if (this.mode === "endless" || !bed.hasStem("groove")) {
+      if (this.groove.bar !== bar) this.groove = { bar, hits: grooveForBar(bed.chapter + 1, bar, this.mode === "endless") };
       for (const hit of this.groove.hits) if (hit.step === step) this.playHit(hit, time);
       if (this.bassLine.bar !== bar) this.bassLine = { bar, notes: bassForBar(bed.chapter + 1, bar, chord) };
       for (const note of this.bassLine.notes) {
@@ -536,7 +541,8 @@ export class Music {
   }
 
   private activityAt(time: number): MelodyActivity {
-    return time >= this.layersFrom && time < this.layersUntil ? "round" : "hub";
+    if (time < this.layersFrom || time >= this.layersUntil) return "hub";
+    return this.mode === "endless" ? "endless" : "round";
   }
 
   private playHit(hit: GrooveHit, time: number): void {

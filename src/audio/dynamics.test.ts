@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { urgencyLevel, urgencyHatForStep } from "./dynamics";
+import { urgencyLevel, urgencyHatForStep, mixForMode } from "./dynamics";
 
 describe("urgencyLevel", () => {
   it("only lifts the final five seconds of a live timed round", () => {
@@ -19,5 +19,15 @@ describe("urgencyHatForStep", () => {
       expect(urgencyHatForStep(step, 1)).toBeGreaterThan(urgencyHatForStep(step, 0.2)!);
     }
     expect(urgencyHatForStep(0, 1)).toBeGreaterThan(urgencyHatForStep(1, 1)!);
+  });
+});
+
+describe("screen mix", () => {
+  it("keeps the hub calm and makes the title a little more welcoming", () => {
+    expect(mixForMode("hub")).toMatchObject({ cutoff: 700, bed: 0.5, groove: 0 });
+    expect(mixForMode("title")).toMatchObject({ cutoff: 1400, groove: 0 });
+    expect(mixForMode("title").bed).toBeGreaterThan(mixForMode("hub").bed);
+    expect(mixForMode("endless").groove).toBeGreaterThan(0);
+    expect(mixForMode("endless").groove).toBeLessThan(mixForMode("round").groove);
   });
 });

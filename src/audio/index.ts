@@ -8,7 +8,7 @@ import { Sfx } from "./sfx";
 
 export type { AudioSettings } from "./settings";
 
-export type Screen = "hub" | "round" | "summary" | "end";
+export type Screen = "title" | "hub" | "round" | "summary" | "end";
 
 /**
  * The game's sound, as main.ts sees it: tell it what's on screen, what was bought, and each frame's
@@ -21,7 +21,7 @@ export interface GameAudio {
   update(change: Partial<AudioSettings>): void;
   onChange(listener: (settings: AudioSettings) => void): () => void;
   /** A screen was shown. `final` is whether the round being played (or just finished) is the Final Round. */
-  screen(screen: Screen, context: { final: boolean; upgrades: Readonly<Record<string, number>> }): void;
+  screen(screen: Screen, context: { final: boolean; endless?: boolean; upgrades: Readonly<Record<string, number>> }): void;
   /** A tech tree node was bought; `upgrades` includes it. */
   purchase(nodeId: string, upgrades: Readonly<Record<string, number>>): void;
   /** One frame's drained world events, and the world they came from. */
@@ -52,6 +52,8 @@ export function createGameAudio(): GameAudio {
 
   /** World time of the last capture, for telling when a combo has run out. */
   let lastCaptureAt = Number.NEGATIVE_INFINITY;
+  let roundActive = false;
+  let roundFinal = false;
 
   function fx(event: FxEvent): void {
     switch (`${event.kind}:${event.name}`) {
@@ -82,18 +84,26 @@ export function createGameAudio(): GameAudio {
     update: (change) => engine.update(change),
     onChange: (listener) => engine.onChange(listener),
 
-    screen(screen, { final, upgrades }) {
+    screen(screen, { final, endless = false, upgrades }) {
+      if (screen !== "round" && roundActive) {
+        music.stinger(roundFinal);
+        roundActive = false;
+      }
       music.setChapter(chapterFor(upgrades));
       switch (screen) {
+        case "title":
+          music.setMode("title");
+          break;
         case "hub":
           music.setMode("hub");
           break;
         case "round":
           lastCaptureAt = Number.NEGATIVE_INFINITY;
-          music.setMode(final ? "final" : "round");
+          roundActive = true;
+          roundFinal = final && !endless;
+          music.setMode(endless ? "endless" : final ? "final" : "round");
           break;
         case "summary":
-          music.stinger(final);
           music.setMode("hub");
           break;
         case "end":

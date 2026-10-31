@@ -7,6 +7,7 @@ import {
   arpForStep,
   bassForBar,
   frenzyForStep,
+  endlessVariation,
   chordForBar,
   grooveForBar,
   melodyForBar,
@@ -175,5 +176,27 @@ describe("frenzyForStep", () => {
       expect(hit.percussion).toBeLessThanOrEqual(1);
     }
     expect(frenzyForStep(null, 0, true)!.percussion).toBeGreaterThan(frenzyForStep(null, 1, true)!.percussion);
+  });
+});
+
+describe("endless arrangement", () => {
+  it("keeps the pulse without a clap and stays less dense than a timed round", () => {
+    for (let bar = 0; bar < 64; bar++) {
+      const hits = grooveForBar(5, bar, true);
+      expect(hits.some((hit) => hit.sound === "clap")).toBe(false);
+      expect(hits.filter((hit) => hit.sound === "kick")).toHaveLength(4);
+    }
+    for (const style of BED_STYLES) {
+      const count = (mode: "hub" | "endless" | "round") => Array.from({ length: 128 }, (_, bar) => melodyForBar(style, bar, mode)).flat().length;
+      expect(count("endless")).toBeGreaterThan(count("hub"));
+      expect(count("endless")).toBeLessThan(count("round"));
+    }
+  });
+
+  it("holds an arrangement for sixteen bars then changes it, throughout a long session", () => {
+    for (let section = 0; section < 64; section++) {
+      expect(endlessVariation(section * 16)).toEqual(endlessVariation(section * 16 + 15));
+      expect(endlessVariation(section * 16 + 16)).not.toEqual(endlessVariation(section * 16));
+    }
   });
 });
