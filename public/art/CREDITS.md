@@ -1,11 +1,11 @@
 | File | Description | Credit |
 | --- | --- | --- |
-| logo.png | Cream and wood Fishy wordmark with rope, brass and fish detail | Generated for Fishy (no third-party assets) |
+| logo.webp | Cream and wood Fishy wordmark with rope, brass and fish detail | Generated for Fishy (no third-party assets) |
 | title-sea.webp | Golden-hour open sea and small wooden fishing boat | Generated for Fishy (no third-party assets) |
 | sea-tile.webp | Seamless, low-contrast teal gameplay water | Generated for Fishy (no third-party assets) |
 | boat.png | Top-down wooden fishing boat with fisher, lantern, rope and basket | Generated for Fishy (no third-party assets) |
 | chart.webp | Light parchment sea chart with quiet centre | Generated for Fishy (no third-party assets) |
-| compass.png | Decorative brass and ink compass rose | Generated for Fishy (no third-party assets) |
+| compass.webp | Decorative brass and ink compass rose | Generated for Fishy (no third-party assets) |
 | wood.webp | Horizontally seamless warm wooden planks | Generated for Fishy (no third-party assets) |
 | paper.webp | Seamless cream logbook paper with subtle fibres | Generated for Fishy (no third-party assets) |
 | rope-frame.png | Transparent twisted rope frame with 64 px corner slices | Generated for Fishy (no third-party assets) |
