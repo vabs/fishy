@@ -8,7 +8,9 @@ import {
   loadSave,
   parseSave,
   recordRound,
+  recordEndless,
   resetProgress,
+  setBounties,
   sanitizeUpgrades,
   saveFileName,
   validateName,
@@ -16,7 +18,8 @@ import {
   type NodeInfo,
   type SaveData,
 } from "./index";
-import { migrate, type Migrations } from "./migrations";
+import { MIGRATIONS, migrate, type Migrations } from "./migrations";
+import v1 from "./fixtures/v1.json";
 
 const NOW = new Date("2026-10-13T12:00:00.000Z");
 const NODES: readonly NodeInfo[] = [
@@ -46,7 +49,7 @@ function playedSave(): SaveData {
     money: 1234,
     round: 5,
     upgrades: { "net.size": 2, "net.damage": 3 },
-    stats: { totalFish: 40, fishByType: { normal: 35, uncommon: 5 }, bestRoundEarnings: 500, playTimeMs: 120_000 },
+    stats: { ...createSave("Ann", NOW).stats, totalFish: 40, fishByType: { normal: 35, uncommon: 5 }, bestRoundEarnings: 500, playTimeMs: 120_000 },
   };
 }
 
@@ -69,12 +72,19 @@ afterEach(() => {
 describe("createSave", () => {
   it("starts a new game at round 1 with nothing", () => {
     expect(createSave("Ann", NOW)).toEqual({
-      version: 1,
+      version: 2,
       playerName: "Ann",
       money: 0,
       round: 1,
       upgrades: {},
-      stats: { totalFish: 0, fishByType: {}, bestRoundEarnings: 0, playTimeMs: 0 },
+      stats: {
+        totalFish: 0, fishByType: {}, bestRoundEarnings: 0, playTimeMs: 0,
+        lastRoundEarnings: 0, goldenCaught: 0, chestsOpened: 0, bestCombo: 0,
+        bestTickCatches: 0, bestStarHits: 0, bountiesCompleted: 0, perfectBountyRounds: 0,
+      },
+      endless: { sessions: 0, totalFish: 0, timeMs: 0, bestEarnings: 0, bestFish: 0, longestMs: 0, bestCombo: 0 },
+      achievements: {},
+      bounties: null,
       finalRoundDone: false,
       createdAt: NOW.toISOString(),
       updatedAt: NOW.toISOString(),
@@ -157,10 +167,12 @@ describe("recordRound", () => {
     expect(after.money).toBe(1534);
     expect(after.round).toBe(6);
     expect(after.stats).toEqual({
+      ...before.stats,
       totalFish: 52,
       fishByType: { normal: 45, uncommon: 5, rare: 2 },
       bestRoundEarnings: 500,
       playTimeMs: 150_000,
+      lastRoundEarnings: 300,
     });
     expect(after.upgrades).toEqual(before.upgrades);
     expect(before).toEqual(snapshot);
@@ -245,7 +257,7 @@ describe("parseSave", () => {
   });
 
   it("refuses a save from a newer version", () => {
-    expect(parseSave(edited({ version: 2 }), NODES)).toEqual({ ok: false, error: SAVE_ERRORS.newer });
+    expect(parseSave(edited({ version: 3 }), NODES)).toEqual({ ok: false, error: SAVE_ERRORS.newer });
   });
 
   it("drops unknown upgrade ids and clamps levels to [0, maxLevel]", () => {
@@ -262,12 +274,13 @@ describe("parseSave", () => {
       edited({
         money: -500,
         round: -3,
-        stats: { totalFish: -1, fishByType: { normal: -2, rare: 1.5 }, bestRoundEarnings: -10, playTimeMs: 1e300 },
+        stats: { ...playedSave().stats, totalFish: -1, fishByType: { normal: -2, rare: 1.5 }, bestRoundEarnings: -10, playTimeMs: 1e300 },
       }),
     );
     expect(save.money).toBe(0);
     expect(save.round).toBe(1);
     expect(save.stats).toEqual({
+      ...createSave("Ann").stats,
       totalFish: 0,
       fishByType: { normal: 0, rare: 1 },
       bestRoundEarnings: 0,
@@ -292,6 +305,7 @@ describe("parseSave", () => {
     /** A made-up version 0 format, to prove old saves are upgraded before they are validated. */
     const v0 = { version: 0, name: "Old Salt", coins: 120, level: 4, nets: { "net.size": 9, gone: 1 } };
     const fromV0: Migrations = {
+      ...MIGRATIONS,
       0: (old) => ({
         playerName: old.name,
         money: old.coins,
@@ -308,12 +322,15 @@ describe("parseSave", () => {
       expect(parseSave(JSON.stringify(v0), NODES, fromV0)).toEqual({
         ok: true,
         save: {
-          version: 1,
+          version: 2,
           playerName: "Old Salt",
           money: 120,
           round: 4,
           upgrades: { "net.size": 5 },
-          stats: { totalFish: 0, fishByType: {}, bestRoundEarnings: 0, playTimeMs: 0 },
+          stats: createSave("Old Salt").stats,
+          endless: createSave("Old Salt").endless,
+          achievements: {},
+          bounties: null,
           finalRoundDone: false,
           createdAt: "2026-01-01T00:00:00.000Z",
           updatedAt: "2026-01-01T00:00:00.000Z",
@@ -362,5 +379,102 @@ describe("saveFileName", () => {
     ["🐟🐟", "fishy-player-2026-10-03.json"],
   ])("makes %j safe", (name, file) => {
     expect(saveFileName(name, day)).toBe(file);
+  });
+});
+
+describe("save v2", () => {
+  it("migrates a complete v1 export and stored save without losing campaign progress", () => {
+    const nodes = Object.keys(v1.upgrades).map((id) => ({ id, maxLevel: 99 }));
+    const imported = parseSave(JSON.stringify(v1), nodes);
+    expect(imported.ok).toBe(true);
+    if (!imported.ok) throw new Error(imported.error);
+    expect(imported.save).toEqual({
+      ...v1, version: 2,
+      stats: { ...createSave("Ann").stats, ...v1.stats },
+      endless: createSave("Ann").endless, achievements: {}, bounties: null,
+    });
+    expect(loadSave(memoryStorage({ [SAVE_KEY]: JSON.stringify(v1) }))).toEqual(imported.save);
+    expect(parseSave(serializeSave(imported.save), nodes)).toEqual(imported);
+  });
+
+  it("banks bounties separately and updates round records without mutating the save", () => {
+    const before = setBounties(playedSave(), { round: 5, list: [{ id: "a", kind: "golden", target: 1, reward: 80 }] });
+    const snapshot = structuredClone(before);
+    const after = recordRound(before, {
+      earned: 600, bountyReward: 80, caught: { normal: 10 }, durationMs: 1000,
+      goldenCaught: 2, chestsOpened: 1, maxCombo: 1.8, bestTickCatches: 12, bestStarHits: 15,
+      bountiesCompleted: 2, allBounties: true,
+    });
+    expect(after.money).toBe(1234 + 600 + 80);
+    expect(after.round).toBe(6);
+    expect(after.bounties).toBeNull();
+    expect(after.stats).toMatchObject({
+      lastRoundEarnings: 600, bestRoundEarnings: 600, goldenCaught: 2, chestsOpened: 1,
+      bestCombo: 1.8, bestTickCatches: 12, bestStarHits: 15, bountiesCompleted: 2,
+      perfectBountyRounds: 1, totalFish: 50, playTimeMs: 121000,
+    });
+    const again = recordRound(after, { earned: 1, caught: {}, durationMs: 0, maxCombo: 1.2, bestTickCatches: 2, bestStarHits: 3, bountiesCompleted: 1 });
+    expect(again.stats).toMatchObject({ lastRoundEarnings: 1, bestRoundEarnings: 600, bestCombo: 1.8, bestTickCatches: 12, bestStarHits: 15, bountiesCompleted: 3, perfectBountyRounds: 1 });
+    expect(before).toEqual(snapshot);
+  });
+
+  it("records Endless fish and time without changing campaign money or round records", () => {
+    const before = { ...setBounties(playedSave(), { round: 5, list: [] }), finalRoundDone: true };
+    const snapshot = structuredClone(before);
+    const after = recordEndless(before, { earned: 50000, caught: { normal: 5, rare: 2, star: undefined }, durationMs: 600000, maxCombo: 3, goldenCaught: 4, chestsOpened: 2 });
+    expect(after.endless).toEqual({ sessions: 1, totalFish: 7, timeMs: 600000, bestEarnings: 50000, bestFish: 7, longestMs: 600000, bestCombo: 3 });
+    expect(after.stats).toEqual({ ...before.stats, totalFish: 47, fishByType: { normal: 40, uncommon: 5, rare: 2 }, playTimeMs: 720000, goldenCaught: 4, chestsOpened: 2, bestCombo: 3 });
+    for (const key of ["money", "round", "upgrades", "bounties", "finalRoundDone"] as const) expect(after[key]).toEqual(before[key]);
+    const again = recordEndless(after, { earned: 10, caught: { normal: 1 }, durationMs: 1000, maxCombo: 1.5, goldenCaught: 1, chestsOpened: 0 });
+    expect(again.endless).toEqual({ ...after.endless, sessions: 2, totalFish: 8, timeMs: 601000 });
+    expect(again.stats.goldenCaught).toBe(5);
+    expect(before).toEqual(snapshot);
+  });
+
+  it("Play Again retains achievements and Endless records while clearing the campaign", () => {
+    const before = recordEndless(playedSave(), { earned: 40, caught: { normal: 3 }, durationMs: 2000, maxCombo: 2, goldenCaught: 1, chestsOpened: 0 });
+    before.achievements = { "first-normal": NOW.toISOString(), "future-badge": NOW.toISOString() };
+    before.finalRoundDone = true;
+    const snapshot = structuredClone(before);
+    const after = resetProgress(before, NOW);
+    expect(after).toEqual({ ...createSave("Ann", NOW), achievements: before.achievements, endless: before.endless });
+    after.achievements["first-normal"] = "changed";
+    after.endless.sessions++;
+    expect(before).toEqual(snapshot);
+  });
+
+  it("persists a bounty board and detaches it from callers", () => {
+    const board = { round: 5, list: [{ id: "a", kind: "catch" as const, fish: "rare" as const, target: 2, reward: 30 }] };
+    const save = setBounties(playedSave(), board);
+    board.list[0]!.target = 999;
+    expect(save.bounties?.list[0]?.target).toBe(2);
+    expect(parseOk(serializeSave(save))).toEqual(save);
+    expect(setBounties(save, null).bounties).toBeNull();
+  });
+
+  it("round-trips every v2 field in an export", () => {
+    let save = recordRound(playedSave(), { earned: 100, caught: { normal: 10 }, durationMs: 1000, maxCombo: 2, bestTickCatches: 10, bestStarHits: 11, bountiesCompleted: 2, allBounties: true });
+    save = recordEndless(save, { earned: 500, caught: { star: 1 }, durationMs: 60000, maxCombo: 2.5, goldenCaught: 2, chestsOpened: 1 });
+    save.achievements = { "first-star": NOW.toISOString(), "future-badge": NOW.toISOString() };
+    save = setBounties(save, { round: save.round, list: [{ id: "gold", kind: "golden", target: 1, reward: 100 }] });
+    expect(parseOk(serializeSave(save))).toEqual(save);
+  });
+
+  it("drops malformed bounties and retains only ISO achievement times, including unknown ids", () => {
+    const valid = { id: "fish", kind: "catch", fish: "rare", target: 2, reward: 40 };
+    const save = parseOk(edited({
+      achievements: { good: NOW.toISOString(), future: "2026-10-13T14:00:00+02:00", bad: "yesterday", short: "2026-10-13", number: 123, null: null },
+      bounties: { round: 5, list: [valid, { ...valid, kind: "unknown" }, { ...valid, fish: "shark" }, { ...valid, fish: undefined }, { ...valid, target: 0 }, { ...valid, reward: -1 }, null] },
+    }));
+    expect(save.bounties).toEqual({ round: 5, list: [valid] });
+    expect(save.achievements).toEqual({ good: NOW.toISOString(), future: "2026-10-13T14:00:00+02:00" });
+    expect(parseOk(serializeSave(save))).toEqual(save);
+    for (const bounties of [{ round: "5", list: [] }, { round: 5, list: "bad" }, "bad"]) expect(parseOk(edited({ bounties })).bounties).toBeNull();
+  });
+
+  it("repairs the new numbers without rounding combo multipliers down", () => {
+    const save = parseOk(edited({ stats: { ...playedSave().stats, lastRoundEarnings: -1, goldenCaught: 1.8, bestCombo: 1.5, perfectBountyRounds: -2 }, endless: { sessions: -1, totalFish: 5.8, timeMs: -1, bestEarnings: -2, bestFish: 2.2, longestMs: 1e300, bestCombo: 2.75 } }));
+    expect(save.stats).toMatchObject({ lastRoundEarnings: 0, goldenCaught: 1, bestCombo: 1.5, perfectBountyRounds: 0 });
+    expect(save.endless).toEqual({ sessions: 0, totalFish: 5, timeMs: 0, bestEarnings: 0, bestFish: 2, longestMs: Number.MAX_SAFE_INTEGER, bestCombo: 2.75 });
   });
 });

@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "playerName": "Captain Ann",
+  "money": 48230.5,
+  "round": 24,
+  "upgrades": { "net.radius": 5, "net.damage": 4, "uncommon.unlock": 1, "econ.combo": 2 },
+  "stats": {
+    "totalFish": 1240,
+    "fishByType": { "normal": 1000, "uncommon": 200, "rare": 40 },
+    "bestRoundEarnings": 15000,
+    "playTimeMs": 1200000
+  },
+  "finalRoundDone": true,
+  "createdAt": "2026-10-13T12:00:00.000Z",
+  "updatedAt": "2026-10-14T09:30:00.000Z"
+}
