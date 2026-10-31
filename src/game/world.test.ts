@@ -623,16 +623,38 @@ describe("Endless frenzy waves", () => {
 describe("Endless population and stability", () => {
   const options: RoundOptions = { round: 1, final: false, endless: true };
 
-  it("caps starting fish, schools, direct and golden spawns", () => {
+  it("caps starting fish, schools and direct spawns", () => {
     const stats = fullStats();
     Object.assign(stats, { startFish: ENDLESS.maxFish * 2, spawnRateMult: 0, goldenRate: 0 });
     const world = new World(stats, createRng(42), 1280, 800, options);
     expect(world.fish).toHaveLength(ENDLESS.maxFish);
     expect(world.spawn("normal")).toBeUndefined();
-    expect(world.spawnGolden()).toBeUndefined();
     world.fish.length = ENDLESS.maxFish - 1;
     world.spawn("uncommon");
     expect(world.fish).toHaveLength(ENDLESS.maxFish);
+  });
+
+  it("keeps golden fish and frenzy pour-ins coming in a full sea, up to the surge room", () => {
+    const stats = fullStats();
+    Object.assign(stats, { startFish: ENDLESS.maxFish, spawnRateMult: 0, goldenRate: 0 });
+    const world = new World(stats, createRng(42), 1280, 800, options);
+    expect(world.fish).toHaveLength(ENDLESS.maxFish);
+    expect(world.spawnGolden()?.golden).toBeDefined();
+    expect(world.spawn("normal", { surge: true })).toBeDefined();
+    for (let i = 0; i < ENDLESS.surgeRoom * 2; i++) world.spawn("normal", { surge: true });
+    expect(world.fish).toHaveLength(ENDLESS.maxFish + ENDLESS.surgeRoom);
+    expect(world.spawnGolden()).toBeUndefined();
+  });
+
+  it("pours fish in during an endless frenzy even when the sea is full", () => {
+    const stats = fullStats();
+    Object.assign(stats, { startFish: ENDLESS.maxFish, goldenRate: 0 });
+    const world = new World(stats, createRng(42), 1280, 800, options);
+    run(world, ENDLESS.firstFrenzy - 1, () => { world.drainEvents(); });
+    const before = world.fish.filter((f) => !f.captured).length;
+    expect(before).toBe(ENDLESS.maxFish);
+    run(world, 2, () => { world.drainEvents(); });
+    expect(world.fish.filter((f) => !f.captured).length).toBeGreaterThan(before);
   });
 
   it("caps Goober bursts and twins, and discards skipped spawns without a backlog", () => {
@@ -685,13 +707,14 @@ describe("Endless population and stability", () => {
     expect(world.elapsed).toBe(600);
     expect(world.over).toBe(false);
     expect(world.timeLeft).toBe(Infinity);
-    expect(peakFish).toBe(ENDLESS.maxFish);
+    expect(peakFish).toBeGreaterThanOrEqual(ENDLESS.maxFish);
+    expect(peakFish).toBeLessThanOrEqual(ENDLESS.maxFish + ENDLESS.surgeRoom);
     expect(world.totalCaught).toBeGreaterThan(1000);
     expect(world.bonusCount.treasure).toBeGreaterThan(0);
     expect(world.bestStarHits).toBeGreaterThan(0);
     expect(peakShots).toBeLessThan(ENDLESS.maxFish * stats.ability.star.count);
-    expect(peakQueue).toBeLessThanOrEqual(ENDLESS.maxFish);
-    expect(peakCooldowns).toBeLessThanOrEqual(ENDLESS.maxFish);
+    expect(peakQueue).toBeLessThanOrEqual(ENDLESS.maxFish + ENDLESS.surgeRoom);
+    expect(peakCooldowns).toBeLessThanOrEqual(ENDLESS.maxFish + ENDLESS.surgeRoom);
     expect(peakEvents).toBeLessThan(2000);
     expect(finite).toBe(true);
     expect(timeBonus).toBe(false);

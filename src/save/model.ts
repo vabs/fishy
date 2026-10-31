@@ -87,6 +87,10 @@ export interface EndlessResult {
   maxCombo: number;
   goldenCaught: number;
   chestsOpened: number;
+  /** Most fish one net tick caught; raises the lifetime record that achievements read. */
+  bestTickCatches?: number;
+  /** Most fish one Star hit; raises the lifetime record that achievements read. */
+  bestStarHits?: number;
 }
 
 export type NameResult = { ok: true; name: string } | { ok: false; error: string };
@@ -118,7 +122,7 @@ export function createSave(playerName: string, now = new Date()): SaveData {
   };
 }
 
-/** Shared lifetime stats: Endless contributes catches and time, without timed-round records. */
+/** Shared lifetime stats: Endless contributes catches, time and the achievement records, never earnings records. */
 function lifetimeStats(save: SaveData, result: RoundResult | EndlessResult): SaveData["stats"] {
   const fishByType = { ...save.stats.fishByType };
   let caught = 0;
@@ -160,7 +164,12 @@ export function recordRound(save: SaveData, result: RoundResult): SaveData {
 
 /** Records an Endless session without changing the campaign or its earnings records. */
 export function recordEndless(save: SaveData, result: EndlessResult): SaveData {
-  const stats = lifetimeStats(save, result);
+  const lifetime = lifetimeStats(save, result);
+  const stats = {
+    ...lifetime,
+    bestTickCatches: Math.max(lifetime.bestTickCatches, result.bestTickCatches ?? 0),
+    bestStarHits: Math.max(lifetime.bestStarHits, result.bestStarHits ?? 0),
+  };
   const caught = stats.totalFish - save.stats.totalFish;
   return {
     ...save,

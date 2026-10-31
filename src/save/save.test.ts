@@ -431,6 +431,17 @@ describe("save v2", () => {
     expect(before).toEqual(snapshot);
   });
 
+  it("raises the haul and Star records from an Endless session, never lowers them", () => {
+    const base = playedSave();
+    const result = { earned: 10, caught: { normal: 1 }, durationMs: 1000, maxCombo: 1, goldenCaught: 0, chestsOpened: 0 };
+    const raised = recordEndless(base, { ...result, bestTickCatches: base.stats.bestTickCatches + 7, bestStarHits: base.stats.bestStarHits + 4 });
+    expect(raised.stats.bestTickCatches).toBe(base.stats.bestTickCatches + 7);
+    expect(raised.stats.bestStarHits).toBe(base.stats.bestStarHits + 4);
+    const kept = recordEndless(raised, { ...result, bestTickCatches: 0, bestStarHits: 0 });
+    expect(kept.stats.bestTickCatches).toBe(raised.stats.bestTickCatches);
+    expect(kept.stats.bestStarHits).toBe(raised.stats.bestStarHits);
+  });
+
   it("Play Again retains achievements and Endless records while clearing the campaign", () => {
     const before = recordEndless(playedSave(), { earned: 40, caught: { normal: 3 }, durationMs: 2000, maxCombo: 2, goldenCaught: 1, chestsOpened: 0 });
     before.achievements = { "first-normal": NOW.toISOString(), "future-badge": NOW.toISOString() };
