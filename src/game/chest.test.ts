@@ -241,3 +241,85 @@ describe("Chest opening", () => {
     expect(golden).toBeGreaterThan(15);
   });
 });
+
+describe("Guaranteed chests", () => {
+  it("bypasses zero chance and appears by 40% of an eligible round", () => {
+    const stats = quietStats(s => { s.chestChance = 0; s.roundSeconds = 20; });
+    for (let seed = 1; seed <= 30; seed++) {
+      const options = { round: 3, final: false, guarantee: { chest: true } };
+      const at = chestTime(options, stats, createRng(seed));
+      expect(at).not.toBeNull();
+      expect(at).toBeGreaterThanOrEqual(4);
+      expect(at).toBeLessThanOrEqual(8);
+      const world = new World(stats, createRng(seed), 800, 600, options);
+      run(world, 8 + STEP);
+      expect(world.chest).not.toBeNull();
+    }
+  });
+
+  it("keeps the round gate, except in the Final Round", () => {
+    const stats = quietStats(s => { s.chestChance = 0; s.roundSeconds = 20; });
+    for (const round of [1, 2]) {
+      const rng = createRng(7);
+      expect(chestTime({ round, final: false, guarantee: { chest: true } }, stats, rng)).toBeNull();
+      expect(rng()).toBe(createRng(7)());
+    }
+    const world = new World(stats, createRng(7), 800, 600, { round: 1, final: true, guarantee: { chest: true } });
+    run(world, 8 + STEP);
+    expect(world.chest).not.toBeNull();
+  });
+
+  it("overrides a failed chance roll", () => {
+    const stats = quietStats(s => { s.chestChance = 0.1; s.roundSeconds = 20; });
+    expect(chestTime({ round: 3, final: false }, stats, () => 0.99)).toBeNull();
+    expect(chestTime({ round: 3, final: false, guarantee: { chest: true } }, stats, () => 0.99)).toBeLessThanOrEqual(8);
+  });
+});
+
+describe("Endless chest rewards", () => {
+  it("turns every time reward into a golden spill without time events", () => {
+    for (let seed = 1; seed <= 30; seed++) {
+      const world = new World(quietStats(), createRng(seed), 800, 600, { round: 1, final: false, endless: true });
+      const { events } = openIt(world, park(world));
+      expect(world.timeLeft).toBe(Infinity);
+      expect(world.bonusCount.treasure).toBe(1);
+      expect(world.earned).toBeGreaterThan(0);
+      expect(events.find(e => e.type === "chest-open")).toMatchObject({ reward: "golden" });
+      expect(events.filter(e => e.type === "golden")).toHaveLength(CHEST.goldenFish);
+      expect(events.some(e => e.type === "time-bonus")).toBe(false);
+    }
+  });
+});
+
+describe("Endless chest arrivals", () => {
+  it("recurs every 60–100 seconds even with zero chance in round 1", () => {
+    const world = new World(quietStats(s => { s.chestChance = 0; }), createRng(42), 800, 600,
+      { round: 1, final: false, endless: true });
+    let previous: Chest | null = null;
+    const arrivals: number[] = [];
+    for (let i = 0; i < 600 / STEP; i++) {
+      world.update(STEP);
+      if (world.chest && world.chest !== previous) arrivals.push(world.elapsed);
+      previous = world.chest;
+      world.drainEvents();
+    }
+    expect(arrivals.length).toBeGreaterThanOrEqual(6);
+    for (let i = 0; i < arrivals.length; i++) {
+      const gap = arrivals[i]! - (arrivals[i - 1] ?? 0);
+      expect(gap).toBeGreaterThanOrEqual(60);
+      expect(gap).toBeLessThanOrEqual(100 + STEP);
+    }
+  });
+
+  it("waits for the previous chest to be gone instead of replacing it", () => {
+    const world = new World(quietStats(s => { s.chestChance = 0; }), createRng(42), 800, 600,
+      { round: 1, final: false, endless: true });
+    const parked = park(world);
+    run(world, 210);
+    expect(world.chest).toBe(parked);
+    world.chest = null;
+    world.update(STEP);
+    expect(world.chest).not.toBeNull();
+    expect(world.chest).not.toBe(parked);
+  });
+});

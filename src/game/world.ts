@@ -9,6 +9,18 @@ const TAU = Math.PI * 2;
 /** The sim always advances in fixed steps, so a seed replays a round exactly. */
 export const STEP = 1 / 60;
 
+/** Endless sandbox pacing and population limit. */
+export const ENDLESS: {
+  /** Seconds between the starts of frenzy waves. */
+  frenzyEvery: number;
+  /** Seconds until the first wave. */
+  firstFrenzy: number;
+  /** Seconds between chest arrivals, waiting if the previous chest is still present. */
+  chestGap: [number, number];
+  /** Most fish swimming at once: about 1.3× the median peak (61) in full-upgrade timed play. */
+  maxFish: number;
+} = { frenzyEvery: 90, firstFrenzy: 45, chestGap: [60, 100], maxFish: 80 };
+
 /** Gap between the swimming area and the screen edge, px. */
 const EDGE_MARGIN = 30;
 /** Fish never orbit closer to the centre than this, so they stay clear of the boat, px. */
@@ -81,6 +93,8 @@ export interface Shot {
   age: number;
   /** Fish id → seconds until this shot can hit that fish again. */
   cooldowns: Map<number, number>;
+  /** Damaging hits over this shot's whole flight. Absent until its first hit. */
+  hits?: number;
 }
 
 /** A visual cue from a fish type's ability. The type's `fx` hook turns it into effects. */
@@ -127,6 +141,10 @@ export interface RoundOptions {
   round: number;
   /** True for the Final Round, played once the whole tree is bought. */
   final: boolean;
+  /** Endless sandbox: no clock, recurring frenzy waves and chests. */
+  endless?: boolean;
+  /** Events a bounty needs: make sure they happen this round. */
+  guarantee?: { chest?: boolean; golden?: boolean };
 }
 
 /** True for a round with a Feeding Frenzy wave: every fifth round, and the Final Round. */
@@ -172,9 +190,13 @@ export class World {
   chest: Chest | null = null;
   /** Captures in the current combo after the first. */
   combo = 0;
+  /** Highest combo multiplier reached this round (1 when no combo). */
+  maxComboMult = 1;
+  /** Most fish captured directly by a single net tick this round. */
+  bestTickCatches = 0;
+  /** Most damaging hits over a single Star shot's whole flight this round. */
+  bestStarHits = 0;
   pointer: Point | null = null;
-  /** This round's Feeding Frenzy wave, or null in a round without one. */
-  readonly frenzy: FrenzyWave | null;
   /** Fish caught while the Feeding Frenzy wave ran, and the money they earned. Part of the totals above. */
   frenzyCaught = 0;
   frenzyEarned = 0;
@@ -194,8 +216,14 @@ export class World {
   private eventStream: Rng | null = null;
   /** Progress towards the next golden fish, in fish. */
   private goldenProgress = 0;
-  /** Round time the chest appears at; null once it has, or if this round has none. */
+  /** A guarantee only supplies a fallback if no golden fish has appeared at all. */
+  private goldenSeen = false;
+  /** Next chest arrival; null after the single timed chest, or in a timed round without one. */
   private chestAt: number | null = null;
+  private finished = false;
+  private readonly firstWave: FrenzyWave | null;
+  /** Compensated elapsed sum in endless, keeping wave boundaries on their fixed steps for hours. */
+  private elapsedError = 0;
 
   constructor(
     readonly stats: Stats,
@@ -204,20 +232,22 @@ export class World {
     private _height: number,
     readonly round: RoundOptions = { round: 1, final: false },
   ) {
-    this.timeLeft = stats.roundSeconds;
-    // Only a frenzy round draws a random number for it, so every other round plays out as before.
-    if (isFrenzyRound(round)) {
-      const start = stats.roundSeconds * FRENZY_START;
-      this.frenzy = { start, end: start + stats.frenzySeconds, sweep: this.rng() < 0.5 ? 1 : -1 };
+    this.timeLeft = this.endless ? Infinity : stats.roundSeconds;
+    // Only frenzy rounds and endless draw for a wave, so other timed rounds replay as before.
+    if (this.endless || isFrenzyRound(round)) {
+      const start = this.endless ? ENDLESS.firstFrenzy : stats.roundSeconds * FRENZY_START;
+      this.firstWave = { start, end: start + stats.frenzySeconds, sweep: this.rng() < 0.5 ? 1 : -1 };
     } else {
-      this.frenzy = null;
+      this.firstWave = null;
     }
     for (let i = 0; i < stats.startFish; i++) this.spawn();
-    // Events that can't happen this round (always so in round 1) draw nothing, so those rounds
+    // Events that can't happen this round (always so in timed round 1) draw nothing, so those rounds
     // replay as they always have.
     if (this.hasGolden) this.goldenProgress = this.eventRng();
-    const chestRound = this.round.final || (this.round.round >= CHEST.fromRound && stats.chestChance > 0);
-    if (chestRound) this.chestAt = chestTime(this.round, stats, this.eventRng);
+    const chestRound = this.round.final ||
+      (this.round.round >= CHEST.fromRound && (stats.chestChance > 0 || this.round.guarantee?.chest));
+    if (this.endless) this.chestAt = range(this.eventRng, ...ENDLESS.chestGap);
+    else if (chestRound) this.chestAt = chestTime(this.round, stats, this.eventRng);
   }
 
   get width(): number {
@@ -229,7 +259,17 @@ export class World {
   }
 
   get over(): boolean {
-    return this.timeLeft <= 0;
+    return this.endless ? this.finished : this.timeLeft <= 0;
+  }
+
+  /** True in the endless sandbox. */
+  get endless(): boolean {
+    return this.round.endless === true;
+  }
+
+  /** Ends an endless session. No-op in a timed round. */
+  finish(): void {
+    if (this.endless) this.finished = true;
   }
 
   /** How far the net is through charging its next tick, 0 to 1. */
@@ -243,6 +283,21 @@ export class World {
 
   get comboMult(): number {
     return Math.min(1 + this.combo * this.stats.comboStep, this.stats.comboMax);
+  }
+
+  /** The current or next frenzy wave; null only in timed rounds without a wave. */
+  get frenzy(): FrenzyWave | null {
+    const first = this.firstWave;
+    if (!this.endless || !first) return first;
+    // Derive from the first start and an integer index, never by adding a period to a drifting
+    // timer. Between waves expose the next one, so the renderer and HUD can read its duration.
+    let index = Math.max(0, Math.floor((this.elapsed - first.start) / ENDLESS.frenzyEvery));
+    if (this.elapsed >= first.start + index * ENDLESS.frenzyEvery + this.stats.frenzySeconds) index++;
+    const start = first.start + index * ENDLESS.frenzyEvery;
+    return {
+      start, end: start + this.stats.frenzySeconds,
+      sweep: index % 2 === 0 ? first.sweep : first.sweep === 1 ? -1 : 1,
+    };
   }
 
   /** True while the Feeding Frenzy wave runs. */
@@ -309,7 +364,14 @@ export class World {
 
   update(dt: number): void {
     if (this.over) return;
-    this.elapsed += dt;
+    if (this.endless) {
+      const seconds = dt - this.elapsedError;
+      const elapsed = this.elapsed + seconds;
+      this.elapsedError = (elapsed - this.elapsed) - seconds;
+      this.elapsed = elapsed;
+    } else {
+      this.elapsed += dt;
+    }
     this.announceFrenzy();
     for (const kind of FISH_KINDS) FISH_SPECS[kind].update?.(this, dt);
     this.moveFish(dt);
@@ -319,7 +381,7 @@ export class World {
     this.floatChest(dt);
     this.tickNet(dt);
     this.processCaptures();
-    this.timeLeft = Math.max(0, this.timeLeft - dt);
+    if (!this.endless) this.timeLeft = Math.max(0, this.timeLeft - dt);
   }
 
   countOf(kind: FishKind): number {
@@ -336,10 +398,16 @@ export class World {
   }
 
   /**
-   * Adds a fish of `kind`, or of a type picked in proportion to spawn rates. There's no limit on fish
-   * in the water, only a type's own maxOnScreen. Undefined if nothing could spawn.
+   * Adds a fish of `kind`, or of a type picked in proportion to spawn rates. Timed rounds only
+   * enforce a type's maxOnScreen; endless also caps the swimming population. Refused spawns are
+   * discarded, including school members and capture by-products. Undefined if nothing could spawn.
    */
   spawn(kind?: FishKind, options: SpawnOptions = {}): Fish | undefined {
+    if (this.endless) {
+      let swimming = 0;
+      for (const fish of this.fish) if (!fish.captured) swimming++;
+      if (swimming >= ENDLESS.maxFish) return undefined;
+    }
     const k = kind ?? this.pickKind();
     if (!k) return undefined;
     const def = FISH[k];
@@ -384,7 +452,10 @@ export class World {
     this.place(fish);
     this.fish.push(fish);
     FISH_SPECS[k].onSpawn?.(this, fish);
-    if (fish.golden) this.emit({ type: "golden", kind: k, x: fish.x, y: fish.y });
+    if (fish.golden) {
+      this.goldenSeen = true;
+      this.emit({ type: "golden", kind: k, x: fish.x, y: fish.y });
+    }
     return fish;
   }
 
@@ -423,9 +494,9 @@ export class World {
     return Math.max(this.stats.tickSeconds, STEP);
   }
 
-  /** Golden fish swim in every round from GOLDEN.fromRound on. */
+  /** Golden fish swim from GOLDEN.fromRound on, and in every endless session. */
   private get hasGolden(): boolean {
-    return this.stats.goldenRate > 0 && (this.round.final || this.round.round >= GOLDEN.fromRound);
+    return this.stats.goldenRate > 0 && (this.endless || this.round.final || this.round.round >= GOLDEN.fromRound);
   }
 
   /**
@@ -511,6 +582,9 @@ export class World {
       this.goldenProgress -= 1;
       this.spawnGolden();
     }
+    if (this.round.guarantee?.golden && !this.goldenSeen && this.elapsed >= this.stats.roundSeconds * 0.35) {
+      this.spawnGolden();
+    }
   }
 
   /** Every type spawns on its own clock, so unlocking or boosting one never slows another. */
@@ -569,13 +643,16 @@ export class World {
   private netTick(point: Point): void {
     let hits = 0;
     let crits = 0;
+    let catches = 0;
     for (const fish of this.fish) {
       if (fish.captured || !this.inNet(fish, point)) continue;
       const crit = this.rng() < this.stats.critChance;
       if (crit) crits++;
       this.damage(fish, this.stats.netDamage * (crit ? this.stats.critMult : 1), "net");
+      if (fish.captured) catches++;
       hits++;
     }
+    this.bestTickCatches = Math.max(this.bestTickCatches, catches);
     const chest = this.chest;
     if (chest && chestInNet(chest, point, this.stats.netRadius)) {
       const crit = this.eventRng() < this.stats.critChance;
@@ -590,8 +667,8 @@ export class World {
 
   /** The chest appears on time, drifts across, and is gone if it reaches the far edge unopened. */
   private floatChest(dt: number): void {
-    if (this.chestAt !== null && this.elapsed >= this.chestAt) {
-      this.chestAt = null;
+    if (this.chestAt !== null && this.elapsed >= this.chestAt && (!this.endless || !this.chest)) {
+      this.chestAt = this.endless ? this.elapsed + range(this.eventRng, ...ENDLESS.chestGap) : null;
       this.chest = launchChest(this._width, this._height, this.eventRng);
     }
     if (this.chest && !moveChest(this.chest, dt, this._width, this._height)) this.chest = null;
@@ -607,7 +684,7 @@ export class World {
     this.earned += value;
     this.bonusCount.treasure++;
     this.bonusEarned.treasure += value;
-    const reward: ChestReward = this.eventRng() < 0.5 ? "time" : "golden";
+    const reward: ChestReward = this.eventRng() < 0.5 && !this.endless ? "time" : "golden";
     this.emit({ type: "chest-open", x: chest.x, y: chest.y, value, reward });
     if (reward === "time") {
       this.timeLeft += CHEST.bonusSeconds;
@@ -654,7 +731,7 @@ export class World {
       FISH_SPECS[fish.kind].onCapture?.(this, fish, source);
       if (this.rng() < this.stats.twinChance) this.spawn(fish.kind);
       const bonusRoom = this.stats.roundSeconds - this.bonusTime;
-      if (bonusRoom > 0 && this.rng() < this.stats.timeBonusChance) {
+      if (!this.endless && bonusRoom > 0 && this.rng() < this.stats.timeBonusChance) {
         const seconds = Math.min(this.stats.timeBonusSeconds, bonusRoom);
         this.bonusTime += seconds;
         this.timeLeft += seconds;
@@ -667,6 +744,7 @@ export class World {
   private updateCombo(): void {
     const chained = this.stats.comboWindow > 0 && this.elapsed - this.lastCaptureAt <= this.stats.comboWindow;
     this.combo = chained ? this.combo + 1 : 0;
+    this.maxComboMult = Math.max(this.maxComboMult, this.comboMult);
     this.lastCaptureAt = this.elapsed;
   }
 }

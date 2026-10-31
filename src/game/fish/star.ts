@@ -180,6 +180,8 @@ function hitFish(world: World, shot: Shot, fromX: number, fromY: number, grid: F
     if (segmentDistance(fish.x, fish.y, fromX, fromY, shot.x, shot.y) > reach) continue;
     shot.cooldowns.set(fish.id, HIT_COOLDOWN);
     world.damage(fish, shot.damage, "star");
+    shot.hits = (shot.hits ?? 0) + 1;
+    world.bestStarHits = Math.max(world.bestStarHits, shot.hits);
   }
 }
 
