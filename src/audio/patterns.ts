@@ -153,17 +153,21 @@ export interface MelodyNote {
 /** Steps the melody may take between notes, in scale degrees: mostly small, sometimes still. */
 const MOVES = [-2, -1, -1, 0, 1, 1, 2];
 
-/** The marimba line for one bar: a few notes on eighths, wandering by small steps, landing on chord tones on the beat. */
-export function melodyForBar(style: BedStyle, bar: number): MelodyNote[] {
+export type MelodyActivity = "hub" | "round" | "endless";
+
+/** The melody for one bar: a few notes on eighths, wandering by small steps, landing on chord tones on the beat. */
+export function melodyForBar(style: BedStyle, bar: number, activity: MelodyActivity = "hub"): MelodyNote[] {
   const rng = barRng(style.seed, bar);
-  if (rng() < style.restChance) return [];
+  if (rng() < (activity === "hub" ? style.restChance : 0.04)) return [];
   const chord = chordForBar(style, bar);
   const start = style.low + Math.floor(rng() * (style.high - style.low + 1));
   let degree = snapToChord(start, chord, style.low, style.high);
   const notes: MelodyNote[] = [];
   for (let eighth = 0; eighth < 8; eighth++) {
+    if (activity === "hub" && eighth % 2 === 1) continue;
     const onBeat = eighth % 2 === 0;
-    const chance = style.density * (eighth === 0 ? 1.5 : onBeat ? 1 : 0.5);
+    const density = activity === "hub" ? style.density : 0.78;
+    const chance = density * (eighth === 0 ? 1.5 : onBeat ? 1 : 0.5);
     if (rng() >= chance) continue;
     degree = Math.min(style.high, Math.max(style.low, degree + pick(rng, MOVES)));
     if (onBeat) degree = snapToChord(degree, chord, style.low, style.high);
@@ -172,7 +176,7 @@ export function melodyForBar(style: BedStyle, bar: number): MelodyNote[] {
   return notes;
 }
 
-export type GrooveSound = "kick" | "shaker" | "bass";
+export type GrooveSound = "kick" | "clap" | "openHat" | "shaker";
 
 export interface GrooveHit {
   step: number;
@@ -180,23 +184,40 @@ export interface GrooveHit {
   velocity: number;
 }
 
-/** The round groove for one bar: a soft kick on 1 and 3, a shaker on eighths, a plucked bass on the chord root. */
+/** Straight four-on-the-floor drums with backbeats, off-beat open hats and accented sixteenths. */
 export function grooveForBar(seed: number, bar: number): GrooveHit[] {
   const rng = barRng(seed ^ 0x27d4eb2f, bar);
-  const hits: GrooveHit[] = [
-    { step: 0, sound: "kick", velocity: 1 },
-    { step: 8, sound: "kick", velocity: 0.75 },
-    { step: 0, sound: "bass", velocity: 1 },
-    { step: 10, sound: "bass", velocity: 0.6 },
-  ];
-  if (rng() < 0.3) hits.push({ step: 14, sound: "kick", velocity: 0.45 });
-  else if (rng() < 0.3) hits.push({ step: 6, sound: "kick", velocity: 0.4 });
-  if (rng() < 0.4) hits.push({ step: 14, sound: "bass", velocity: 0.45 });
-  for (let step = 0; step < PATTERN_STEPS; step += 2) {
-    hits.push({ step, sound: "shaker", velocity: step % 4 === 2 ? 0.8 : 0.45 });
-    if (rng() < 0.18) hits.push({ step: step + 1, sound: "shaker", velocity: 0.25 });
+  const hits: GrooveHit[] = [];
+  for (let step = 0; step < PATTERN_STEPS; step++) {
+    if (step % 4 === 0) hits.push({ step, sound: "kick", velocity: step === 0 ? 1 : 0.88 });
+    if (step === 4 || step === 12) hits.push({ step, sound: "clap", velocity: 0.8 + rng() * 0.2 });
+    if (step % 4 === 2) hits.push({ step, sound: "openHat", velocity: 0.7 + rng() * 0.2 });
+    hits.push({ step, sound: "shaker", velocity: (step % 4 === 2 ? 0.55 : step % 2 === 0 ? 0.35 : 0.18) + rng() * 0.12 });
   }
   return hits;
+}
+
+export interface BassNote {
+  step: number;
+  /** Pentatonic degree in octave 2, including root inversions. */
+  degree: number;
+  velocity: number;
+  /** Length in sixteenth-note steps; leaves a gap before the next attack. */
+  length: number;
+}
+
+/** Syncopated root, octave and pentatonic passing tones, regenerated from the bar's seed. */
+export function bassForBar(seed: number, bar: number, chord: Chord | null): BassNote[] {
+  const rng = barRng(seed ^ 0x165667b1, bar);
+  const root = chord?.bass ?? 0;
+  const rhythms = [[0, 3, 6, 10, 13, 15], [0, 2, 7, 10, 12, 15], [0, 3, 5, 8, 11, 14]];
+  const steps = pick(rng, rhythms);
+  return steps.map((step, i) => ({
+    step,
+    degree: root + (i === 0 ? 0 : i === 2 ? SCALE_SIZE : pick(rng, [0, 1, 2, 3, SCALE_SIZE])),
+    velocity: i === 0 ? 1 : 0.5 + rng() * 0.3,
+    length: Math.min(1.6, (steps[i + 1] ?? PATTERN_STEPS) - step - 0.25),
+  }));
 }
 
 /**

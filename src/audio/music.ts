@@ -4,16 +4,18 @@ import {
   BED_STYLES,
   PATTERN_STEPS,
   arpForStep,
+  bassForBar,
   chordForBar,
   grooveForBar,
   isChordStart,
   melodyForBar,
   type BedStyle,
+  type MelodyActivity,
   type Chord,
   type GrooveHit,
   type MelodyNote,
 } from "./patterns";
-import { bass, bell, kick, noise, pad, pluck } from "./synth";
+import { bass, bell, clap, kick, noise, pad, pluck } from "./synth";
 import {
   BEATS_PER_BAR,
   DEFAULT_BPM,
@@ -66,11 +68,9 @@ const CROSSFADE = 3;
 const FIRST_FADE = 2.5;
 /** The Final Round always has some of the combo layer. */
 const FINAL_COMBO_FLOOR = 0.35;
-/** Swing: off-beat eighths of the groove land this share of a beat late. */
-const SWING = 0.08;
 
 /** Levels of the generated parts, before the music volume. Kept low: the music sits behind the game. */
-const LEVEL = { pad: 0.02, melody: 0.1, kick: 0.16, shaker: 0.03, bass: 0.08, arp: 0.07, stinger: 0.1 };
+const LEVEL = { pad: 0.016, melody: 0.065, kick: 0.12, clap: 0.045, openHat: 0.022, shaker: 0.016, bass: 0.06, arp: 0.045, stinger: 0.1 };
 
 /** Sets a parameter's course from `now`: hold until `start`, then ramp to `value` by `end`. */
 function glide(param: AudioParam, now: number, value: number, start: number, end: number, exponential = false): void {
@@ -151,9 +151,9 @@ class GeneratedBed extends Bed {
   private readonly style: BedStyle;
   private readonly out: GainNode;
   private nextStep = 0;
-  private melody: { bar: number; notes: MelodyNote[] } = { bar: -1, notes: [] };
+  private melody: { bar: number; activity: MelodyActivity; notes: MelodyNote[] } = { bar: -1, activity: "hub", notes: [] };
 
-  constructor(ctx: AudioContext, dest: AudioNode, chapter: number, start: number) {
+  constructor(ctx: AudioContext, dest: AudioNode, chapter: number, start: number, private readonly activityAt: (time: number) => MelodyActivity) {
     super(ctx, chapter, { origin: start, bpm: DEFAULT_BPM, beatsPerBar: BEATS_PER_BAR }, DEFAULT_KEY);
     this.style = BED_STYLES[chapter] ?? BED_STYLES[0]!;
     this.out = this.fader(dest);
@@ -180,7 +180,8 @@ class GeneratedBed extends Bed {
       const freqs = [degreeToHz(key, chord.bass, 2), ...chord.pad.map((degree) => degreeToHz(key, degree))];
       pad(ctx, out, { time, freqs, gain: LEVEL.pad, length: style.barsPerChord * barLength(this.clock), cutoff: style.padCutoff });
     }
-    if (this.melody.bar !== bar) this.melody = { bar, notes: melodyForBar(style, bar) };
+    const activity = this.activityAt(time);
+    if (this.melody.bar !== bar || this.melody.activity !== activity) this.melody = { bar, activity, notes: melodyForBar(style, bar, activity) };
     const kalimba = style.voice === "kalimba";
     for (const note of this.melody.notes) {
       if (note.step !== step) continue;
@@ -267,6 +268,7 @@ export class Music {
   /** The groove and combo layers play between these times. */
   private layersFrom = Infinity;
   private layersUntil = Infinity;
+  private bassLine: { bar: number; notes: ReturnType<typeof bassForBar> } = { bar: -1, notes: [] };
   private groove: { bar: number; hits: GrooveHit[] } = { bar: -1, hits: [] };
 
   /** The key the music is in, for sound effects to match. */
@@ -407,7 +409,7 @@ export class Music {
     const now = ctx.currentTime;
     const previous = this.current;
     const start = previous ? nextDownbeat(previous.clock, now + 0.1) : now + 0.1;
-    const bed = loaded ? new LoopBed(ctx, this.buses, chapter, loaded, start) : new GeneratedBed(ctx, this.buses.bed, chapter, start);
+    const bed = loaded ? new LoopBed(ctx, this.buses, chapter, loaded, start) : new GeneratedBed(ctx, this.buses.bed, chapter, start, (time) => this.activityAt(time));
     bed.fadeIn(start, previous ? CROSSFADE : FIRST_FADE);
     previous?.fadeOut(start, CROSSFADE);
     this.beds.push(bed);
@@ -441,6 +443,8 @@ export class Music {
       // A new bed: the layers follow its grid from its first downbeat.
       this.layerClock = bed.clock;
       this.layerStep = stepIndexAt(bed.clock, now);
+      this.groove.bar = -1;
+      this.bassLine.bar = -1;
     }
     for (; ; this.layerStep++) {
       const time = stepTime(bed.clock, this.layerStep);
@@ -457,8 +461,12 @@ export class Music {
     const chord = bed.chordAt(time);
     if (!bed.hasStem("groove")) {
       if (this.groove.bar !== bar) this.groove = { bar, hits: grooveForBar(bed.chapter + 1, bar) };
-      const swing = step % 4 === 2 ? SWING * beatLength(bed.clock) : 0;
-      for (const hit of this.groove.hits) if (hit.step === step) this.playHit(hit, time + swing, chord, bed.key);
+      for (const hit of this.groove.hits) if (hit.step === step) this.playHit(hit, time);
+      if (this.bassLine.bar !== bar) this.bassLine = { bar, notes: bassForBar(bed.chapter + 1, bar, chord) };
+      for (const note of this.bassLine.notes) {
+        if (note.step !== step) continue;
+        bass(ctx, this.buses.groove, time, degreeToHz(bed.key, note.degree, 2), LEVEL.bass * note.velocity, note.length * beatLength(bed.clock) / 4);
+      }
     }
     if (!bed.hasStem("combo")) {
       const note = arpForStep(chord, index, this.comboLevel);
@@ -475,7 +483,11 @@ export class Music {
     }
   }
 
-  private playHit(hit: GrooveHit, time: number, chord: Chord | null, key: Key): void {
+  private activityAt(time: number): MelodyActivity {
+    return time >= this.layersFrom && time < this.layersUntil ? "round" : "hub";
+  }
+
+  private playHit(hit: GrooveHit, time: number): void {
     const ctx = this.ctx!;
     const dest = this.buses.groove;
     switch (hit.sound) {
@@ -483,10 +495,13 @@ export class Music {
         kick(ctx, dest, time, LEVEL.kick * hit.velocity);
         break;
       case "shaker":
-        noise(ctx, dest, { time, gain: LEVEL.shaker * hit.velocity, attack: 0.004, decay: 0.07, filter: "highpass", from: 7000, q: 0.7 });
+        noise(ctx, dest, { time, gain: LEVEL.shaker * hit.velocity, attack: 0.001, decay: 0.025, filter: "highpass", from: 7000, q: 0.7 });
         break;
-      case "bass":
-        bass(ctx, dest, time, degreeToHz(key, chord?.bass ?? 0, 2), LEVEL.bass * hit.velocity, 0.45);
+      case "clap":
+        clap(ctx, dest, time, LEVEL.clap * hit.velocity);
+        break;
+      case "openHat":
+        noise(ctx, dest, { time, gain: LEVEL.openHat * hit.velocity, attack: 0.002, decay: 0.12, filter: "highpass", from: 6500, q: 0.6 });
         break;
     }
   }

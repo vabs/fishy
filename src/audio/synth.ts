@@ -31,6 +31,7 @@ function oscillator(ctx: AudioContext, wave: Wave, freq: number, dest: AudioNode
 /** Disconnects `nodes` when `source` stops, so finished notes can be garbage collected. */
 function cleanUp(source: AudioScheduledSourceNode, ...nodes: AudioNode[]): void {
   source.onended = () => {
+    source.disconnect();
     for (const node of nodes) node.disconnect();
   };
 }
@@ -141,13 +142,13 @@ export function noise(ctx: AudioContext, dest: AudioNode, o: NoiseOptions): { en
   return { end, out };
 }
 
-/** A soft, low kick: a sine that drops in pitch. */
+/** A short, punchy kick: a sine that drops in pitch. */
 export function kick(ctx: AudioContext, dest: AudioNode, time: number, gain: number): number {
   const out = voice(ctx, dest);
-  const end = strike(out.gain, time, gain, 0.004, 0.32);
-  const osc = oscillator(ctx, "sine", 110, out, time, end + 0.02);
-  osc.frequency.setValueAtTime(110, time);
-  osc.frequency.exponentialRampToValueAtTime(46, time + 0.14);
+  const end = strike(out.gain, time, gain, 0.002, 0.16);
+  const osc = oscillator(ctx, "sine", 145, out, time, end + 0.02);
+  osc.frequency.setValueAtTime(145, time);
+  osc.frequency.exponentialRampToValueAtTime(48, time + 0.065);
   cleanUp(osc, out);
   return end;
 }
@@ -168,11 +169,14 @@ export function bass(ctx: AudioContext, dest: AudioNode, time: number, freq: num
   const out = voice(ctx, dest);
   const filter = ctx.createBiquadFilter();
   filter.type = "lowpass";
-  filter.frequency.value = 420;
-  filter.connect(out);
-  const end = strike(out.gain, time, gain, 0.012, length);
+  filter.frequency.value = 280;
+  const highpass = ctx.createBiquadFilter();
+  highpass.type = "highpass";
+  highpass.frequency.value = 42;
+  filter.connect(highpass).connect(out);
+  const end = strike(out.gain, time, gain, 0.008, length);
   const osc = oscillator(ctx, "triangle", freq, filter, time, end + 0.02);
-  cleanUp(osc, filter, out);
+  cleanUp(osc, filter, highpass, out);
   return end;
 }
 
@@ -255,5 +259,15 @@ export function run(
   out.gain.exponentialRampToValueAtTime(SILENT, end);
   cleanUp(osc, filter, out, sparkle);
   cleanUp(octave);
+  return end;
+}
+
+/** A compact snare/clap: filtered noise with a quiet, short sine body. */
+export function clap(ctx: AudioContext, dest: AudioNode, time: number, gain: number): number {
+  const { end } = noise(ctx, dest, { time, gain, attack: 0.003, decay: 0.105, filter: "bandpass", from: 1900, to: 3200, q: 0.6 });
+  const out = voice(ctx, dest);
+  strike(out.gain, time, gain * 0.35, 0.002, 0.065);
+  const body = oscillator(ctx, "sine", 185, out, time, end + 0.02);
+  cleanUp(body, out);
   return end;
 }

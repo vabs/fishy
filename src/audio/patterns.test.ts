@@ -5,6 +5,7 @@ import {
   CHORDS,
   PATTERN_STEPS,
   arpForStep,
+  bassForBar,
   chordForBar,
   grooveForBar,
   melodyForBar,
@@ -70,7 +71,7 @@ describe("melodyForBar", () => {
     for (const style of BED_STYLES) {
       const bars = Array.from({ length: 256 }, (_, bar) => melodyForBar(style, bar));
       const notesPerBar = bars.reduce((sum, notes) => sum + notes.length, 0) / bars.length;
-      expect(notesPerBar).toBeGreaterThan(0.8);
+      expect(notesPerBar).toBeGreaterThan(0.3);
       expect(notesPerBar).toBeLessThan(4);
       expect(bars.some((notes) => notes.length === 0)).toBe(true);
       const text = bars.map((notes) => JSON.stringify(notes));
@@ -83,15 +84,16 @@ describe("melodyForBar", () => {
 });
 
 describe("grooveForBar", () => {
-  it("has a kick and bass on the downbeat and a shaker on every eighth", () => {
+  it("puts the kick on every beat, claps on 2 and 4, and open hats on the ands", () => {
     for (let bar = 0; bar < 50; bar++) {
       const hits = grooveForBar(5, bar);
-      expect(hits).toContainEqual({ step: 0, sound: "kick", velocity: 1 });
-      expect(hits).toContainEqual({ step: 0, sound: "bass", velocity: 1 });
-      for (let step = 0; step < PATTERN_STEPS; step += 2) {
-        expect(hits.some((hit) => hit.sound === "shaker" && hit.step === step)).toBe(true);
-      }
-      expect(hits.every((hit) => hit.step >= 0 && hit.step < PATTERN_STEPS)).toBe(true);
+      const steps = (sound: string) => hits.filter((hit) => hit.sound === sound).map((hit) => hit.step);
+      expect(steps("kick")).toEqual([0, 4, 8, 12]);
+      expect(steps("clap")).toEqual([4, 12]);
+      expect(steps("openHat")).toEqual([2, 6, 10, 14]);
+      expect(steps("shaker")).toEqual(Array.from({ length: 16 }, (_, i) => i));
+      expect(new Set(hits.filter((hit) => hit.sound === "shaker").map((hit) => hit.velocity)).size).toBeGreaterThan(2);
+      expect(hits.every((hit) => hit.step >= 0 && hit.step < PATTERN_STEPS && hit.velocity > 0 && hit.velocity <= 1)).toBe(true);
     }
   });
 
@@ -128,5 +130,36 @@ describe("arpForStep", () => {
   it("runs the whole scale when the chord is unknown (a loop file is playing)", () => {
     const degrees = new Set(Array.from({ length: 10 }, (_, step) => arpForStep(null, step, 1)!.degree % SCALE_SIZE));
     expect(degrees.size).toBe(SCALE_SIZE);
+  });
+});
+
+describe("bassForBar", () => {
+  it("anchors the chord root, jumps octaves and uses pentatonic passing notes", () => {
+    for (const chord of Object.values(CHORDS)) {
+      const bars = Array.from({ length: 64 }, (_, bar) => bassForBar(11, bar, chord));
+      for (const notes of bars) {
+        expect(notes[0]).toMatchObject({ step: 0, degree: chord.bass });
+        expect(notes.some((note) => note.degree === chord.bass + 5)).toBe(true);
+        expect(notes.some((note) => note.step % 4 !== 0)).toBe(true);
+        for (const note of notes) {
+          expect(D_MAJOR_PENTATONIC.has(degreeToMidi(DEFAULT_KEY, note.degree, 2) % 12)).toBe(true);
+          expect(note.step + note.length).toBeLessThanOrEqual(16);
+          expect(note.length).toBeGreaterThan(0);
+        }
+      }
+      expect(new Set(bars.map((notes) => JSON.stringify(notes))).size).toBeGreaterThan(32);
+      expect(bassForBar(11, 8, chord)).toEqual(bassForBar(11, 8, chord));
+    }
+  });
+});
+
+describe("melody activity", () => {
+  it("leaves room in the hub and plays more notes in a round", () => {
+    for (const style of BED_STYLES) {
+      const count = (mode: "hub" | "round") => Array.from({ length: 128 }, (_, bar) => melodyForBar(style, bar, mode)).flat().length;
+      expect(count("round")).toBeGreaterThan(count("hub") * 2);
+      const hub = melodyForBar({ ...style, restChance: 0, density: 1 }, 0, "hub");
+      expect(hub.every((note) => note.step % 4 === 0)).toBe(true);
+    }
   });
 });
