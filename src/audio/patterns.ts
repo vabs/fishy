@@ -238,3 +238,10 @@ export function arpForStep(chord: Chord | null, step: number, level: number): { 
   const accent = step % 4 === 0 ? 1 : 0.7;
   return { degree, velocity: (0.4 + 0.6 * level) * accent };
 }
+
+/** An octave above the combo arp plus a tambourine accent on every sixteenth, only during a wave. */
+export function frenzyForStep(chord: Chord | null, step: number, active: boolean): { degree: number; velocity: number; percussion: number } | null {
+  if (!active) return null;
+  const note = arpForStep(chord, step, 1)!;
+  return { degree: note.degree + SCALE_SIZE, velocity: note.velocity * 0.65, percussion: step % 4 === 2 ? 1 : step % 2 === 0 ? 0.65 : 0.35 };
+}

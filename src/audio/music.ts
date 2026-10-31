@@ -8,6 +8,7 @@ import {
   bassForBar,
   chordForBar,
   grooveForBar,
+  frenzyForStep,
   isChordStart,
   melodyForBar,
   type BedStyle,
@@ -253,7 +254,7 @@ class LoopBed extends Bed {
 export class Music {
   private ctx: AudioContext | null = null;
   private filter!: BiquadFilterNode;
-  private buses!: Record<keyof Buses | "stinger" | "urgency", GainNode>;
+  private buses!: Record<keyof Buses | "stinger" | "urgency" | "frenzy", GainNode>;
   private beds: Bed[] = [];
   private current: Bed | null = null;
   /** Null until fetched. */
@@ -264,6 +265,7 @@ export class Music {
   private mode: MusicMode = "hub";
   private combo = 0;
   private urgency = 0;
+  private frenzy = false;
   private riser: NoiseRiser | null = null;
   /** The generated layers' grid, and their next step on it. */
   private layerClock: Clock | null = null;
@@ -293,6 +295,7 @@ export class Music {
       combo: gainNode(ctx, 0, this.filter),
       stinger: gainNode(ctx, 1, output),
       urgency: gainNode(ctx, 0, this.filter),
+      frenzy: gainNode(ctx, 0, this.filter),
     };
     window.setInterval(() => this.pump(), TICK_MS);
     void fetchManifest().then(({ manifest, base }) => {
@@ -308,6 +311,7 @@ export class Music {
     if (mode !== "round" && mode !== "final") {
       this.combo = 0;
       this.setUrgency(0);
+      this.setFrenzy(false);
     }
     this.applyMode(false);
   }
@@ -324,6 +328,16 @@ export class Music {
     if (Math.abs(level - this.combo) < 0.01) return;
     this.combo = level;
     if (this.ctx && this.current) this.current.setStem("combo", this.comboLevel, this.ctx.currentTime);
+  }
+
+  /** A wave adds a bright octave lead and a separate tambourine layer. */
+  setFrenzy(active: boolean): void {
+    const next = active && (this.mode === "round" || this.mode === "final");
+    if (next === this.frenzy) return;
+    this.frenzy = next;
+    if (!this.ctx || !this.buses) return;
+    const now = this.ctx.currentTime;
+    glide(this.buses.frenzy.gain, now, next ? 1 : 0, now, now + 0.025);
   }
 
   /** Last-five-seconds lift. Its dedicated bus also silences notes already in the lookahead. */
@@ -488,6 +502,11 @@ export class Music {
     const bar = Math.floor(index / perBar);
     const step = index % perBar;
     const chord = bed.chordAt(time);
+    const frenzy = frenzyForStep(chord, index, this.frenzy);
+    if (frenzy) {
+      pluck(ctx, this.buses.frenzy, { time, freq: degreeToHz(bed.key, frenzy.degree), gain: 0.028 * frenzy.velocity, decay: 0.18, overtone: 2, bright: 0.35 });
+      noise(ctx, this.buses.frenzy, { time, gain: 0.018 * frenzy.percussion, attack: 0.001, decay: 0.045, filter: "highpass", from: 8800, q: 1.2 });
+    }
     const roll = urgencyHatForStep(step, this.urgency);
     if (roll !== null) {
       noise(ctx, this.buses.urgency, { time, gain: 0.025 * roll, attack: 0.001, decay: 0.035, filter: "highpass", from: 7500, q: 0.5 });

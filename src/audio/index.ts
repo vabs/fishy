@@ -131,9 +131,13 @@ export function createGameAudio(): GameAudio {
         const sinceCapture = world.elapsed - lastCaptureAt;
         // The combo layer also lifts the music for a Feeding Frenzy wave.
         const frenzy = world.frenzyActive;
+        music.setFrenzy(!world.over && frenzy);
         music.setUrgency(world.over ? 0 : urgencyLevel(world.timeLeft));
         music.setCombo(world.over ? 0 : comboLevel({ mult: world.comboMult, max: comboMax, sinceCapture, window: comboWindow, frenzy }));
-      } else music.setUrgency(0);
+      } else {
+        music.setUrgency(0);
+        music.setFrenzy(false);
+      }
       music.pump();
     },
 

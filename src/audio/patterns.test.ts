@@ -6,6 +6,7 @@ import {
   PATTERN_STEPS,
   arpForStep,
   bassForBar,
+  frenzyForStep,
   chordForBar,
   grooveForBar,
   melodyForBar,
@@ -161,5 +162,18 @@ describe("melody activity", () => {
       const hub = melodyForBar({ ...style, restChance: 0, density: 1 }, 0, "hub");
       expect(hub.every((note) => note.step % 4 === 0)).toBe(true);
     }
+  });
+});
+
+describe("frenzyForStep", () => {
+  it("adds a higher lead and accented percussion for every sixteenth of a wave", () => {
+    expect(frenzyForStep(CHORDS.I, 0, false)).toBeNull();
+    for (let step = 0; step < 32; step++) {
+      const hit = frenzyForStep(CHORDS.vi, step, true)!;
+      expect(hit.degree).toBe(arpForStep(CHORDS.vi, step, 1)!.degree + 5);
+      expect(hit.percussion).toBeGreaterThan(0);
+      expect(hit.percussion).toBeLessThanOrEqual(1);
+    }
+    expect(frenzyForStep(null, 0, true)!.percussion).toBeGreaterThan(frenzyForStep(null, 1, true)!.percussion);
   });
 });
