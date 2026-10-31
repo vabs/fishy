@@ -1,7 +1,7 @@
 /*
  * Small synthesised instruments, shared by the music and the sound effects. Each call builds a few
  * oscillators or a noise source for one note, schedules it at `time` (AudioContext seconds) and
- * cleans the nodes up when it ends. Every function returns the time the note is silent.
+ * cleans the nodes up when it ends. One-shot voices return their end time; the riser has an explicit stop.
  */
 
 /** "Silent" for exponential ramps, which can't reach 0: −80 dB. */

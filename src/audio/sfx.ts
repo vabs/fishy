@@ -162,6 +162,7 @@ export class Sfx {
     lfo.start(time);
     lfo.stop(end + 0.05);
     lfo.onended = () => {
+      lfo.disconnect();
       depth.disconnect();
       swirl.disconnect();
     };

@@ -111,7 +111,15 @@ describe("instrument lifecycle", () => {
   });
 });
 
-describe("reward sound routing", () => {
+describe("sound effect routing and cleanup", () => {
+  it("disconnects the whirlpool modulation source along with its noise", () => {
+    vi.stubGlobal("PeriodicWave", Wave);
+    const ctx = new Context();
+    const engine = { running: true, ctx, sfx: new Node() } as unknown as AudioEngine;
+    new Sfx(engine, () => ({ tonic: 2, mode: "major" })).implode(10);
+    ctx.finish();
+  });
+
   it("rate-limits each reward, follows the current key and routes through the effects bus", () => {
     vi.stubGlobal("PeriodicWave", Wave);
     const ctx = new Context();
