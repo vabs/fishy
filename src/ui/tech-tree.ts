@@ -56,10 +56,10 @@ const TOUCH_MIN_SCALE = 48 / NODE_SIZE;
 
 /** Fish lanes take the fish's colour in the player's palette, published as --fish-<kind> by main.ts. */
 const LANE_TINTS: Record<LaneKey, string> = {
-  net: "#24617a",
-  time: "#76516b",
-  spawning: "#276958",
-  economy: "#8a541a",
+  net: "#a5d1d1",
+  time: "#ddbed9",
+  spawning: "#aad6b0",
+  economy: "#f0ca7b",
   ...(Object.fromEntries(
     Object.entries(FISH).map(([kind, def]) => [kind, `var(--fish-${kind}, ${def.body})`]),
   ) as Record<keyof typeof FISH, string>),
@@ -212,6 +212,9 @@ export function mountTechTree(container: HTMLElement, options: { onBuy(nodeId: s
   const root = html("div", "tech");
   root.tabIndex = -1;
   const world = html("div", "tech-world");
+  // One chart covers every lane, including the outer labels, at every stage of progression.
+  const chartSize = Math.max(2400, (layout.extent + LABEL_GAP + FIT_MARGIN + ROOT_SIZE) * 2);
+  world.style.setProperty("--chart-size", `${chartSize}px`);
   const back = svg("svg", { class: "tech-svg", width: 1, height: 1, "aria-hidden": "true" });
   const ringLayer = svg("g", { class: "tech-rings" });
   const edgeLayer = svg("g", { class: "tech-edges" });

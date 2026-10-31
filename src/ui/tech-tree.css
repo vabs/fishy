@@ -17,8 +17,17 @@
   height: 100%;
   overflow: hidden;
   background:
-    radial-gradient(circle at 50% 50%, rgba(158, 240, 255, 0.08), transparent 38%),
-    radial-gradient(ellipse at 50% 50%, var(--tech-water) 0%, #093248 45%, var(--tech-water-deep) 100%);
+    radial-gradient(
+      circle at 50% 50%,
+      rgba(158, 240, 255, 0.08),
+      transparent 38%
+    ),
+    radial-gradient(
+      ellipse at 50% 50%,
+      var(--tech-water) 0%,
+      #093248 45%,
+      var(--tech-water-deep) 100%
+    );
   color: var(--ink, #fff7e6);
   font-family: inherit;
   cursor: grab;
@@ -125,7 +134,11 @@
   padding: 0;
   border: 2px solid color-mix(in srgb, var(--tint) 45%, transparent);
   border-radius: 50%;
-  background: radial-gradient(circle at 50% 30%, var(--tech-node), var(--tech-node-deep));
+  background: radial-gradient(
+    circle at 50% 30%,
+    var(--tech-node),
+    var(--tech-node-deep)
+  );
   color: var(--tint);
   font: inherit;
   cursor: pointer;
@@ -243,7 +256,11 @@
 /* Maxed: filled with the lane colour. */
 .tech-node.is-maxed {
   border-color: var(--tint);
-  background: radial-gradient(circle at 50% 30%, color-mix(in srgb, var(--tint) 85%, white), var(--tint));
+  background: radial-gradient(
+    circle at 50% 30%,
+    color-mix(in srgb, var(--tint) 85%, white),
+    var(--tint)
+  );
   color: #06202e;
   box-shadow:
     0 6px 16px rgba(0, 0, 0, 0.4),
@@ -538,10 +555,14 @@
   top: calc(var(--viewport-top, 0px) + var(--app-height, 100dvh));
   left: 50%;
   width: min(480px, 100%);
-  max-height: calc(var(--app-height, 100dvh) - 12px - env(safe-area-inset-top, 0px));
+  max-height: calc(
+    var(--app-height, 100dvh) - 12px - env(safe-area-inset-top, 0px)
+  );
   box-sizing: border-box;
   transform: translate(-50%, -100%);
-  padding: 20px max(18px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(18px, env(safe-area-inset-left, 0px));
+  padding: 20px max(18px, env(safe-area-inset-right, 0px))
+    max(16px, env(safe-area-inset-bottom, 0px))
+    max(18px, env(safe-area-inset-left, 0px));
   overflow-y: auto;
   overscroll-behavior: contain;
   touch-action: pan-y;
@@ -659,57 +680,231 @@
 
 /* A chart that travels with the graph. The viewport's paper continues beyond its edges. */
 .tech {
-  --tech-edge: #7e624a55; --tech-edge-owned: #5b4938b3;
-  --tech-ready: #a96824; --tech-ready-glow: #b6772b66; --tech-short: #8b3f2c;
-  --tech-node: #16495b; --tech-node-deep: #0d3544; --tech-pill: #fff2d6;
-  background: #e3c995 url("../../public/art/paper.webp") center / 700px;
+  --tech-edge: #7e624a55;
+  --tech-edge-owned: #5b4938b3;
+  --tech-ready: #a96824;
+  --tech-ready-glow: #b6772b66;
+  --tech-short: #8b3f2c;
+  --tech-node: #16495b;
+  --tech-node-deep: #0d3544;
+  --tech-pill: #fff2d6;
+  background-color: var(--paper, #f3e3c3);
+  background-image:
+    linear-gradient(#72563f0c 1px, transparent 1px),
+    linear-gradient(90deg, #72563f0c 1px, transparent 1px);
+  background-size: 64px 64px;
   color: var(--ink-dark, #3b2414);
 }
 .tech-world::before {
-  content: ""; position: absolute; left: -2400px; top: -2400px; width: 4800px; height: 4800px;
-  background: url("../../public/art/chart.webp") center / 2400px 2400px;
+  content: "";
+  position: absolute;
+  left: calc(var(--chart-size, 2400px) / -2);
+  top: calc(var(--chart-size, 2400px) / -2);
+  width: var(--chart-size, 2400px);
+  height: var(--chart-size, 2400px);
+  background: url("/art/chart.webp") center / 100% 100% no-repeat;
+  mask-image: radial-gradient(ellipse at center, #000 65%, transparent 100%);
   pointer-events: none;
 }
-.tech-world::after { content: ""; position: absolute; left: 530px; top: -420px; width: 320px; height: 320px; background: url("../../public/art/compass.webp") center / contain no-repeat; opacity: .12; pointer-events: none; }
-.tech-rings circle { stroke: #6c675635; stroke-dasharray: 3 9; }
-.tech-edges line { stroke-width: 2.5; }
-.tech-label { fill: var(--ink-dark) !important; font: 400 clamp(12px, calc(13px / var(--zoom, 1)), 21px) var(--display); letter-spacing: .1em; opacity: .9; paint-order: stroke; stroke: #f3e3c3; stroke-width: 4px; }
-.tech-boat { opacity: .9; }
-.tech-boat.has-art .tech-boat-bob { display: none; }
-.tech-boat-art { filter: drop-shadow(0 4px 3px #5b402b40); }
-.tech-node { border: 3px solid #b89452; color: var(--tint); box-shadow: inset 0 0 0 2px #f3d28677, 0 3px 0 #76532f, 0 6px 9px #51361f35; }
-/* Pale fish colours retain contrast on a dark medallion centre in both palettes. */
-.tech-node.is-owned { background: radial-gradient(circle at 50% 25%, #286078, #0d3544); }
-.tech-node.is-ready { border-color: #ffe1a2; outline: 2px solid #a96824; outline-offset: 2px; }
-.tech-node.is-ready::after { inset: -7px; border: 1px dashed #a96824; }
-.tech-node.is-short { border-color: #9d8868; background: repeating-linear-gradient(135deg, #153d49 0 4px, #204753 4px 6px); }
-.tech-node.is-short .tech-icon { opacity: .65; }
-.tech-pips path { stroke: #51443240; }
-.tech-pips path.is-on { stroke: #765023; stroke-width: 4; }
-.tech-cost { border: 1px solid #af8d5e; border-radius: 4px; background: #fff2d6; color: #3b2414; box-shadow: 0 2px #77573420; }
-.tech-node.is-ready .tech-cost { background: #f3cc7b; color: #3b2414; }
-.tech-node.is-maxed { border: 3px double #fff0b1; outline: 2px solid #8f692f; outline-offset: 1px; background: radial-gradient(circle at 50% 25%, #286078, #0d3544); color: var(--tint); box-shadow: 0 3px #76532f, inset 0 0 0 2px #b5914f; }
-.tech-node.is-maxed .tech-cost { color: #4b4026; background: #e5d9b7; letter-spacing: .06em; }
-.tech-node.is-maxed .tech-cost::before { content: "✓ "; }
-.tech-node:focus-visible, .tech-node.is-selected { outline: 3px solid #15586c; outline-offset: 9px; }
-.tech-tip, .tech-sheet {
-  --ink: #3b2414; --ink-muted: #705137; --tech-ready: #a36623; --tech-short: #963f26;
-  border: 2px solid #b28b52; border-top: 5px solid var(--brass, #d9a441);
-  background: #f3e3c3 url("../../public/art/paper.webp") center / 650px;
-  color: #3b2414; box-shadow: 0 8px 24px #3b241440; backdrop-filter: none;
+.tech-world::after {
+  content: "";
+  position: absolute;
+  left: 530px;
+  top: -420px;
+  width: 320px;
+  height: 320px;
+  background: url("/art/compass.webp") center / contain no-repeat;
+  opacity: 0.12;
+  pointer-events: none;
 }
-.tech-tip-name { font: 400 23px var(--display, cursive); }
-.tech-sheet .tech-tip-name { font-size: 27px; }
-.tech-tip-lane { color: #3c5960; }
-.tech-tip-stats { background: #fff7e660; border: 1px solid #b28b5233; }
-.tech-tip-cost.is-maxed { color: #28634d; }
-.tech-level-segment { border-color: #a98c66; background: #bca17b40; }
-.tech-level-segment.is-on { background: #1c5b6e; border-color: #123d4c; }
-.tech-tip-buy, .tech-sheet-buy { min-height: 44px; border: 1px solid #a66c28; background: linear-gradient(#ffd18c, #f4a259); box-shadow: 0 3px #805125; color: #3b2414; font: 400 18px var(--display, cursive); }
-.tech-tip-buy:disabled, .tech-sheet-buy:disabled { background: #d7c6a6; color: #67533a; box-shadow: none; }
-.tech-control { width: 44px; height: 44px; border: 1px solid #ab8a56; background: linear-gradient(#fff2d6, #e0c798); color: #3b2414; box-shadow: 0 3px #9a7948; }
-.tech-control:hover { background: #fff2d6; }
-.tech-hint { max-width: calc(100% - 210px); padding: 5px 10px; border: 1px solid #b28b5244; border-radius: 6px; background: #f3e3c3e6; color: #59452f; opacity: 1; }
-.tech-sheet-close { background: #b9986140; }
-.tech-sheet button:focus-visible, .tech-tip-buy:focus-visible, .tech-control:focus-visible { outline-color: #1f6f86; }
-@media (max-width: 760px) { .tech-hint { left: calc(65px + env(safe-area-inset-left, 0px)); bottom: calc(72px + env(safe-area-inset-bottom, 0px)); max-width: calc(100% - 80px); } }
+.tech-rings circle {
+  stroke: #6c675635;
+  stroke-dasharray: 3 9;
+}
+.tech-edges line {
+  stroke-width: 2.5;
+}
+.tech-label {
+  fill: var(--ink-dark) !important;
+  font: 400 clamp(12px, calc(13px / var(--zoom, 1)), 21px) var(--display);
+  letter-spacing: 0.1em;
+  opacity: 0.9;
+  paint-order: stroke;
+  stroke: #f3e3c3;
+  stroke-width: 4px;
+}
+.tech-boat {
+  opacity: 0.9;
+}
+.tech-boat.has-art .tech-boat-bob {
+  display: none;
+}
+.tech-boat-art {
+  filter: drop-shadow(0 4px 3px #5b402b40);
+}
+.tech-node {
+  border: 3px solid #b89452;
+  color: var(--tint);
+  box-shadow:
+    inset 0 0 0 2px #f3d28677,
+    0 3px 0 #76532f,
+    0 6px 9px #51361f35;
+}
+/* Pale fish colours retain contrast on a dark medallion centre in both palettes. */
+.tech-node.is-owned {
+  background: radial-gradient(circle at 50% 25%, #286078, #0d3544);
+}
+.tech-node.is-ready {
+  border-color: #ffe1a2;
+  outline: 2px solid #a96824;
+  outline-offset: 2px;
+}
+.tech-node.is-ready::after {
+  inset: -7px;
+  border: 1px dashed #a96824;
+}
+.tech-node.is-short {
+  border-color: #9d8868;
+  background: repeating-linear-gradient(135deg, #153d49 0 4px, #204753 4px 6px);
+}
+.tech-node.is-short .tech-icon {
+  opacity: 0.65;
+}
+.tech-pips path {
+  stroke: #51443240;
+}
+.tech-pips path.is-on {
+  stroke: #765023;
+  stroke-width: 4;
+}
+.tech-cost {
+  border: 1px solid #af8d5e;
+  border-radius: 4px;
+  background: #fff2d6;
+  color: #3b2414;
+  box-shadow: 0 2px #77573420;
+}
+.tech-node.is-ready .tech-cost {
+  background: #f3cc7b;
+  color: #3b2414;
+}
+.tech-node.is-maxed {
+  border: 3px double #fff0b1;
+  outline: 2px solid #8f692f;
+  outline-offset: 1px;
+  background: radial-gradient(circle at 50% 25%, #286078, #0d3544);
+  color: var(--tint);
+  box-shadow:
+    0 3px #76532f,
+    inset 0 0 0 2px #b5914f;
+}
+.tech-node.is-maxed .tech-cost {
+  color: #4b4026;
+  background: #e5d9b7;
+  letter-spacing: 0.06em;
+}
+.tech-node.is-maxed .tech-cost::before {
+  content: "✓ ";
+}
+.tech-node:focus-visible,
+.tech-node.is-selected {
+  outline: 3px solid #15586c;
+  outline-offset: 9px;
+}
+.tech-tip,
+.tech-sheet {
+  --ink: #3b2414;
+  --ink-muted: #705137;
+  --tech-ready: #a36623;
+  --tech-short: #963f26;
+  border: 2px solid #b28b52;
+  border-top: 5px solid var(--brass, #d9a441);
+  background: #f3e3c3 url("/art/paper.webp") center / 650px;
+  color: #3b2414;
+  box-shadow: 0 8px 24px #3b241440;
+  backdrop-filter: none;
+}
+.tech-tip-name {
+  font: 400 23px var(--display, cursive);
+}
+.tech-sheet .tech-tip-name {
+  font-size: 27px;
+}
+.tech-tip-lane {
+  color: #3c5960;
+}
+.tech-tip-stats {
+  background: #fff7e660;
+  border: 1px solid #b28b5233;
+}
+.tech-tip-cost.is-maxed {
+  color: #28634d;
+}
+.tech-level-segment {
+  border-color: #a98c66;
+  background: #bca17b40;
+}
+.tech-level-segment.is-on {
+  background: #1c5b6e;
+  border-color: #123d4c;
+}
+.tech-tip-buy,
+.tech-sheet-buy {
+  min-height: 44px;
+  border: 1px solid #a66c28;
+  background: linear-gradient(#ffd18c, #f4a259);
+  box-shadow: 0 3px #805125;
+  color: #3b2414;
+  font: 400 18px var(--display, cursive);
+}
+.tech-tip-buy:disabled,
+.tech-sheet-buy:disabled {
+  background: #d7c6a6;
+  color: #67533a;
+  box-shadow: none;
+}
+.tech-control {
+  width: 44px;
+  height: 44px;
+  border: 1px solid #ab8a56;
+  background: linear-gradient(#fff2d6, #e0c798);
+  color: #3b2414;
+  box-shadow: 0 3px #9a7948;
+}
+.tech-control:hover {
+  background: #fff2d6;
+}
+.tech-hint {
+  max-width: calc(100% - 210px);
+  padding: 5px 10px;
+  border: 1px solid #b28b5244;
+  border-radius: 6px;
+  background: #f3e3c3e6;
+  color: #59452f;
+  opacity: 1;
+}
+.tech-sheet-close {
+  background: #b9986140;
+}
+.tech-sheet button:focus-visible,
+.tech-tip-buy:focus-visible,
+.tech-control:focus-visible {
+  outline-color: #1f6f86;
+}
+@media (max-width: 760px) {
+  .tech-hint {
+    left: calc(65px + env(safe-area-inset-left, 0px));
+    bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+    max-width: calc(100% - 80px);
+  }
+}
+
+/* A dark ink well keeps even the colour-blind Goober glyph above 3:1 contrast. */
+.tech-node .tech-icon {
+  width: 56%;
+  height: 56%;
+  padding: 2px;
+  border-radius: 50%;
+  background: #061f2e;
+  box-shadow: inset 0 0 0 1px #d9a44130;
+}
