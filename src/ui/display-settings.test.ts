@@ -37,8 +37,14 @@ describe("parseDisplaySettings", () => {
     expect(parseDisplaySettings('{"colorBlind":"yes"}')).toEqual(DEFAULT_DISPLAY_SETTINGS);
   });
 
+  it("defaults haptics on for old settings and validates each field separately", () => {
+    expect(parseDisplaySettings('{"haptics":false}')).toEqual({ colorBlind: false, haptics: false });
+    expect(parseDisplaySettings('{"colorBlind":true,"haptics":"no"}')).toEqual({ colorBlind: true, haptics: true });
+    expect(parseDisplaySettings('{"colorBlind":7,"haptics":false}')).toEqual({ colorBlind: false, haptics: false });
+  });
+
   it("keeps a valid setting", () => {
-    expect(parseDisplaySettings('{"colorBlind":true}')).toEqual({ colorBlind: true });
+    expect(parseDisplaySettings('{"colorBlind":true}')).toEqual({ colorBlind: true, haptics: true });
   });
 });
 
@@ -46,9 +52,9 @@ describe("display settings storage", () => {
   it("round-trips under its own key, apart from the save and the sound settings", () => {
     const storage = new MemoryStorage();
     storage.setItem(SAVE_KEY, "save");
-    expect(writeDisplaySettings({ colorBlind: true }, storage)).toBe(true);
+    expect(writeDisplaySettings({ colorBlind: true, haptics: false }, storage)).toBe(true);
     expect(new Set([DISPLAY_KEY, SAVE_KEY, AUDIO_KEY]).size).toBe(3);
-    expect(loadDisplaySettings(storage)).toEqual({ colorBlind: true });
+    expect(loadDisplaySettings(storage)).toEqual({ colorBlind: true, haptics: false });
     expect(storage.getItem(SAVE_KEY)).toBe("save");
   });
 
@@ -57,11 +63,11 @@ describe("display settings storage", () => {
     storage.failReads = true;
     expect(loadDisplaySettings(storage)).toEqual(DEFAULT_DISPLAY_SETTINGS);
     storage.failWrites = true;
-    expect(writeDisplaySettings({ colorBlind: true }, storage)).toBe(false);
+    expect(writeDisplaySettings({ colorBlind: true, haptics: true }, storage)).toBe(false);
   });
 
   it("falls back to defaults when there's no storage at all", () => {
     expect(loadDisplaySettings()).toEqual(DEFAULT_DISPLAY_SETTINGS);
-    expect(writeDisplaySettings({ colorBlind: true })).toBe(false);
+    expect(writeDisplaySettings({ colorBlind: true, haptics: true })).toBe(false);
   });
 });

@@ -1,0 +1,25 @@
+/* The same Settings drawer can be reached without entering the campaign. */
+.hub-tools.is-title-settings {
+  position: fixed;
+  z-index: 35;
+  top: calc(var(--viewport-top, 0px) + var(--safe-top) + 12px);
+  bottom: auto;
+  right: calc(var(--safe-right) + 12px);
+  max-height: calc(var(--app-height) - var(--safe-top) - var(--safe-bottom) - 24px);
+}
+.hub-achievements {
+  display: block;
+  min-height: 24px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: 700 10px var(--body);
+  text-align: left;
+  cursor: pointer;
+}
+.hub-achievements:focus-visible {
+  outline: 2px solid var(--brass);
+  outline-offset: 2px;
+}
+#hud-earned.is-bumping { transform-origin: center; }

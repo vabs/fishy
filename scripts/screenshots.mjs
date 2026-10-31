@@ -15,6 +15,8 @@ try {
   const tech = await dev.load("/src/game/tech/index.ts");
   const { BASE_STATS } = await dev.load("/src/game/stats.ts");
   const { createSave } = await dev.load("/src/save/index.ts");
+  const { grantAchievements, newAchievements } = await dev.load("/src/game/achievements.ts");
+  const withBadges = (save) => grantAchievements(save, newAchievements(save).map((a) => a.id));
 
   // First visit: the name prompt.
   const first = await newPage(browser);
@@ -33,9 +35,20 @@ try {
   // Mid-game: a save with a good part of the tree bought.
   const mid = await newPage(browser);
   const upgrades = buyCheapest(tech, MID_GAME_BUDGET);
-  const midSave = { ...createSave("Skipper"), round: 24, money: 1_850, upgrades };
+  const midSave = withBadges({ ...createSave("Skipper"), round: 24, money: 1_850, upgrades,
+    stats: { ...createSave("Skipper").stats, totalFish: 800, bestRoundEarnings: 26000,
+      fishByType: { normal: 350, uncommon: 250, rare: 80, electric: 60, epic: 40, goober: 20 },
+      bestCombo: 1.6 } });
   await mid.addInitScript((data) => localStorage.setItem("fishy.save", data), JSON.stringify(midSave));
   await mid.goto(`${dev.url}?fish=${ALL_FISH}`);
+  await mid.waitForSelector("#title:not([hidden])");
+  await mid.waitForTimeout(600);
+  await save(await mid.screenshot(), "title");
+  await mid.click("#title-achievements");
+  await mid.waitForSelector("#achievements-panel:not([hidden])");
+  await save(await mid.screenshot(), "achievements");
+  await mid.click("#achievements-close");
+  await mid.click("#title-play");
   await mid.waitForSelector("#hub:not([hidden])");
   await mid.waitForTimeout(600);
   await save(await mid.screenshot(), "tech-tree");
@@ -54,24 +67,34 @@ try {
   await save(best.image, "gameplay");
 
   await mid.waitForSelector("#summary-panel:not([hidden])", { timeout: 120_000 });
-  await mid.waitForTimeout(400);
+  await mid.waitForTimeout(1000);
   await save(await mid.screenshot(), "summary");
+
+  // A real Endless trip with the dev-only sea-phase override set to night.
+  const endless = await newPage(browser);
+  await endless.addInitScript((data) => localStorage.setItem("fishy.save", data), JSON.stringify(midSave));
+  await endless.goto(`${dev.url}?fish=${ALL_FISH}&time=0.5`);
+  await endless.click("#title-endless");
+  await endless.waitForSelector('#hud[data-mode="endless"]:not([hidden])');
+  await chaseFish(endless, { steps: 65, netRadius });
+  await save(await endless.screenshot(), "endless");
 
   // The end: a finished game.
   const done = await newPage(browser);
-  const doneSave = {
+  const doneSave = withBadges({
     ...createSave("Skipper"),
     round: 131,
     finalRoundDone: true,
-    stats: { totalFish: 48_213, fishByType: {}, bestRoundEarnings: 412_300, playTimeMs: 4_730_000 },
-  };
+    stats: { ...createSave("Skipper").stats, totalFish: 48_213, fishByType: {}, bestRoundEarnings: 412_300, playTimeMs: 4_730_000 },
+  });
   await done.addInitScript((data) => localStorage.setItem("fishy.save", data), JSON.stringify(doneSave));
   await done.goto(dev.url);
+  await done.click("#title-play");
   await done.waitForSelector("#end-panel:not([hidden])");
   await done.waitForTimeout(400);
   await save(await done.screenshot(), "end");
 
-  const errors = [first, mid, done].flatMap((page) => page.errors);
+  const errors = [first, mid, endless, done].flatMap((page) => page.errors);
   if (errors.length) throw new Error(`Page errors:\n${errors.join("\n")}`);
 } finally {
   await browser.close();

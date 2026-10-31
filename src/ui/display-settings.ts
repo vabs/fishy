@@ -9,9 +9,11 @@ export const DISPLAY_KEY = "fishy.display";
 export interface DisplaySettings {
   /** Fish drawn in the colour-blind palette (src/game/palette.ts). */
   colorBlind: boolean;
+  /** Brief vibration for catches and milestones on supported devices. */
+  haptics: boolean;
 }
 
-export const DEFAULT_DISPLAY_SETTINGS: Readonly<DisplaySettings> = { colorBlind: false };
+export const DEFAULT_DISPLAY_SETTINGS: Readonly<DisplaySettings> = { colorBlind: false, haptics: true };
 
 /** Reads stored settings, keeping whatever is valid and falling back to defaults for the rest. */
 export function parseDisplaySettings(raw: string | null): DisplaySettings {
@@ -23,6 +25,7 @@ export function parseDisplaySettings(raw: string | null): DisplaySettings {
   }
   const fields = typeof data === "object" && data !== null && !Array.isArray(data) ? (data as Record<string, unknown>) : {};
   return {
+    haptics: typeof fields.haptics === "boolean" ? fields.haptics : DEFAULT_DISPLAY_SETTINGS.haptics,
     colorBlind: typeof fields.colorBlind === "boolean" ? fields.colorBlind : DEFAULT_DISPLAY_SETTINGS.colorBlind,
   };
 }
@@ -51,7 +54,7 @@ export function writeDisplaySettings(settings: DisplaySettings, storage?: Storag
   const store = storage ?? browserStorage();
   if (!store) return false;
   try {
-    store.setItem(DISPLAY_KEY, JSON.stringify({ colorBlind: settings.colorBlind }));
+    store.setItem(DISPLAY_KEY, JSON.stringify({ colorBlind: settings.colorBlind, haptics: settings.haptics }));
     return true;
   } catch {
     return false;
