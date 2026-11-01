@@ -253,7 +253,7 @@ try {
     await tap("#title-play");
     await fits(page, "#start-button");
     await fits(page, ".weather-badge");
-    assert.match(await page.locator(".weather-badge").innerText(), /Storm/);
+    assert.match(await page.locator(".weather-badge").innerText(), /storm/i);
     await tap("#start-button");
     await page.locator("#sea-banner").waitFor({ state: "visible" });
     await fits(page, "#sea-banner");

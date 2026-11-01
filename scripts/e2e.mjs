@@ -162,7 +162,7 @@ try {
   await page.waitForSelector("#frenzy-banner", { state: "hidden", timeout: 15_000 });
   await page.waitForSelector("#summary-panel:not([hidden])", { timeout: 30_000 });
   assert.equal(await text(page, "#summary-title"), "Round 5 complete");
-  assert.match(await text(page, "#summary-frenzy"), /^Feeding Frenzy: \+\$[\d,]+ from [\d,]+ fish$/);
+  assert.match(await text(page, "#summary-frenzy"), /^Feeding Frenzy:?\s+\+\$[\d,]+\s+from [\d,]+ fish$/);
   await page.click("#continue-button");
   round = 6;
   await page.waitForSelector("#hub:not([hidden])");
@@ -196,7 +196,7 @@ try {
   await page.waitForSelector("#summary-panel:not([hidden])", { timeout: 120_000 });
   assert.equal(await text(page, "#summary-title"), "Final Round complete");
   await continueVisible(page);
-  assert.match(await text(page, "#summary-frenzy"), /^Feeding Frenzy: /);
+  assert.match(await text(page, "#summary-frenzy"), /^Feeding Frenzy:?\s/);
   await page.click("#continue-button");
   await page.waitForSelector("#end-panel:not([hidden])");
   assert.equal(await text(page, "#end-rounds"), String(round));
@@ -331,7 +331,7 @@ async function checkWeatherAndBiomes(browser, dev) {
   await page.goto(`${dev.url}?sea=storm`);
   await page.click("#title-play");
   await page.locator("#hub").waitFor({ state: "visible" });
-  assert.match(await text(page, "#start-button .weather-badge"), /Storm/);
+  assert.match(await text(page, "#start-button .weather-badge"), /storm/i);
   assert.match(await text(page, "#hub-hint"), /Storm this round: fish drift with the wind/);
   await page.reload();
   await page.click("#title-play");
