@@ -7,6 +7,7 @@ import { isChumKey, mountChumControl } from "./ui/chum-control";
 import { ACHIEVEMENTS, grantAchievements, newAchievements, type AchievementMoment } from "./game/achievements";
 import { bountyGuarantees, type Bounty } from "./game/bounties";
 import { renderBounties } from "./ui/bounties-view";
+import { renderSummaryExtras, type SummaryExtra } from "./ui/summary-extras";
 import { renderAchievements } from "./ui/achievements-view";
 import { showAchievementToast } from "./ui/achievement-toast";
 import { createGameAudio } from "./audio";
@@ -66,8 +67,7 @@ const summary = {
   root: element("#summary-panel"),
   title: element("#summary-title"),
   earned: element("#summary-earned"),
-  frenzy: element("#summary-frenzy"),
-  traps: element("#summary-traps"),
+  bonuses: element("#summary-bonuses"),
   table: element("#summary-table"),
   rows: element("#summary-rows"),
   fish: element("#summary-fish"),
@@ -94,10 +94,6 @@ hubAchievements.id = "hub-achievements";
 hubAchievements.type = "button";
 hubAchievements.className = "hub-achievements";
 element(".hub-player").append(hubAchievements);
-const summaryBountyReward = document.createElement("p");
-summaryBountyReward.id = "summary-bounty-reward";
-summaryBountyReward.className = "summary-frenzy";
-element("#summary-bounties").before(summaryBountyReward);
 const toast = element("#toast");
 const roundHint = element("#round-hint");
 const frenzyBanner = {
@@ -429,17 +425,16 @@ function endRound(finished: World): void {
   const total = finished.earned + bounties.reward;
   summary.earned.textContent = formatMoney(total);
   renderBounties(element("#summary-bounties"), bounties.items, "summary");
-  summaryBountyReward.hidden = activeBounties.length === 0;
-  summaryBountyReward.textContent = `Bounties +${formatMoney(bounties.reward)}`;
-  // Already counted in the rows below; this says how much of it the wave brought in.
-  summary.frenzy.hidden = !finished.frenzy;
-  summary.frenzy.textContent = finished.frenzy
-    ? `Feeding Frenzy: +${formatMoney(finished.frenzyEarned)} from ${finished.frenzyCaught.toLocaleString("en-US")} fish`
-    : "";
-  summary.traps.hidden = finished.trapCatches === 0;
-  summary.traps.textContent = `Trap nets: ${finished.trapCatches.toLocaleString("en-US")} fish`;
+  // Frenzy earnings are already in the fish table; bounty rewards are added to the headline.
+  const extras: SummaryExtra[] = [];
+  if (finished.frenzy) extras.push({ key: "frenzy", icon: "frenzy", label: "Feeding Frenzy:",
+    detail: `from ${finished.frenzyCaught.toLocaleString("en-US")} fish`, amount: finished.frenzyEarned });
+  if (finished.trapCatches > 0) extras.push({ key: "traps", icon: "traps", label: "Trap nets:",
+    detail: `${finished.trapCatches.toLocaleString("en-US")} fish` });
+  if (activeBounties.length > 0) extras.push({ key: "bounties", icon: "bounties", label: "Bounties", amount: bounties.reward });
+  renderSummaryExtras(summary.bonuses, extras);
   summary.fish.textContent = finished.totalCaught.toLocaleString("en-US");
-  // The table adds up its own rows; bounty money shows in the headline and the Bounties chip.
+  // The table adds up its own rows; bounty money shows in the headline and the bonus ledger.
   summary.total.textContent = formatMoney(finished.earned);
   const rows = summaryRows(finished);
   summary.rows.replaceChildren(...rows.map(summaryRow));

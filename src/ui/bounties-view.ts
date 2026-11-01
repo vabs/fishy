@@ -103,10 +103,20 @@ export function renderBounties(
     row.label.textContent = item.label;
     row.progress.textContent = item.progressText ?? `${Math.floor(Math.min(item.value, item.target))}/${item.target}`;
     row.progress.hidden = variant !== "hud";
-    row.reward.textContent =
-      variant === "summary" && !done
-        ? `${formatMoney(item.reward)} · Not earned`
-        : `+${formatMoney(item.reward)}`;
+    if (variant === "summary") {
+      const amount = document.createElement("span");
+      amount.className = "bounty-amount";
+      amount.textContent = `${done ? "+" : ""}${formatMoney(item.reward)}`;
+      row.reward.replaceChildren(amount);
+      if (!done) {
+        const status = document.createElement("span");
+        status.className = "bounty-unearned";
+        status.textContent = " · Not earned";
+        row.reward.append(status);
+      }
+    } else {
+      row.reward.textContent = `+${formatMoney(item.reward)}`;
+    }
     row.reward.hidden = variant === "hud";
     row.el.setAttribute(
       "aria-label",

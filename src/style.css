@@ -491,83 +491,6 @@ body.playing #game {
   box-shadow: 0 0 0 3px rgba(244, 162, 89, 0.35);
 }
 
-/* Round summary: the money earned is the headline, then what each fish type brought in. */
-.summary-panel {
-  width: min(440px, calc(100vw - 32px));
-}
-
-.panel .summary-earned {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  margin: 0 0 18px;
-}
-
-.summary-earned-amount {
-  color: var(--accent);
-  font-size: 46px;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.1;
-}
-
-.summary-earned-label {
-  color: var(--ink-muted);
-  font-size: 14px;
-}
-
-.summary-table {
-  width: 100%;
-  margin: 0 0 22px;
-  border-collapse: collapse;
-  font-variant-numeric: tabular-nums;
-}
-
-.summary-table th,
-.summary-table td {
-  padding: 6px 4px;
-  text-align: right;
-}
-
-.summary-table th:first-child,
-.summary-table td:first-child {
-  text-align: left;
-}
-
-.summary-table thead th {
-  border-bottom: 1px solid var(--panel-edge);
-  color: var(--ink-muted);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.summary-table tbody td:last-child {
-  font-weight: 700;
-}
-
-.summary-table tfoot th,
-.summary-table tfoot td {
-  border-top: 1px solid var(--panel-edge);
-  font-weight: 700;
-}
-
-.summary-fish {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.summary-fish canvas {
-  flex: none;
-  width: 40px;
-  height: 26px;
-}
-
-.panel .summary-empty {
-  margin: 0 0 20px;
-}
-
 .end-panel {
   width: min(420px, calc(100vw - 32px));
 }
@@ -697,19 +620,6 @@ body.playing #game {
   .frenzy-banner {
     animation: none;
   }
-}
-
-.panel .summary-frenzy {
-  width: fit-content;
-  margin: -6px auto 18px;
-  padding: 5px 12px;
-  border: 1px dashed rgba(255, 255, 255, 0.35);
-  border-radius: 999px;
-  color: var(--ink);
-  font-size: 14px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.4;
 }
 
 @media (max-width: 760px), (any-pointer: coarse) {
@@ -869,20 +779,6 @@ body.playing #game {
   .panel button,
   .primary-button {
     min-height: 48px;
-  }
-
-  .summary-earned-amount {
-    font-size: 38px;
-  }
-
-  .summary-fish {
-    gap: 4px;
-  }
-
-  .summary-table th,
-  .summary-table td {
-    font-size: 13px;
-    padding: 6px 2px;
   }
 
   .round-hint {
@@ -1595,60 +1491,8 @@ button.secondary-button:active:enabled,
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
-.summary-panel,
 .endless-panel {
   width: min(480px, calc(100vw - 32px));
-}
-.summary-panel h2 {
-  font-size: 29px;
-}
-.summary-earned-amount {
-  color: #a45b27;
-  font: 400 54px/1.1 var(--display);
-  font-variant-numeric: tabular-nums;
-}
-.summary-earned-label {
-  color: #725338;
-  font-size: 12px;
-}
-.summary-table {
-  margin-bottom: 16px;
-}
-.summary-table thead th {
-  font-weight: 800;
-  color: #795b3b;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-.summary-table tbody td {
-  border-bottom: 1px solid #8d72532b;
-  padding-block: 7px;
-}
-.summary-table tbody td:last-child {
-  color: #75411e;
-  font-weight: 800;
-}
-.summary-table tfoot th,
-.summary-table tfoot td {
-  padding-top: 10px;
-  border-top: 2px solid #8d725366;
-  font-weight: 800;
-}
-.panel .summary-frenzy {
-  border-color: #a97037;
-  background: #e9bd6540;
-  color: #79451e;
-  font-size: 12px;
-}
-.summary-earned-amount.is-counting {
-  animation: log-count 0.28s ease-out;
-}
-@keyframes log-count {
-  50% {
-    color: #c77b2b;
-    transform: scale(1.04);
-  }
 }
 .pause-panel {
   z-index: 30;
@@ -1806,13 +1650,6 @@ body:has(#end-panel:not([hidden]))::before {
   .panel h2 {
     font-size: 28px;
   }
-  .summary-earned-amount {
-    font-size: 46px;
-  }
-  .summary-table td,
-  .summary-table th {
-    font-size: 13px;
-  }
   .round-hint {
     width: calc(100% - 32px);
     font-size: 13px;
@@ -1870,7 +1707,6 @@ body:has(#end-panel:not([hidden]))::before {
   *::after {
     scroll-behavior: auto !important;
   }
-  .summary-earned-amount.is-counting,
   #hud.is-urgent #hud-timer {
     animation: none;
   }
@@ -1960,38 +1796,6 @@ body:has(#end-panel:not([hidden]))::before {
 .is-hud .is-done .bounty-label {
   text-decoration: line-through;
   opacity: 0.8;
-}
-.is-summary.bounties {
-  display: grid;
-  gap: 7px;
-  margin: 0 0 22px;
-  padding-top: 12px;
-  border-top: 1px dashed #a38458;
-  text-align: left;
-}
-.is-summary::before {
-  content: "Bounty rewards";
-  color: #795b3b;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-.is-summary .bounty-row {
-  font-size: 12px;
-}
-.is-summary .is-done .bounty-mark {
-  color: #21614c;
-}
-.is-summary .is-failed .bounty-mark,
-.is-summary .is-failed .bounty-reward {
-  color: #846d56;
-}
-.is-summary .is-failed .bounty-reward {
-  font-size: 10px;
-  white-space: normal;
-  text-align: right;
-  max-width: 98px;
 }
 @media (max-width: 760px) {
   .bounties.is-hub {
@@ -2322,26 +2126,156 @@ button:active:enabled {
   font: 400 28px var(--body);
 }
 
-/* Only the body scrolls; the paper footer stays visible even in a full logbook. */
+/* Captain's log scorecard: one scrolling body, a shared bonus/bounty grid, and a fixed footer. */
 .summary-panel {
   --summary-padding: 32px;
-  padding-inline: var(--summary-padding);
   display: flex;
   flex-direction: column;
+  width: min(560px, calc(100vw - 32px));
   overflow: hidden;
-  padding-bottom: 0;
+  padding: 30px var(--summary-padding) 0;
 }
 .summary-panel > .logbook-kicker,
 .summary-panel > h2,
 .summary-panel > .summary-earned,
 .summary-footer { flex: none; }
+.summary-panel h2 { font-size: 29px; }
+.panel .summary-earned {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  margin: 0 0 18px;
+}
+.summary-earned-amount {
+  color: #a45b27;
+  font: 400 54px/1.1 var(--display);
+  font-variant-numeric: tabular-nums;
+}
+.summary-earned-label {
+  color: #725338;
+  font-size: 14px;
+}
 .summary-body {
+  display: grid;
+  gap: 20px;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   text-align: left;
+  scrollbar-width: thin;
 }
 .summary-catches, .summary-extras { min-width: 0; }
+.summary-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+.summary-table th,
+.summary-table td {
+  padding: 6px 4px;
+  text-align: right;
+}
+.summary-table th:first-child,
+.summary-table td:first-child { text-align: left; }
+.summary-table thead th {
+  border-bottom: 1px solid var(--panel-edge);
+  color: #795b3b;
+  font-size: 13px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.summary-table tbody td { border-bottom: 1px solid #8d72532b; }
+.summary-table tbody td:last-child {
+  color: #75411e;
+  font-weight: 800;
+}
+.summary-table tfoot th,
+.summary-table tfoot td {
+  padding-top: 10px;
+  border-top: 2px solid #8d725366;
+  font-weight: 800;
+}
+.summary-fish {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.summary-fish canvas {
+  flex: none;
+  width: 40px;
+  height: 26px;
+}
+.panel .summary-empty { margin: 0 0 20px; }
+.summary-bonuses,
+.is-summary.bounties { display: grid; }
+.summary-section-title,
+.is-summary::before {
+  margin: 0 0 6px;
+  color: #795b3b;
+  font: 800 15px/1.4 var(--body);
+  text-align: left;
+}
+.is-summary::before { content: "Bounty rewards"; }
+.is-summary.bounties {
+  margin: 18px 0 0;
+  padding-top: 16px;
+  border-top: 1px dashed #a38458;
+}
+.is-summary.bounties:first-child { margin-top: 0; }
+.summary-extra-row,
+.is-summary .bounty-row {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) fit-content(112px);
+  align-items: center;
+  column-gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid #8d72532b;
+  color: var(--ink-dark);
+  font-size: 15px;
+  line-height: 1.4;
+  text-align: left;
+}
+.summary-extra-icon {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  display: flex;
+  color: #9a652b;
+}
+.summary-extra-label { grid-column: 2; grid-row: 1; }
+.summary-extra-detail {
+  grid-column: 2;
+  grid-row: 2;
+  color: #705137;
+  font-size: 14px;
+}
+.summary-extra-amount,
+.is-summary .bounty-reward {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  color: #75411e;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.summary-extra-label,
+.is-summary .bounty-label { min-width: 0; overflow-wrap: anywhere; }
+.is-summary .bounty-mark { grid-column: 1; grid-row: 1; }
+.is-summary .bounty-label { grid-column: 2; grid-row: 1; }
+.is-summary .bounty-reward { max-width: 112px; white-space: normal; }
+.is-summary .bounty-amount { display: block; }
+.is-summary .bounty-unearned {
+  display: block;
+  font-size: 14px;
+  text-transform: lowercase;
+}
+.is-summary .is-done .bounty-mark { color: #21614c; }
+.is-summary .is-failed,
+.is-summary .is-failed .bounty-mark,
+.is-summary .is-failed .bounty-reward { color: #846d56; }
 .summary-footer {
   position: sticky;
   bottom: 0;
@@ -2352,11 +2286,17 @@ button:active:enabled {
   box-shadow: 0 -8px 16px #60401e18;
 }
 .summary-footer #continue-button { width: 100%; }
+.summary-earned-amount.is-counting { animation: log-count 0.28s ease-out; }
+@keyframes log-count {
+  50% { color: #c77b2b; transform: scale(1.04); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .summary-earned-amount.is-counting { animation: none; }
+}
 @media (min-width: 1000px) {
-  .summary-panel { width: min(840px, calc(100vw - 48px)); }
+  .summary-panel { width: min(940px, calc(100vw - 48px)); }
   .summary-body {
-    display: grid;
-    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
     gap: 24px;
   }
   .summary-extras {
@@ -2365,7 +2305,12 @@ button:active:enabled {
   }
 }
 @media (max-width: 760px) {
-  .summary-panel { --summary-padding: 22px; }
+  .summary-panel { --summary-padding: 18px; padding-top: 24px; }
+  .summary-earned-amount { font-size: 46px; }
+  .summary-fish { gap: 4px; }
+  .summary-table th, .summary-table td { padding-inline: 2px; font-size: 14px; }
+  .summary-table thead th { font-size: 12px; }
+  .summary-fish canvas { width: 32px; height: 21px; }
 }
 @media (min-width: 900px) {
   .achievement-toast {
