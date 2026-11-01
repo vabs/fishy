@@ -2,7 +2,7 @@ import type { FishKind } from "../fish";
 import { cloneStats, type Stats } from "../stats";
 import { TECH_NODES } from "./nodes";
 
-export type Branch = "net" | "time" | "economy" | "spawning" | "fish" | "star";
+export type Branch = "net" | "rigging" | "boat" | "time" | "economy" | "spawning" | "fish" | "star";
 
 export interface TechNode {
   /** Stable: saved in players' save files. Never rename once shipped. */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { TECH_NODES } from ".";
+import { TECH_NODES, type TechNode } from ".";
 import { DEFAULT_LAYOUT, LANE_ORDER, laneOf, layoutTree } from "./layout";
 
 const TAU = Math.PI * 2;
@@ -16,6 +16,20 @@ describe("layoutTree", () => {
     expect(layoutTree()).toEqual(layout);
   });
 
+  it("places Rigging and Boat between Net and Time with readable lane labels", () => {
+    const root = TECH_NODES[0]!;
+    const nodes: TechNode[] = [
+      root,
+      { ...root, id: "test.rigging", branch: "rigging", requires: [root.id] },
+      { ...root, id: "test.boat", branch: "boat", requires: ["test.rigging"] },
+    ];
+    expect(layoutTree(nodes).lanes.map(({ key, label }) => [key, label])).toEqual([
+      ["rigging", "Rigging"],
+      ["boat", "Boat"],
+    ]);
+    expect(LANE_ORDER.slice(0, 4)).toEqual(["net", "rigging", "boat", "time"]);
+  });
+
   it("keeps every pair of nodes out of each other's footprint", () => {
     const { x: sx, y: sy } = DEFAULT_LAYOUT.spacing;
     const points = [...layout.nodes.entries()];
@@ -29,7 +43,8 @@ describe("layoutTree", () => {
   });
 
   it("fits the lanes around the circle without overlapping, Net at the top", () => {
-    expect(layout.lanes.map((l) => l.key)).toEqual(LANE_ORDER);
+    const occupied = new Set(TECH_NODES.filter((n) => n.requires.length > 0).map(laneOf));
+    expect(layout.lanes.map((l) => l.key)).toEqual(LANE_ORDER.filter((key) => occupied.has(key)));
     for (const [i, lane] of layout.lanes.entries()) {
       expect(lane.end).toBeGreaterThan(lane.start);
       const next = layout.lanes[i + 1];

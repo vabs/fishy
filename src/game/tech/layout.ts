@@ -17,6 +17,8 @@ export type LaneKey = Exclude<Branch, "fish" | "star"> | FishKind;
 /** Clockwise from the top. Neighbours share requirements, so cross-lane edges stay short. */
 export const LANE_ORDER: readonly LaneKey[] = [
   "net",
+  "rigging",
+  "boat",
   "time",
   "spawning",
   "economy",
@@ -32,6 +34,8 @@ export const LANE_ORDER: readonly LaneKey[] = [
 
 const LANE_LABELS: Record<LaneKey, string> = {
   net: "Net",
+  rigging: "Rigging",
+  boat: "Boat",
   time: "Time",
   spawning: "Spawning",
   economy: "Economy",

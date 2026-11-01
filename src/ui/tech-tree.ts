@@ -57,6 +57,8 @@ const TOUCH_MIN_SCALE = 48 / NODE_SIZE;
 /** Fish lanes take the fish's colour in the player's palette, published as --fish-<kind> by main.ts. */
 const LANE_TINTS: Record<LaneKey, string> = {
   net: "#a5d1d1",
+  rigging: "#ffb680",
+  boat: "#b4c9f2",
   time: "#ddbed9",
   spawning: "#aad6b0",
   economy: "#f0ca7b",
