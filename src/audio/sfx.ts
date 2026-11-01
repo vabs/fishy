@@ -13,9 +13,15 @@ import { degreeToHz, type Key } from "./theory";
 
 type SfxKind =
   | "catch" | "current" | "bounce" | "launch" | "implode" | "burst" | "bonus" | "chime" | "frenzy" | "shimmer" | "golden"
-  | "plop" | "treasure" | "bounty" | "achievement";
+  | "plop" | "treasure" | "bounty" | "achievement"
+  | "trapSnap" | "seine" | "snag" | "chum" | "trapCast";
 
 const LIMITS: Record<SfxKind, VoiceLimit> = {
+  trapSnap: { gap: 0.12, voices: 2 },
+  seine: { gap: 0.35, voices: 1 },
+  snag: { gap: 0.6, voices: 1 },
+  chum: { gap: 0.9, voices: 1 },
+  trapCast: { gap: 1.5, voices: 1 },
   catch: { gap: 0.04, voices: 4 },
   current: { gap: 0.12, voices: 2 },
   bounce: { gap: 0.07, voices: 2 },
@@ -225,6 +231,57 @@ export class Sfx {
     const { ctx, time, out } = voice;
     pop(ctx, out, time, this.hz(pickOne([0, 2]), 3), LEVEL.plop);
     noise(ctx, out, { time: time + 0.02, gain: LEVEL.plop * 0.25, attack: 0.005, decay: 0.12, filter: "highpass", from: 2500 });
+  }
+
+  /** All traps snapping this frame share one creak, splash and low wooden knock. */
+  trapSnaps(count: number): void {
+    if (count <= 0) return;
+    const voice = this.start("trapSnap", 0.42);
+    if (!voice) return;
+    const { ctx, time, out } = voice;
+    const gain = 0.065 * (1 + Math.min(3, count - 1) * 0.1);
+    noise(ctx, out, { time, gain: gain * 0.65, attack: 0.015, decay: 0.13, filter: "bandpass", from: this.hz(0, 3), to: this.hz(2, 3), q: 14 });
+    noise(ctx, out, { time: time + 0.035, gain: gain * 0.7, attack: 0.008, decay: 0.2, filter: "highpass", from: 1400, to: 700 });
+    pluck(ctx, out, { time: time + 0.025, freq: this.hz(0, 2), gain, decay: 0.12, bright: 0.08 });
+  }
+
+  /** A quiet keyed rope pluck, with a deliberately long gap under a busy seine. */
+  seineHit(): void {
+    const voice = this.start("seine", 0.2);
+    if (!voice) return;
+    pluck(voice.ctx, voice.out, { time: voice.time, freq: this.hz(2, 4), gain: 0.028, decay: 0.15, bright: 0.06 });
+  }
+
+  /** The chest meets the rope: a low clunk under a short, rising stretch. */
+  snag(): void {
+    const voice = this.start("snag", 0.5);
+    if (!voice) return;
+    const { ctx, time, out } = voice;
+    pop(ctx, out, time, this.hz(0, 2), 0.09);
+    noise(ctx, out, { time: time + 0.025, gain: 0.055, attack: 0.06, decay: 0.26, filter: "bandpass", from: this.hz(0, 3), to: this.hz(3, 3), q: 18 });
+  }
+
+  /** A larger splash followed by a falling, bubbly gurgle. */
+  chum(): void {
+    const voice = this.start("chum", 0.9);
+    if (!voice) return;
+    const { ctx, time, out } = voice;
+    noise(ctx, out, { time, gain: 0.14, attack: 0.025, decay: 0.4, filter: "lowpass", from: 2200, to: 350 });
+    for (let i = 0; i < 6; i++) {
+      pop(ctx, out, time + 0.13 + i * 0.085, this.hz(5 - i % 4, 3), 0.045 * (1 - i * 0.1));
+    }
+  }
+
+  /** One cast gets three soft plops, regardless of the number of nets thrown. */
+  trapCast(): void {
+    const voice = this.start("trapCast", 0.8);
+    if (!voice) return;
+    const { ctx, time, out } = voice;
+    for (const [i, degree] of [0, 2, 1].entries()) {
+      const at = time + i * 0.15;
+      pop(ctx, out, at, this.hz(degree, 3), 0.055);
+      noise(ctx, out, { time: at + 0.01, gain: 0.018, attack: 0.005, decay: 0.1, filter: "highpass", from: 900 });
+    }
   }
 
   /** A treasure chest opening: a creaking hinge, a soft thud as the lid falls back, then coins. */

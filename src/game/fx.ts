@@ -106,3 +106,76 @@ export function drawGlow(ctx: CanvasRenderingContext2D, channels: string, x: num
   ctx.drawImage(sprite, x - radius, y - radius, radius * 2, radius * 2);
   ctx.globalAlpha = previous;
 }
+
+const chumSprites = new Map<boolean, HTMLCanvasElement>();
+
+/** Draws cached soft chum pigment, as a broad plume or a hollow reduced-motion tint ring. */
+export function drawChumShape(ctx: CanvasRenderingContext2D, x: number, y: number, radius: number, alpha: number, ring = false): void {
+  if (radius <= 0 || alpha <= 0) return;
+  let sprite = chumSprites.get(ring);
+  if (!sprite) {
+    if (typeof document === "undefined") return;
+    sprite = document.createElement("canvas");
+    sprite.width = sprite.height = 160;
+    const paint = sprite.getContext("2d");
+    if (!paint) return;
+    const gradient = paint.createRadialGradient(80, 80, 0, 80, 80, 80);
+    const stops: readonly (readonly [number, number])[] = ring ? [[0, 0], [0.28, 0], [0.58, 0.55], [0.76, 0.42], [1, 0]] : [[0, 0.75], [0.3, 0.65], [0.65, 0.3], [1, 0]];
+    for (const [offset, opacity] of stops) gradient.addColorStop(offset, `rgba(151, 76, 49, ${opacity})`);
+    paint.fillStyle = gradient;
+    paint.fillRect(0, 0, 160, 160);
+    chumSprites.set(ring, sprite);
+  }
+  const previous = ctx.globalAlpha;
+  ctx.globalAlpha = previous * Math.min(1, alpha);
+  ctx.drawImage(sprite, x - radius, y - radius, radius * 2, radius * 2);
+  ctx.globalAlpha = previous;
+}
+
+/** Re-arm progress, from empty at the snap to one when ready. */
+export function cooldownArcFraction(cooldown: number, resetSeconds: number): number {
+  return resetSeconds <= 0 ? 1 : Math.max(0, Math.min(1, 1 - cooldown / resetSeconds));
+}
+
+/** A small, deterministic foam burst; callers omit it for reduced motion. */
+export function waterSplash(x: number, y: number, radius = 24): Effect {
+  return {
+    life: 0.5,
+    draw(ctx, t) {
+      ctx.strokeStyle = `rgba(232, 251, 255, ${0.65 * (1 - t)})`;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.ellipse(x, y, radius * (0.3 + t), radius * (0.2 + t * 0.6), 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = "#e8fbff";
+      ctx.globalAlpha *= 0.7 * (1 - t);
+      ctx.beginPath();
+      for (let i = 0; i < 8; i++) {
+        const angle = i * Math.PI / 4 + 0.2;
+        const distance = radius * (0.2 + t * 0.8);
+        const px = x + Math.cos(angle) * distance;
+        const py = y + Math.sin(angle) * distance * 0.6 - Math.sin(t * Math.PI) * 10;
+        ctx.moveTo(px + 1.5, py);
+        ctx.arc(px, py, 1.5, 0, Math.PI * 2);
+      }
+      ctx.fill();
+    },
+  };
+}
+
+/** Point on a gently sagging quadratic rope; sag stays within the seine's hit reach. */
+export function ropeSagPoint(a: { x: number; y: number }, b: { x: number; y: number }, t: number): { x: number; y: number } {
+  t = Math.max(0, Math.min(1, t));
+  const sag = Math.min(18, Math.hypot(b.x - a.x, b.y - a.y) * 0.08);
+  return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t + 2 * (1 - t) * t * sag };
+}
+
+/** Normalized cloud opacity over the configured chum lifetime. */
+export function chumCloudAlpha(age: number, seconds: number): number {
+  return seconds <= 0 ? 0 : Math.max(0, Math.min(1, 1 - age / seconds)) ** 1.3;
+}
+
+/** Lure light follows its actual range; a locked lantern retains the small ordinary night lamp. */
+export function lanternLightRadius(upgradeRadius: number, night: number): number {
+  return upgradeRadius > 0 ? upgradeRadius : night > 0 ? 125 : 0;
+}
