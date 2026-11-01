@@ -244,6 +244,33 @@ try {
     await page.waitForFunction(() => window.__fishy.pointer === null);
     await shot(page, `mobile-tools-${viewport.width}`);
   }
+  step("weather badges and stacked announcements fit 320–390px phones");
+  const weatherSave = { ...afterBuy, round: 7, upgrades: { "net.radius": 1 }, money: 1000 };
+  await page.evaluate((data) => localStorage.setItem("fishy.save", JSON.stringify(data)), weatherSave);
+  for (const width of [320, 360, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto(`${dev.url}?sea=storm`);
+    await tap("#title-play");
+    await fits(page, "#start-button");
+    await fits(page, ".weather-badge");
+    assert.match(await page.locator(".weather-badge").innerText(), /Storm/);
+    await tap("#start-button");
+    await page.locator("#sea-banner").waitFor({ state: "visible" });
+    await fits(page, "#sea-banner");
+    const banner = await page.locator("#sea-banner").boundingBox();
+    const bounties = await page.locator("#hud-bounties").boundingBox();
+    assert.ok(banner.y >= bounties.y + bounties.height, "weather banner overlaps the bounty checklist");
+    await shot(page, `mobile-storm-${width}`);
+    await page.goto(`${dev.url}?endlessTime=301`);
+    await tap("#title-endless");
+    await fits(page, "#hud");
+    await fits(page, "#hud-biome");
+    await fits(page, "#hud-weather");
+    await fits(page, "#biome-banner");
+    assert.equal(await page.locator("#hud-biome").innerText(), "Abyssal Trench");
+    await shot(page, `mobile-trench-${width}`);
+  }
+  await page.goto(dev.url);
   await seed({ ...afterBuy, finalRoundDone: true, upgrades: maxed });
   await page.locator("#end-panel").waitFor({ state: "visible" });
   await fits(page, "#end-panel");
