@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { chestValue } from "../chest";
 import { FISH, type FishKind } from "../fish";
+import { seaStateFor } from "../sea";
 import { createRng } from "../rng";
 import { BASE_STATS } from "../stats";
 import { STEP, World, type Fish, type Point } from "../world";
@@ -31,6 +32,10 @@ const WIDTH = 1280;
 const HEIGHT = 800;
 /** Seconds a player spends between rounds: summary screen plus shopping. */
 const HUB_SECONDS = 10;
+/** Fixed campaign identity keeps weather and the shopping timeline reproducible. */
+const CREATED_AT = "2026-01-01T00:00:00.000Z";
+/** Measured on main before weather wiring, using the same bot and seeds. */
+const BASELINE_MINUTES = 74.6;
 /**
  * Bot skill: cursor speed (px/s) and how often it picks a new target. Tuned to a casual player,
  * about $11 in round 1; a sharp bot (1400 px/s, 0.1 s) earns about $16.
@@ -84,7 +89,8 @@ function playRound(
   chumThrows: number;
   trapCatches: number;
 } {
-  const world = new World(applyUpgrades(BASE_STATS, upgrades), createRng(seed), WIDTH, HEIGHT, { round, final: false });
+  const world = new World(applyUpgrades(BASE_STATS, upgrades), createRng(seed), WIDTH, HEIGHT, { round, final: false,
+    sea: seaStateFor(CREATED_AT, round, false) });
   let pointer: Point = { x: WIDTH / 2, y: HEIGHT / 2 };
   let target: Point | null = null;
   let retarget = 0;
@@ -218,8 +224,9 @@ describe.runIf(import.meta.env.PACING)("pacing", () => {
       ].join("\n"),
     );
     expect(isTreeComplete(upgrades)).toBe(true);
-    // Pre-tools main: 69.9 min / 84 rounds. Allow at most 15% more campaign time.
-    expect(total).toBeLessThanOrEqual(69.9 * 60 * 1.15);
+    // Weather must preserve campaign duration within three percent in either direction.
+    expect(total).toBeGreaterThanOrEqual(BASELINE_MINUTES * 60 * 0.97);
+    expect(total).toBeLessThanOrEqual(BASELINE_MINUTES * 60 * 1.03);
     expect(trapUnlockedAt / 60).toBeGreaterThan(15);
     expect(trapUnlockedAt / 60).toBeLessThan(35);
     expect(chumThrows).toBeGreaterThan(0);
