@@ -1,7 +1,7 @@
 import { formatMoney } from "../format";
 import { CHEST, chestInNet, coinBurst, type Chest } from "./chest";
 import { FISH, FISH_KINDS, FISH_SPECS, MAX_FISH_SIZE, type FishKind } from "./fish";
-import { causticCells, chumCloudAlpha, coinFlight, cooldownArcFraction, drawChumShape, drawGlow, lanternLightRadius, ropeSagPoint, shakeOffset, waterSplash, weatherLayers, weatherLightning, type Effect } from "./fx";
+import { causticCells, chumCloudAlpha, coinFlight, cooldownArcFraction, drawChumShape, drawGlow, lanternLightRadius, ropeSagPoint, shakeOffset, waterSplash, weatherLayers, weatherLightning, paintFogPool, paintWhitecap, whitecapPose, type Effect } from "./fx";
 import { loadArt, onArtReady } from "./art";
 import type { Biome } from "./biome";
 import { fogAlpha, fogClearRadius, type SeaState } from "./sea";
@@ -104,7 +104,7 @@ export function seaLight({ biome, timeOfDay, sea }: { biome: Biome; timeOfDay?: 
   const overlays: { rgb: number[]; alpha: number }[] = [];
   if (biome === "trench") overlays.push({ rgb: [172, 190, 255], alpha: 0.1 });
   if (biome === "graveyard") overlays.push({ rgb: [157, 221, 190], alpha: 0.08 });
-  if (sea === "storm") overlays.push({ rgb: [142, 180, 208], alpha: 0.24 });
+  if (sea === "storm") overlays.push({ rgb: [88, 121, 158], alpha: 0.5 });
   if (sea === "fog") overlays.push({ rgb: [197, 222, 219], alpha: 0.12 });
   if (sea === "bloom") overlays.push({ rgb: [117, 198, 138], alpha: 0.22 });
   if (overlays.length) {
@@ -251,6 +251,10 @@ export class Renderer {
   private fogOutlines = new Map<FishKind, HTMLCanvasElement>();
   private lanternLevel = 0;
   private rainTravel = [0, 0];
+  private stormDrift = { x: 0, y: 0 };
+  private whitecap: HTMLCanvasElement | null = null;
+  private fogLayer: HTMLCanvasElement | null = null;
+  private fogPool: { radius: number; feather: number; image: HTMLCanvasElement } | null = null;
   private readonly sprites = new Map<FishKind, FishSprites>();
   /** Palette the cached sprites were drawn in. */
   private palette: PaletteName = getPalette();
@@ -311,6 +315,8 @@ export class Renderer {
     this.canvas.style.height = `${height}px`;
     this.backgrounds.clear();
     this.backgrounds.set("reef", this.paintBackground("reef"));
+    this.fogLayer = null;
+    this.fogPool = null;
     this.caustics = this.paintCaustics();
     this.lantern = this.paintLantern();
     // A viewport change cannot invalidate a pending HUD bump.
@@ -537,7 +543,9 @@ export class Renderer {
     const phase = timeOfDay ?? world?.timeOfDay;
     if (sea === "storm" && !this.reducedMotion?.matches) {
       const wind = world?.sea === "storm" ? world.wind : { x: 25, y: 32 };
-      for (let i = 0; i < 2; i++) this.rainTravel[i] = (this.rainTravel[i]! + dt * (150 + Math.hypot(wind.x, wind.y) * 3) * (i ? 0.72 : 1)) % 512;
+      for (let i = 0; i < 2; i++) this.rainTravel[i] = (this.rainTravel[i]! + dt * (500 + Math.hypot(wind.x, wind.y) * 5) * (i ? 0.72 : 1)) % 512;
+      this.stormDrift.x = (this.stormDrift.x + wind.x * dt * 0.4) % Math.max(1, this.canvas.width / this.dpr);
+      this.stormDrift.y = (this.stormDrift.y + wind.y * dt * 0.4) % Math.max(1, this.canvas.height / this.dpr);
     }
     // Prime the incoming biome before its eight-second fade begins; retain at most two canvases.
     if (biome && this.width > 0) {
@@ -674,6 +682,7 @@ export class Renderer {
       patterns = weatherLayers(sea).flatMap(layer => { const pattern = ctx.createPattern(layer, "repeat"); return pattern ? [pattern] : []; });
       this.weatherPatterns.set(sea, patterns);
     }
+    if (sea === "fog") { this.drawFog(patterns, world, pointer, stats); return; }
     const reduced = !!this.reducedMotion?.matches;
     const time = reduced ? 0 : this.time;
     const wind = world?.sea === "storm" ? world.wind : { x: 25, y: 32 };
@@ -681,55 +690,92 @@ export class Renderer {
     const reach = Math.hypot(w, h) + 1024;
     ctx.save();
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    if (sea === "fog") {
-      const clear = fogClearRadius(stats) * this.viewScale;
-      const pools = [{ x: this.width / 2, y: this.height / 2 }];
-      if (pointer && !world?.over) pools.push(pointer);
-      // Intersect the complements of both circles: their overlap also stays clear.
-      for (const pool of pools) {
-        ctx.beginPath(); ctx.rect(0, 0, w, h);
-        const x = pool.x * this.viewScale + this.offsetX, y = pool.y * this.viewScale + this.offsetY;
-        ctx.moveTo(x + clear, y); ctx.arc(x, y, clear, 0, TAU);
-        ctx.clip("evenodd");
-      }
-    }
     for (const [i, pattern] of patterns.entries()) {
       ctx.save();
       ctx.translate(w / 2, h / 2);
       if (sea === "storm") {
         ctx.rotate(Math.atan2(wind.y, wind.x) - Math.PI / 2);
         ctx.translate(i * 73, reduced ? 0 : this.rainTravel[i]!);
-      } else ctx.translate((time * (i ? -3 : 5)) % 512, (time * (sea === "fog" ? 2 : 4) * (i ? -1 : 1)) % 512);
+      } else ctx.translate((time * (i ? -2.2 : 3)) % 512, (time * (i ? -1.4 : 1.8)) % 512);
       ctx.fillStyle = pattern;
-      ctx.globalAlpha = sea === "fog" ? 0.14 : sea === "bloom" ? 0.23 : reduced ? 0.035 : 0.09;
+      ctx.globalAlpha = sea === "bloom" ? (i ? 0.28 : 0.36) : reduced ? (i ? 0.18 : 0.22) : (i ? 0.25 : 0.32);
       ctx.fillRect(-reach, -reach, reach * 2, reach * 2);
       ctx.restore();
     }
     if (sea === "storm" && !reduced) {
-      ctx.strokeStyle = "rgba(185, 219, 231, 0.14)"; ctx.lineWidth = 0.8;
+      ctx.strokeStyle = "rgba(210, 235, 245, 0.3)"; ctx.lineWidth = 1;
       const angle = Math.atan2(wind.y, wind.x);
       ctx.beginPath();
       for (let i = 0; i < 28; i++) {
-        const x = ((i * 0.618034 * w + wind.x * time * 0.4) % w + w) % w;
-        const y = ((i * 0.4137 * h + wind.y * time * 0.4) % h + h) % h;
+        const x = ((i * 0.618034 * w + this.stormDrift.x) % w + w) % w;
+        const y = ((i * 0.4137 * h + this.stormDrift.y) % h + h) % h;
         ctx.moveTo(x + Math.cos(angle) * 7, y + Math.sin(angle) * 7);
         ctx.ellipse(x, y, 7, 1.6, angle, 0, Math.PI);
       }
       ctx.stroke();
+      this.whitecap ??= paintWhitecap();
+      for (let i = 0; i < 36; i++) {
+        const foam = whitecapPose(i, time, wind, w, h);
+        const scale = 0.65 + i % 4 * 0.12;
+        ctx.save(); ctx.translate(foam.x, foam.y); ctx.rotate(angle);
+        ctx.globalAlpha = foam.alpha;
+        ctx.drawImage(this.whitecap, -14 * scale, -7 * scale, 28 * scale, 14 * scale);
+        ctx.restore();
+      }
       const flash = weatherLightning(world?.elapsed ?? this.time);
       if (flash > 0) { ctx.fillStyle = "#b6cee5"; ctx.globalAlpha = flash; ctx.fillRect(0, 0, w, h); }
     }
     if (sea === "bloom") {
-      ctx.strokeStyle = "#c6dfac"; ctx.lineWidth = 0.8; ctx.globalAlpha = 0.23;
-      ctx.beginPath();
-      for (let i = 0; i < 18; i++) {
-        const x = ((i * 0.618034 + 0.2) % 1) * w;
-        const y = ((i * 0.4137 * h - time * (3 + i % 4)) % h + h) % h;
-        ctx.moveTo(x + 1.5 + i % 3, y); ctx.arc(x, y, 1.5 + i % 3, 0, TAU);
+      ctx.strokeStyle = "#dbedbf"; ctx.lineWidth = 0.9;
+      for (let i = 0; i < 24; i++) {
+        const speed = 7 + i % 5 * 1.4;
+        const rise = ((i * 0.4137 - time * speed / h) % 1 + 1) % 1;
+        const x = ((i * 0.618034 + 0.2) % 1) * w + Math.sin(time * 0.5 + i) * 2;
+        const y = rise * h, radius = 1.8 + i % 4 * 0.8;
+        ctx.globalAlpha = Math.min(1, Math.min(rise, 1 - rise) * 16) * 0.45;
+        ctx.beginPath(); ctx.arc(x, y, radius, 0, TAU); ctx.stroke();
       }
-      ctx.stroke();
     }
     ctx.restore();
+    this.resetTransform();
+  }
+
+  /** Two cached wisp tiles are composited at CSS density; only their final mask follows the net. */
+  private drawFog(patterns: readonly CanvasPattern[], world: World | null, pointer: Point | null, stats: Stats): void {
+    const w = Math.ceil(this.canvas.width / this.dpr), h = Math.ceil(this.canvas.height / this.dpr);
+    if (!this.fogLayer) {
+      this.fogLayer = document.createElement("canvas");
+      this.fogLayer.width = w; this.fogLayer.height = h;
+    }
+    const fog = this.fogLayer.getContext("2d")!;
+    fog.setTransform(1, 0, 0, 1, 0, 0);
+    fog.globalCompositeOperation = "source-over"; fog.globalAlpha = 1;
+    fog.clearRect(0, 0, w, h);
+    const time = this.reducedMotion?.matches ? 0 : this.time;
+    const reach = Math.hypot(w, h) + 1024;
+    for (const [i, pattern] of patterns.entries()) {
+      fog.save(); fog.translate(w / 2, h / 2);
+      fog.rotate(i ? -0.32 : 0.15); fog.scale(i ? 1.36 : 1, i ? 1.36 : 1);
+      // Wrap in the tile's own coordinates so neither rotation nor scale introduces a jump.
+      fog.translate((time * (i ? -5.5 : 7.5)) % 512, (time * (i ? -3 : 2.5)) % 512);
+      fog.globalAlpha = i ? 0.4 : 0.5; fog.fillStyle = pattern;
+      fog.fillRect(-reach, -reach, reach * 2, reach * 2); fog.restore();
+    }
+    const radius = fogClearRadius(stats) * this.viewScale, feather = 140 * this.viewScale;
+    if (!this.fogPool || this.fogPool.radius !== radius || this.fogPool.feather !== feather) {
+      this.fogPool = { radius, feather, image: paintFogPool(radius, feather) };
+    }
+    const mask = this.fogPool.image;
+    fog.globalCompositeOperation = "destination-out"; fog.globalAlpha = 1;
+    const erasePool = (pool: Point) => {
+      const x = pool.x * this.viewScale + this.offsetX, y = pool.y * this.viewScale + this.offsetY;
+      fog.drawImage(mask, x - mask.width / 2, y - mask.height / 2, mask.width, mask.height);
+    };
+    erasePool({ x: this.width / 2, y: this.height / 2 });
+    if (pointer && !world?.over) erasePool(pointer);
+    const ctx = this.ctx;
+    ctx.save(); ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    ctx.globalAlpha = 1; ctx.drawImage(this.fogLayer, 0, 0); ctx.restore();
     this.resetTransform();
   }
 

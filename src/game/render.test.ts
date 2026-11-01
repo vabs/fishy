@@ -21,6 +21,7 @@ function canvasRecorder() {
   const curves: number[][] = [];
   const scales: number[][] = [];
   const moves: number[][] = [];
+  const gradients: { radii: number[]; stops: [number, string][] }[] = [];
   const noop = () => {};
   const target = {
     shadowBlur: 0,
@@ -30,6 +31,7 @@ function canvasRecorder() {
     lineWidth: 1,
     globalCompositeOperation: "source-over",
     globalAlpha: 1,
+    clip: noop,
     beginPath() { currentArc = undefined; },
     stroke() { paints.push({ blur: this.shadowBlur, style: this.strokeStyle, alpha: this.globalAlpha, width: this.lineWidth, arc: currentArc }); },
     fillRect() { fills.push({ color: this.fillStyle, blend: this.globalCompositeOperation, alpha: this.globalAlpha }); },
@@ -43,13 +45,17 @@ function canvasRecorder() {
     moveTo(...values: number[]) { moves.push(values); },
     scale(...values: number[]) { scales.push(values); },
     drawImage(image: CanvasImageSource, ...values: number[]) { images.push(values); imagePaints.push({ image, alpha: this.globalAlpha, args: values }); },
-    createRadialGradient: () => ({ addColorStop: noop }),
+    createRadialGradient: (...radii: number[]) => {
+      const stops: [number, string][] = [];
+      gradients.push({ radii, stops });
+      return { addColorStop: (offset: number, color: string) => stops.push([offset, color]) };
+    },
     createLinearGradient: () => ({ addColorStop: noop }),
     createPattern: () => null,
   };
   const ctx = new Proxy(target, { get: (object, key) => Reflect.get(object, key) ?? noop }) as unknown as CanvasRenderingContext2D;
   const canvas = { getContext: () => ctx, style: {} } as unknown as HTMLCanvasElement;
-  return { canvas, ctx, paints, fills, arcs, circles, ellipses, transforms, translations, images, imagePaints, curves, scales, moves, renderer: new Renderer(canvas) };
+  return { canvas, ctx, paints, fills, arcs, circles, ellipses, transforms, translations, images, imagePaints, curves, scales, moves, gradients, renderer: new Renderer(canvas) };
 }
 
 const scene = { world: null, pointer: null, stats: BASE_STATS };
@@ -857,8 +863,8 @@ describe("weather rendering integration", () => {
   it("shares soft, infrequent lightning timing and suppresses flashes with reduced motion", async () => {
     const { weatherLightning } = await import("./fx");
     expect(weatherLightning(11)).toBe(0);
-    expect(weatherLightning(11.325)).toBeCloseTo(0.075);
-    expect(weatherLightning(25.325)).toBeCloseTo(0.075);
+    expect(weatherLightning(11.325)).toBeCloseTo(0.1);
+    expect(weatherLightning(25.325)).toBeCloseTo(0.1);
     expect(weatherLightning(11.325, true)).toBe(0);
     expect(weatherLightning(12)).toBe(0);
     expect(weatherLightning(19.325)).toBe(0);
@@ -896,4 +902,103 @@ it.each(["storm", "fog", "bloom"] as const)("holds both %s layers still with red
   expect(translations).toEqual(first);
   expect(pattern).toHaveBeenCalledTimes(2);
   if (sea === "storm") expect(ellipses.filter(e => e[2] === 7 && e[3] === 1.6)).toHaveLength(0);
+});
+
+
+describe("weather visual review regressions", () => {
+  it("draws two clearly visible rain depths and fading downwind whitecaps without frame allocations", async () => {
+    const caches: ReturnType<typeof canvasRecorder>[] = [];
+    vi.stubGlobal("document", { createElement: () => { const cache = canvasRecorder(); caches.push(cache); return cache.canvas; } });
+    const { renderer, ctx } = canvasRecorder();
+    renderer.resize(1280, 800, 1);
+    const patterns = [{}, {}] as CanvasPattern[];
+    let index = 0;
+    vi.spyOn(ctx, "createPattern").mockImplementation(() => patterns[index++ % 2]!);
+    const paints: number[] = [];
+    vi.spyOn(ctx, "fillRect").mockImplementation(() => { if (patterns.includes(ctx.fillStyle as CanvasPattern)) paints.push(ctx.globalAlpha); });
+    renderer.draw({ ...scene, sea: "storm" }, 0.5);
+    expect(paints).toHaveLength(2);
+    for (const alpha of paints) { expect(alpha).toBeGreaterThanOrEqual(0.25); expect(alpha).toBeLessThanOrEqual(0.35); }
+    const count = caches.length;
+    renderer.draw({ ...scene, sea: "storm" }, 0.5);
+    expect(caches).toHaveLength(count);
+    const { whitecapPose } = await import("./fx");
+    const a = whitecapPose(0, 0.4, { x: 30, y: 10 }, 1280, 800);
+    const b = whitecapPose(0, 0.5, { x: 30, y: 10 }, 1280, 800);
+    expect(b.x - a.x).toBeCloseTo(3);
+    expect(b.y - a.y).toBeCloseTo(1);
+    expect(a.alpha).toBeGreaterThan(0);
+    expect(whitecapPose(0, 0, { x: 30, y: 10 }, 1280, 800).alpha).toBe(0);
+  });
+
+  it("feathers the fog itself across 140 pixels with a reusable radial mask, without a circular clip", async () => {
+    const { paintFogPool } = await import("./fx");
+    const caches: ReturnType<typeof canvasRecorder>[] = [];
+    vi.stubGlobal("document", { createElement: () => { const cache = canvasRecorder(); caches.push(cache); return cache.canvas; } });
+    const mask = paintFogPool(200);
+    expect(mask.width).toBe(680);
+    const gradient = caches[0]!.gradients[0]!;
+    expect(gradient.radii).toEqual([340, 340, 200, 340, 340, 340]);
+    expect(gradient.stops).toEqual([[0, "rgba(0, 0, 0, 1)"], [1, "rgba(0, 0, 0, 0)"]]);
+    const { renderer, ctx } = canvasRecorder();
+    renderer.resize(1280, 800, 1);
+    vi.spyOn(ctx, "createPattern").mockReturnValue({} as CanvasPattern);
+    const clip = vi.spyOn(ctx, "clip");
+    renderer.draw({ ...scene, sea: "fog", pointer: { x: 300, y: 300 } }, 0.1);
+    expect(clip).not.toHaveBeenCalled();
+    const count = caches.length;
+    const submissions = caches.flatMap(c => c.imagePaints).filter(p => p.args.length === 4);
+    expect(submissions.length).toBeGreaterThanOrEqual(2); // Boat and net erase the same cached feather.
+    renderer.draw({ ...scene, sea: "fog", pointer: { x: 400, y: 300 } }, 0.1);
+    expect(caches).toHaveLength(count);
+  });
+
+  it("makes a daytime storm darker than clear water while retaining every biome's contrast", async () => {
+    const { seaLight } = await import("./render");
+    for (const biome of ["reef", "trench", "graveyard"] as const) {
+      const light = seaLight({ biome, sea: "storm", timeOfDay: 0 });
+      const tint = light.tint.match(/[\d.]+/g)!.map(Number);
+      const transmission = tint.map(v => 1 - light.alpha + light.alpha * v / 255);
+      expect(transmission[1]).toBeLessThan(biome === "trench" ? 0.85 : 0.8);
+      expect(transmission[2]).toBeGreaterThan(transmission[0]!);
+    }
+  });
+});
+
+it("drifts fog continuously across a tile wrap even when the layer is rotated and scaled", () => {
+  const pattern = {} as CanvasPattern;
+  const samples: number[] = [];
+  vi.stubGlobal("document", { createElement: () => {
+    const { canvas, ctx } = canvasRecorder();
+    // Minimal affine Canvas platform: sample a periodic pigment at one fixed screen pixel.
+    let m = [1, 0, 0, 1, 0, 0];
+    const stack: number[][] = [];
+    Object.assign(ctx, {
+      save() { stack.push([...m]); }, restore() { m = stack.pop()!; },
+      setTransform(...values: number[]) { m = values; },
+      translate(x: number, y: number) { m[4]! += m[0]! * x + m[2]! * y; m[5]! += m[1]! * x + m[3]! * y; },
+      scale(x: number, y: number) { m[0]! *= x; m[1]! *= x; m[2]! *= y; m[3]! *= y; },
+      rotate(angle: number) {
+        const [a, b, c, d] = m as [number, number, number, number];
+        const cos = Math.cos(angle), sin = Math.sin(angle);
+        m[0] = a * cos + c * sin; m[1] = b * cos + d * sin;
+        m[2] = c * cos - a * sin; m[3] = d * cos - b * sin;
+      },
+      fillRect() {
+        if (ctx.fillStyle !== pattern) return;
+        const [a, b, c, d, e, f] = m as [number, number, number, number, number, number];
+        const x = 20 - e, y = 30 - f, det = a * d - b * c;
+        samples.push(Math.cos((d * x - c * y) / det * Math.PI * 2 / 512) + Math.sin((a * y - b * x) / det * Math.PI * 2 / 512));
+      },
+    });
+    return canvas;
+  } });
+  const { renderer, ctx } = canvasRecorder();
+  renderer.resize(1280, 800, 1);
+  vi.spyOn(ctx, "createPattern").mockReturnValue(pattern);
+  renderer.draw({ ...scene, sea: "fog" }, 512 / 7.5 - 0.0001);
+  const before = [...samples]; samples.length = 0;
+  renderer.draw({ ...scene, sea: "fog" }, 0.0002);
+  expect(before).toHaveLength(2); expect(samples).toHaveLength(2);
+  for (let i = 0; i < 2; i++) expect(Math.abs(samples[i]! - before[i]!)).toBeLessThan(0.001);
 });

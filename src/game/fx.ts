@@ -192,35 +192,41 @@ export function weatherLayers(state: "storm" | "fog" | "bloom"): readonly HTMLCa
     canvas.width = canvas.height = 512;
     const ctx = canvas.getContext("2d")!;
     if (state === "storm") {
-      ctx.strokeStyle = "#b7dbe8"; ctx.lineWidth = layer ? 0.7 : 1;
+      ctx.strokeStyle = "#d5e6ef"; ctx.lineWidth = layer ? 0.65 : 0.9;
       ctx.beginPath();
-      for (let i = 0; i < 90; i++) {
-        const x = rng() * 512, y = rng() * 512, length = 9 + rng() * 15;
+      for (let i = 0; i < (layer ? 280 : 210); i++) {
+        const x = rng() * 512, y = rng() * 512, length = layer ? 13 + rng() * 12 : 22 + rng() * 19;
         // Repeat edge strokes too, so the moving tiles have no seam.
         for (const dy of [-512, 0, 512]) { ctx.moveTo(x, y + dy); ctx.lineTo(x, y + dy + length); }
       }
       ctx.stroke();
     } else if (state === "fog") {
-      // Several scales of soft pigment make low-frequency cloud noise, without a runtime filter.
-      for (let i = 0; i < 32; i++) {
-        const x = rng() * 512, y = rng() * 512, radius = 45 + rng() * 120;
+      // Long, broken wisps leave translucent gaps, rather than accumulating a flat grey wash.
+      for (let i = 0; i < 12; i++) {
+        const x = rng() * 512, y = rng() * 512, radius = 90 + rng() * 85;
+        const angle = rng() * 0.8 - 0.4;
         for (const dx of [-512, 0, 512]) for (const dy of [-512, 0, 512]) {
-          const gradient = ctx.createRadialGradient(x + dx, y + dy, 0, x + dx, y + dy, radius);
-          gradient.addColorStop(0, "rgba(202, 222, 215, 0.3)");
-          gradient.addColorStop(1, "rgba(202, 222, 215, 0)");
-          ctx.fillStyle = gradient; ctx.fillRect(x + dx - radius, y + dy - radius, radius * 2, radius * 2);
+          ctx.save(); ctx.translate(x + dx, y + dy); ctx.rotate(angle); ctx.scale(1, 0.42);
+          const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, radius);
+          gradient.addColorStop(0, "rgba(212, 231, 224, 0.75)");
+          gradient.addColorStop(0.45, "rgba(202, 224, 218, 0.35)");
+          gradient.addColorStop(1, "rgba(202, 224, 218, 0)");
+          ctx.fillStyle = gradient; ctx.fillRect(-radius, -radius, radius * 2, radius * 2);
+          ctx.restore();
         }
       }
     } else {
-      for (let i = 0; i < 24; i++) {
-        const x = rng() * 512, y = rng() * 512, radius = 7 + rng() * 23;
+      for (let i = 0; i < 22; i++) {
+        const x = rng() * 512, y = rng() * 512, radius = 20 + rng() * 32;
         for (const dx of [-512, 0, 512]) for (const dy of [-512, 0, 512]) {
-          const gradient = ctx.createRadialGradient(x + dx, y + dy, 0, x + dx, y + dy, radius);
-          gradient.addColorStop(0, "rgba(136, 171, 78, 0.6)");
-          gradient.addColorStop(0.5, "rgba(93, 154, 84, 0.35)");
-          gradient.addColorStop(1, "rgba(93, 154, 84, 0)");
-          ctx.fillStyle = gradient;
-          ctx.beginPath(); ctx.ellipse(x + dx, y + dy, radius, radius * 0.55, i * 1.7, 0, Math.PI * 2); ctx.fill();
+          ctx.save(); ctx.translate(x + dx, y + dy); ctx.rotate(i * 1.7); ctx.scale(1, 0.7);
+          const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, radius);
+          gradient.addColorStop(0, "rgba(67, 125, 60, 0.75)");
+          gradient.addColorStop(0.4, "rgba(96, 147, 65, 0.55)");
+          gradient.addColorStop(0.75, "rgba(121, 161, 77, 0.2)");
+          gradient.addColorStop(1, "rgba(121, 161, 77, 0)");
+          ctx.fillStyle = gradient; ctx.fillRect(-radius, -radius, radius * 2, radius * 2);
+          ctx.restore();
         }
       }
     }
@@ -234,5 +240,43 @@ export function weatherLayers(state: "storm" | "fog" | "bloom"): readonly HTMLCa
 export function weatherLightning(elapsed: number, reducedMotion = false): number {
   if (reducedMotion || !Number.isFinite(elapsed) || elapsed < 0) return 0;
   const phase = elapsed % 14 - 11;
-  return phase > 0 && phase < 0.65 ? Math.sin(phase / 0.65 * Math.PI) * 0.075 : 0;
+  return phase > 0 && phase < 0.65 ? Math.sin(phase / 0.65 * Math.PI) * 0.1 : 0;
+}
+
+
+/** A radial fog eraser with a fully clear centre and a 140 px feather. Cache until its radius changes. */
+export function paintFogPool(clearRadius: number, feather = 140): HTMLCanvasElement {
+  const extent = Math.ceil(clearRadius + feather);
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = extent * 2;
+  const ctx = canvas.getContext("2d")!;
+  const gradient = ctx.createRadialGradient(extent, extent, clearRadius, extent, extent, clearRadius + feather);
+  gradient.addColorStop(0, "rgba(0, 0, 0, 1)");
+  gradient.addColorStop(1, "rgba(0, 0, 0, 0)");
+  ctx.fillStyle = gradient; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  return canvas;
+}
+
+/** A small foam crest painted once; the renderer supplies its fade and downwind drift. */
+export function paintWhitecap(): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
+  canvas.width = 28; canvas.height = 14;
+  const ctx = canvas.getContext("2d")!;
+  ctx.strokeStyle = "#eefaff"; ctx.lineWidth = 1.5; ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(5, 5); ctx.quadraticCurveTo(11, 2, 17, 5);
+  ctx.moveTo(11, 8); ctx.lineTo(21, 7);
+  ctx.moveTo(5, 10); ctx.lineTo(9, 10);
+  ctx.stroke();
+  return canvas;
+}
+
+/** A bounded, deterministic foam life: fade in, drift with the wind, fade out and reseed elsewhere. */
+export function whitecapPose(index: number, time: number, wind: { x: number; y: number }, width: number, height: number): { x: number; y: number; alpha: number } {
+  const life = 1.4 + index % 4 * 0.2;
+  const clock = Math.max(0, time) + index * 0.271828;
+  const cycle = Math.floor(clock / life), age = clock % life;
+  const x = ((index * 0.618034 + cycle * 0.173) % 1) * width + wind.x * age;
+  const y = ((index * 0.4137 + cycle * 0.317) % 1) * height + wind.y * age;
+  return { x: (x % width + width) % width, y: (y % height + height) % height, alpha: Math.sin(age / life * Math.PI) ** 2 * 0.6 };
 }
