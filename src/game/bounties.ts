@@ -3,6 +3,7 @@ import { CHEST } from "./chest";
 import { FISH, FISH_KINDS, type FishKind } from "./fish";
 import { GOLDEN } from "./golden";
 import type { Rng } from "./rng";
+import type { SeaState } from "./sea";
 import { spawnRate, type Stats } from "./stats";
 import { isFrenzyRound } from "./world";
 
@@ -36,6 +37,7 @@ export const BOUNTIES_FROM_ROUND = 2;
 export function rollBounties(input: {
   round: number;
   final: boolean;
+  sea?: SeaState;
   upgrades: Readonly<Record<string, number>>;
   stats: Stats;
   recentEarnings: number;
@@ -50,7 +52,7 @@ export function rollBounties(input: {
   for (const fish of unlocked) candidates.push({ kind: "catch", fish });
   if (stats.comboWindow > 0 && stats.comboMax > 1.1 && stats.comboMax >= 1.2) candidates.push({ kind: "combo" });
   candidates.push({ kind: "haul" });
-  if (recentEarnings > 0) candidates.push({ kind: "earn" });
+  if (recentEarnings > 0 && input.sea !== "bloom") candidates.push({ kind: "earn" });
   if (round >= GOLDEN.fromRound && stats.goldenRate > 0) candidates.push({ kind: "golden" });
   if (round >= CHEST.fromRound) candidates.push({ kind: "chest" });
   if (isFrenzyRound({ round, final })) candidates.push({ kind: "frenzy" });

@@ -162,3 +162,18 @@ describe("bounty labels and progress", () => {
     expect(bountyGuarantees(["chest", "golden"].map((kind) => ({ id: kind, kind, target: 1, reward: 5 } as Bounty)))).toEqual({ chest: true, golden: true });
   });
 });
+
+it("omits earnings challenges only in Algal Bloom, leaving other boards unchanged", () => {
+  for (const sea of ["clear", "storm", "fog", "bloom"] as const) {
+    let earnings = 0;
+    for (let seed = 0; seed < 100; seed++) {
+      const board = rollBounties({ round: 8, final: false, upgrades, stats: maxStats,
+        recentEarnings: 1234, rng: createRng(seed), sea });
+      expect(board).toHaveLength(3);
+      earnings += board.filter(b => b.kind === "earn").length;
+      if (sea !== "bloom") expect(board).toEqual(roll(seed, 8));
+    }
+    if (sea === "bloom") expect(earnings).toBe(0);
+    else expect(earnings).toBeGreaterThan(0);
+  }
+});

@@ -5,6 +5,7 @@ import { GOLDEN, goldenSwim, newGoldenState, type GoldenState } from "./golden";
 import { createRng, pickWeighted, range, type Rng } from "./rng";
 import { castTraps, resizeTraps, RIGGING, segmentDistance, type Trap } from "./rigging";
 import { spawnRate, type Stats } from "./stats";
+import { SEA, type SeaState } from "./sea";
 
 const TAU = Math.PI * 2;
 
@@ -122,6 +123,7 @@ export type WorldEvent =
   | { type: "capture"; kind: FishKind; source: CaptureSource; x: number; y: number; value: number; combo: number; golden?: boolean }
   | { type: "time-bonus"; x: number; y: number; seconds: number }
   | { type: "frenzy"; phase: "start" | "end" }
+  | { type: "sea"; phase: "start" | "end"; state: SeaState }
   /** A golden fish appeared. */
   | { type: "golden"; kind: FishKind; x: number; y: number }
   /** A golden fish wasn't caught in time and dived away. It's already gone from `fish`. */
@@ -159,6 +161,8 @@ export interface RoundOptions {
   final: boolean;
   /** Endless sandbox: no clock, recurring frenzy waves and chests. */
   endless?: boolean;
+  /** Timed-round weather supplied by the hub; Endless uses its own weather clock. */
+  sea?: SeaState;
   /** Events a bounty needs: make sure they happen this round. */
   guarantee?: { chest?: boolean; golden?: boolean };
 }
@@ -219,6 +223,18 @@ export class World {
   /** Fish caught while the Feeding Frenzy wave ran, and the money they earned. Part of the totals above. */
   frenzyCaught = 0;
   frenzyEarned = 0;
+  /** Extra money from storm and fog, already included in the catch totals. */
+  seaEarned = 0;
+
+  private currentSea: SeaState;
+  private windAngle = 0;
+  private seaStarted = 0;
+  /** Seeded from the already-drawn first-wave seed; weather never advances fish or event RNG. */
+  private weatherStream: Rng | null = null;
+  private nextSeaAt: number = SEA.endlessEvery;
+  private seaUntil = 0;
+  private pendingSea: SeaState | null = null;
+  private lastSea: SeaState = "clear";
 
   private events: WorldEvent[] = [];
   private captureQueue: { fish: Fish; source: CaptureSource }[] = [];
@@ -256,11 +272,14 @@ export class World {
     private _height: number,
     readonly round: RoundOptions = { round: 1, final: false },
   ) {
+    this.currentSea = this.endless ? "clear" : round.sea ?? "clear";
     this.timeLeft = this.endless ? Infinity : stats.roundSeconds;
     // Only frenzy rounds and endless draw for a wave, so other timed rounds replay as before.
     if (this.endless || isFrenzyRound(round)) {
       const start = this.endless ? ENDLESS.firstFrenzy : stats.roundSeconds * FRENZY_START;
-      this.firstWave = { start, end: start + stats.frenzySeconds, sweep: this.rng() < 0.5 ? 1 : -1 };
+      const roll = this.rng();
+      this.firstWave = { start, end: start + stats.frenzySeconds, sweep: roll < 0.5 ? 1 : -1 };
+      if (this.endless) this.weatherStream = createRng(Math.floor(roll * 0x1_0000_0000) ^ 0x736561);
     } else {
       this.firstWave = null;
     }
@@ -273,6 +292,9 @@ export class World {
     if (this.endless) this.chestAt = range(this.eventRng, ...ENDLESS.chestGap);
     else if (chestRound) this.chestAt = chestTime(this.round, stats, this.eventRng);
     this.castRigging();
+    if (this.sea === "storm") this.windAngle = range(this.rng, 0, TAU);
+    if (this.sea !== "clear") this.emit({ type: "sea", phase: "start", state: this.sea });
+    this.boundStorm();
   }
 
   get width(): number {
@@ -290,6 +312,24 @@ export class World {
   /** True in the endless sandbox. */
   get endless(): boolean {
     return this.round.endless === true;
+  }
+
+  /** Current weather, supplied for timed rounds and rotated during Endless. */
+  get sea(): SeaState {
+    return this.currentSea;
+  }
+
+  /** Endless weather seconds remaining; timed weather lasts the whole round. */
+  get seaLeft(): number {
+    return this.endless ? Math.max(0, this.seaUntil - this.elapsed) : Infinity;
+  }
+
+  /** Wind velocity with a smooth six-second gust, zero outside a storm. */
+  get wind(): Point {
+    if (this.sea !== "storm") return { x: 0, y: 0 };
+    const gust = (1 - Math.cos((this.elapsed - this.seaStarted) * TAU / 6)) / 2;
+    const speed = SEA.stormBase + (SEA.stormGust - SEA.stormBase) * gust;
+    return { x: Math.cos(this.windAngle) * speed, y: Math.sin(this.windAngle) * speed };
   }
 
   /** Endless day phase: golden hour at 0, night at 0.5; absent in timed rounds. */
@@ -323,7 +363,10 @@ export class World {
 
   /** Ends an endless session. No-op in a timed round. */
   finish(): void {
-    if (this.endless) this.finished = true;
+    if (this.endless && !this.finished) {
+      if (this.sea !== "clear") this.emit({ type: "sea", phase: "end", state: this.sea });
+      this.finished = true;
+    }
   }
 
   /** How far the net is through charging its next tick, 0 to 1. */
@@ -391,6 +434,9 @@ export class World {
       fish.offsetX *= sx;
       fish.offsetY *= sy;
       resizePull(fish, sx, sy);
+      if (fish.state.windOx !== undefined) fish.state.windOx *= sx;
+      if (fish.state.windOy !== undefined) fish.state.windOy *= sy;
+      this.driftInStorm(fish, 0);
       this.place(fish);
     }
     this.traps = resizeTraps(this.traps, this.swimArea(), width, height, sx, sy);
@@ -434,6 +480,7 @@ export class World {
       this.elapsed += dt;
     }
     this.announceFrenzy();
+    this.rotateSea();
     if (this.endless && this.elapsed >= this.nextRecast) {
       this.castRigging();
       this.nextRecast = (Math.floor(this.elapsed / RIGGING.endlessRecast) + 1) * RIGGING.endlessRecast;
@@ -457,7 +504,11 @@ export class World {
     this.snapTraps();
     this.hitSeines();
     this.processCaptures();
-    if (!this.endless) this.timeLeft = Math.max(0, this.timeLeft - dt);
+    this.boundStorm();
+    if (!this.endless) {
+      this.timeLeft = Math.max(0, this.timeLeft - dt);
+      if (this.over && this.sea !== "clear") this.emit({ type: "sea", phase: "end", state: this.sea });
+    }
   }
 
   countOf(kind: FishKind): number {
@@ -507,8 +558,8 @@ export class World {
     const fish: Fish = {
       id: this.nextId++,
       kind: k,
-      hp: def.hp,
-      maxHp: def.hp,
+      hp: def.hp * (this.sea === "bloom" ? SEA.bloomHp : 1),
+      maxHp: def.hp * (this.sea === "bloom" ? SEA.bloomHp : 1),
       hits: 0,
       angle,
       orbit,
@@ -584,6 +635,47 @@ export class World {
   private get eventRng(): Rng {
     this.eventStream ??= createRng(Math.floor(this.rng() * 0x1_0000_0000));
     return this.eventStream;
+  }
+
+  /** Applies bloom toughness to existing fish too, preserving their remaining health fraction. */
+  private changeSea(state: SeaState): void {
+    const hpMult = (state === "bloom" ? SEA.bloomHp : 1) / (this.sea === "bloom" ? SEA.bloomHp : 1);
+    if (hpMult !== 1) {
+      for (const fish of this.fish) {
+        fish.hp *= hpMult;
+        fish.maxHp *= hpMult;
+      }
+    }
+    this.currentSea = state;
+  }
+
+  /** Rolls on fixed endless-only boundaries; a selected state waits for a whole wave-free window. */
+  private rotateSea(): void {
+    const rng = this.weatherStream;
+    if (!this.endless || !rng) return;
+    if (this.sea !== "clear" && this.elapsed >= this.seaUntil) {
+      this.emit({ type: "sea", phase: "end", state: this.sea });
+      this.changeSea("clear");
+      this.seaUntil = 0;
+    }
+    if (this.sea !== "clear") return;
+    if (this.pendingSea === null && this.elapsed >= this.nextSeaAt) {
+      this.nextSeaAt = (Math.floor(this.elapsed / SEA.endlessEvery) + 1) * SEA.endlessEvery;
+      if (rng() >= 0.5) return;
+      const choices = (["storm", "fog", "bloom"] as const).filter(state => state !== this.lastSea);
+      this.pendingSea = choices[Math.floor(rng() * choices.length)]!;
+    }
+    if (this.pendingSea === null) return;
+    const wave = this.frenzy;
+    if (wave && wave.start < this.elapsed + SEA.endlessLength && wave.end > this.elapsed) return;
+    const state = this.pendingSea;
+    this.changeSea(state);
+    this.pendingSea = null;
+    this.lastSea = state;
+    this.seaStarted = this.elapsed;
+    this.seaUntil = this.elapsed + SEA.endlessLength;
+    if (state === "storm") this.windAngle = range(rng, 0, TAU);
+    this.emit({ type: "sea", phase: "start", state });
   }
 
   private pullToBoat(dt: number): void {
@@ -703,6 +795,62 @@ export class World {
     fish.y = cy + sin * (fish.orbit * ry + wobble) + fish.offsetY;
   }
 
+  /**
+   * Adds only the wind's share of displacement, leaving lures and ability offsets independent.
+   * Integrates the spring exactly for this step's wind, then bounds the resulting position through
+   * offsets; place() remains the only writer of orbit-derived x/y.
+   */
+  private driftInStorm(fish: Fish, dt: number): void {
+    const ox = fish.state.windOx ?? 0;
+    const oy = fish.state.windOy ?? 0;
+    if (this.sea !== "storm" && ox === 0 && oy === 0) return;
+    const wind = this.wind;
+    const decay = Math.exp(-SEA.stormSpring * dt);
+    let nx = ox * decay + wind.x / SEA.stormSpring * (1 - decay);
+    let ny = oy * decay + wind.y / SEA.stormSpring * (1 - decay);
+    if (this.sea === "storm") {
+      const { rx, ry } = this.swimArea();
+      const wobble = Math.sin(fish.wobblePhase) * FISH[fish.kind].wobble;
+      const baseX = Math.cos(fish.angle) * (fish.orbit * rx + wobble) + fish.offsetX - ox;
+      const baseY = Math.sin(fish.angle) * (fish.orbit * ry + wobble) + fish.offsetY - oy;
+      let x = baseX + nx;
+      let y = baseY + ny;
+      const orbit = Math.hypot(x / rx, y / ry);
+      if (orbit > 1) { x /= orbit; y /= orbit; }
+      const distance = Math.hypot(x, y);
+      const keep = Math.min(BOAT_CLEARANCE, rx, ry);
+      if (distance < keep) {
+        const angle = distance > 1e-9 ? Math.atan2(y, x) : fish.angle;
+        x = Math.cos(angle) * keep;
+        y = Math.sin(angle) * keep;
+      }
+      nx = x - baseX;
+      ny = y - baseY;
+    } else if (Math.hypot(nx, ny) < 0.001) {
+      // Once weather clears, return fully to the original path, including its natural wobble.
+      nx = 0;
+      ny = 0;
+    }
+    fish.offsetX += nx - ox;
+    fish.offsetY += ny - oy;
+    if (nx === 0 && ny === 0) {
+      delete fish.state.windOx;
+      delete fish.state.windOy;
+    } else {
+      fish.state.windOx = nx;
+      fish.state.windOy = ny;
+    }
+  }
+
+  /** Rechecks bounds after lure pulls and spawns (including school and capture by-products). */
+  private boundStorm(): void {
+    if (this.sea !== "storm") return;
+    for (const fish of this.fish) {
+      this.driftInStorm(fish, 0);
+      this.place(fish);
+    }
+  }
+
   private moveFish(dt: number): void {
     const { rx, ry } = this.swimArea();
     const boat = { x: this.width / 2, y: this.height / 2 };
@@ -712,10 +860,11 @@ export class World {
       const arc = fish.orbit * Math.hypot(rx * Math.sin(fish.angle), ry * Math.cos(fish.angle));
       // A golden fish's extra speed applies to this step only; speedMult belongs to the type.
       const boost = fish.golden ? goldenSwim(this, fish, fish.golden, dt) : 1;
-      const swimDt = dt * lanternSpeed(fish, boat, this.stats.boat);
+      const swimDt = dt * lanternSpeed(fish, boat, this.stats.boat) * (this.sea === "bloom" ? SEA.bloomSpeed : 1);
       fish.angle += (fish.dir * spec.def.speed * fish.speedMult * boost * swimDt) / Math.max(arc, 1);
       fish.wobblePhase += spec.def.wobbleSpeed * swimDt;
       spec.move?.(this, fish, swimDt);
+      this.driftInStorm(fish, dt);
       const prevX = fish.x;
       const prevY = fish.y;
       this.place(fish);
@@ -756,7 +905,7 @@ export class World {
     const front = this.frenzyFront;
     const mult = front === null ? 1 : this.stats.frenzySpawnMult;
     for (const kind of FISH_KINDS) {
-      const rate = spawnRate(this.stats, kind) * mult;
+      const rate = spawnRate(this.stats, kind) * mult * (this.sea === "bloom" ? SEA.bloomSpawn : 1);
       if (rate <= 0) continue;
       // Each type starts part-way to its first spawn, so types don't all arrive in step.
       let progress = (this.spawnTimers.get(kind) ?? this.rng()) + rate * dt;
@@ -877,9 +1026,12 @@ export class World {
       if (rigging) this.trapCatches++;
       const sourceMult = source === "net" || rigging ? 1 : this.stats.abilityValueMult;
       const goldenMult = fish.golden ? this.stats.goldenValueMult : 1;
-      const value =
+      const baseValue =
         FISH[fish.kind].value * this.stats.fish[fish.kind].valueMult * this.stats.valueMult * sourceMult * frenzyMult *
         this.comboMult * goldenMult;
+      const seaMult = this.sea === "storm" ? SEA.stormValue : this.sea === "fog" ? SEA.fogValue : 1;
+      const value = baseValue * seaMult;
+      this.seaEarned += value - baseValue;
       this.earned += value;
       if (frenzy) {
         this.frenzyCaught++;

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { FISH } from "./fish";
 import { createRng } from "./rng";
+import { SEA } from "./sea";
 import { BASE_STATS, type Stats } from "./stats";
 import { TECH_NODES, applyUpgrades } from "./tech";
 import { ENDLESS, STEP, World, isFrenzyRound, type Fish, type RoundOptions, type WorldEvent } from "./world";
@@ -1069,4 +1070,345 @@ describe("Seine recast immunity", () => {
     run(world, 1 - STEP);
     expect(fish.hits).toBe(2);
   });
+});
+
+
+describe("Clear weather compatibility", () => {
+  // Recorded on main at 7b142c4 before weather integration, including the next RNG draw.
+  it.each([
+    { round: 1, earned: 7, caught: 7, fish: 13, x: 658.3007773408348, y: 130.822569566625, next: 0.08626641938462853 },
+    { round: 7, earned: 8, caught: 8, fish: 12, x: 658.3007773408348, y: 130.822569566625, next: 0.35655746911652386 },
+    { round: 10, earned: 9.5, caught: 8, fish: 19, x: 267.34808996982747, y: 339.93167735968734, next: 0.20450056600384414 },
+  ])("replays main's round $round exactly, with omitted or explicit clear weather", fixture => {
+    for (const sea of [undefined, "clear"] as const) {
+      const world = new World(BASE_STATS, createRng(314), 800, 600, { round: fixture.round, final: false, sea });
+      run(world, 8, () => { world.pointer = world.fish[0] ?? null; world.drainEvents(); });
+      expect(world.sea).toBe("clear");
+      expect(world.seaLeft).toBe(Infinity);
+      expect(world.seaEarned).toBe(0);
+      expect(world.earned).toBe(fixture.earned);
+      expect(world.caught).toEqual({ normal: fixture.caught });
+      expect(world.fish).toHaveLength(fixture.fish);
+      expect(world.fish[0]!.x).toBe(fixture.x);
+      expect(world.fish[0]!.y).toBe(fixture.y);
+      expect(world.rng()).toBe(fixture.next);
+    }
+  });
+});
+
+
+describe("Storm wind", () => {
+  const storm = (startFish = 1) => makeWorld({ startFish, roundSeconds: 90, goldenRate: 0, chestChance: 0 },
+    { round: 7, final: false, sea: "storm" });
+
+  it("has a seeded direction, a smooth six-second gust cycle and zero wind in other states", () => {
+    const a = storm();
+    const b = storm();
+    expect(a.wind).toEqual(b.wind);
+    expect(Math.hypot(a.wind.x, a.wind.y)).toBeCloseTo(22);
+    run(a, 3);
+    expect(Math.hypot(a.wind.x, a.wind.y)).toBeCloseTo(45);
+    run(a, 3);
+    expect(Math.hypot(a.wind.x, a.wind.y)).toBeCloseTo(22);
+    for (const sea of ["clear", "fog", "bloom"] as const) {
+      expect(makeWorld({}, { round: 7, final: false, sea }).wind).toEqual({ x: 0, y: 0 });
+    }
+  });
+
+  it("settles in a bounded periodic spring equilibrium through offsets", () => {
+    const world = storm();
+    const fish = world.fish[0]!;
+    fish.angle = 0;
+    fish.orbit = 0.45;
+    fish.speedMult = 0;
+    const lengths: number[] = [];
+    for (let step = 0; step < 30 / STEP; step++) {
+      world.update(STEP);
+      if (step >= 24 / STEP) lengths.push(Math.hypot(fish.offsetX, fish.offsetY));
+      world.drainEvents();
+    }
+    // Mean displacement is mean wind / spring, with a small phase-lagged six-second sway.
+    expect(lengths.reduce((a, b) => a + b) / lengths.length).toBeCloseTo((22 + 45) / 2 / 0.6, 1);
+    expect(Math.min(...lengths)).toBeGreaterThan(35);
+    expect(Math.max(...lengths)).toBeLessThan(75);
+    const settled = { x: fish.offsetX, y: fish.offsetY };
+    run(world, 6);
+    expect(fish.offsetX).toBeCloseTo(settled.x, 4);
+    expect(fish.offsetY).toBeCloseTo(settled.y, 4);
+    expect(fish.x).toBeCloseTo(world.swimArea().cx + fish.orbit * world.swimArea().rx +
+      Math.sin(fish.wobblePhase) * FISH.normal.wobble + fish.offsetX);
+  });
+
+  it("keeps drifting fish and goldens inside the swim ellipse and clear of the boat, including on resize", () => {
+    const world = storm(40);
+    const golden = world.spawnGolden()!;
+    golden.golden!.timeLeft = 100;
+    let bounded = true;
+    for (let step = 0; step < 20 / STEP; step++) {
+      if (step === 10 / STEP) world.resize(320, 568);
+      world.update(STEP);
+      const { cx, cy, rx, ry } = world.swimArea();
+      for (const fish of world.fish) {
+        bounded &&= Math.hypot((fish.x - cx) / rx, (fish.y - cy) / ry) <= 1 + 1e-9 &&
+          Math.hypot(fish.x - cx, fish.y - cy) >= 70 - 1e-9;
+      }
+      world.drainEvents();
+    }
+    expect(bounded).toBe(true);
+    expect(Math.hypot(golden.offsetX, golden.offsetY)).toBeGreaterThan(1);
+  });
+
+  it("announces timed weather once and leaves the chest on its own path", () => {
+    const world = storm();
+    world.chest = { x: 40, y: 40, vx: 10, vy: 0, hp: 10, maxHp: 10, age: 0, hitFlash: 0 };
+    run(world, 2);
+    expect(world.chest!.x).toBeCloseTo(60);
+    expect(world.chest!.y).toBe(40);
+    expect(world.drainEvents().filter(e => e.type === "sea")).toEqual([
+      { type: "sea", phase: "start", state: "storm" },
+    ]);
+    world.timeLeft = STEP;
+    world.update(STEP);
+    world.update(STEP);
+    expect(world.drainEvents().filter(e => e.type === "sea")).toEqual([
+      { type: "sea", phase: "end", state: "storm" },
+    ]);
+  });
+});
+
+describe("Sea payouts", () => {
+  it.each(["clear", "storm", "fog", "bloom"] as const)("applies %s to every capture source, with combo and golden bonuses", sea => {
+    const mult = sea === "storm" ? 1.2 : sea === "fog" ? 1.15 : 1;
+    const world = makeWorld({ startFish: 0, goldenRate: 0, chestChance: 0, comboWindow: 5 },
+      { round: 7, final: false, sea });
+    const sources = ["net", "trap", "seine", "electric", "epic", "star", "whirlpool"] as const;
+    let base = 0;
+    for (const [index, source] of sources.entries()) {
+      const fish = world.spawn("normal", { golden: index === sources.length - 1 })!;
+      base += FISH.normal.value * (source === "net" || source === "trap" || source === "seine" ? 1 : 1.5) *
+        (1 + index * 0.1) * (fish.golden ? 10 : 1);
+      world.capture(fish, source);
+    }
+    run(world, STEP);
+    expect(world.earned).toBeCloseTo(base * mult);
+    expect(world.seaEarned).toBeCloseTo(base * (mult - 1));
+    const captures = world.drainEvents().filter(e => e.type === "capture");
+    expect(captures.reduce((sum, e) => sum + e.value, 0)).toBeCloseTo(world.earned);
+    expect(Object.values(world.earnedBy).reduce((a, b) => a + b, 0) + world.bonusEarned.golden).toBeCloseTo(world.earned);
+  });
+
+  it("excludes treasure from the weather bonus", () => {
+    const world = makeWorld({ startFish: 0, netDamage: 100, goldenRate: 0, chestChance: 0 },
+      { round: 7, final: false, sea: "fog" });
+    world.chest = { x: 200, y: 200, vx: 0, vy: 0, hp: 1, maxHp: 1, age: 0, hitFlash: 0 };
+    world.pointer = { x: 200, y: 200 };
+    run(world, 0.6);
+    expect(world.bonusCount.treasure).toBe(1);
+    expect(world.earned).toBe(world.bonusEarned.treasure);
+    expect(world.seaEarned).toBe(0);
+  });
+});
+
+describe("Algal Bloom", () => {
+  it.each(["clear", "storm", "fog", "bloom"] as const)("only changes spawn rates, HP and swimming in bloom (%s)", sea => {
+    const stats = { ...BASE_STATS, startFish: 0, goldenRate: 0, chestChance: 0,
+      fish: { ...BASE_STATS.fish, normal: { rate: 20, rateMult: 1, valueMult: 1 } } };
+    const before = structuredClone(stats);
+    const world = new World(stats, createRng(42), 800, 600, { round: 7, final: false, sea });
+    const fish = world.spawn("normal")!;
+    const angle = fish.angle;
+    const { rx, ry } = world.swimArea();
+    const arc = fish.orbit * Math.hypot(rx * Math.sin(angle), ry * Math.cos(angle));
+    world.update(STEP);
+    const bloom = sea === "bloom";
+    expect(fish.hp).toBe(FISH.normal.hp * (bloom ? SEA.bloomHp : 1));
+    expect(fish.maxHp).toBe(fish.hp);
+    expect(Math.abs(fish.angle - angle)).toBeCloseTo(FISH.normal.speed * STEP / arc * (bloom ? SEA.bloomSpeed : 1), 12);
+    run(world, 4 - STEP);
+    expect(Math.abs(world.fish.length - (1 + 80 * (bloom ? SEA.bloomSpawn : 1)))).toBeLessThanOrEqual(1);
+    expect(world.countOf("rare")).toBe(0);
+    expect(stats).toEqual(before);
+  });
+
+  it("toughens all newly spawned kinds, including goldens, schools and capture by-products", () => {
+    const world = makeWorld({ startFish: 0 }, { round: 7, final: false, sea: "bloom" });
+    for (const kind of Object.keys(FISH) as (keyof typeof FISH)[]) world.spawn(kind);
+    world.spawnGolden();
+    for (const fish of world.fish) expect(fish.maxHp).toBe(FISH[fish.kind].hp * 1.5);
+    const goober = world.fish.find(f => f.kind === "goober")!;
+    world.capture(goober, "epic");
+    run(world, STEP);
+    expect(world.totalCaught).toBe(1);
+    for (const fish of world.fish) expect(fish.maxHp).toBe(FISH[fish.kind].hp * 1.5);
+  });
+});
+
+describe("Endless weather", () => {
+  function weatherWorld(seed: number, overrides: Partial<Stats> = {}): World {
+    return new World({ ...BASE_STATS, startFish: 0, spawnRateMult: 0, goldenRate: 0, ...overrides },
+      createRng(seed), 800, 600, { round: 1, final: false, endless: true });
+  }
+
+  it("preserves main's chest arrivals, wave timing and world random stream", () => {
+    // Recorded on main 7b142c4, before adding the endless-only weather stream.
+    const world = weatherWorld(314);
+    const chests: number[] = [];
+    for (let step = 0; step < 400 / STEP; step++) {
+      const before = world.chest;
+      world.update(STEP);
+      if (world.chest && world.chest !== before) chests.push(world.elapsed);
+      world.drainEvents();
+    }
+    expect(chests).toEqual([82.65, 148.46666666666667, 209.01666666666665, 304.95, 387.01666666666665]);
+    expect(world.frenzy).toEqual({ start: 405, end: 410, sweep: 1 });
+    expect(world.rng()).toBe(0.5842846354935318);
+  });
+
+  it("rolls at 150-second boundaries, lasts 60 seconds and defers future frenzy overlaps", () => {
+    let starts = 0;
+    let skipped = 0;
+    let deferred = 0;
+    for (let seed = 0; seed < 12; seed++) {
+      const world = weatherWorld(seed);
+      expect(world.sea).toBe("clear");
+      expect(world.seaLeft).toBe(0);
+      let started = 0;
+      let previous = "clear";
+      const times: number[] = [];
+      let overlap = false;
+      let peakEvents = 0;
+      for (let step = 0; step < 660 / STEP; step++) {
+        world.update(STEP);
+        const events = world.drainEvents().filter(e => e.type === "sea");
+        peakEvents = Math.max(peakEvents, events.length);
+        overlap ||= world.sea !== "clear" && world.frenzyActive;
+        for (const event of events) {
+          if (event.phase === "start") {
+            starts++;
+            started = world.elapsed;
+            times.push(started);
+            expect(event.state).not.toBe(previous);
+            previous = event.state;
+            expect(world.seaLeft).toBeCloseTo(60, 8);
+            // 300s and 450s rolls would overlap waves at 315s and 495s respectively.
+            const allowed = [150, 320, 500, 600];
+            expect(allowed.some(t => Math.abs(t - started) < STEP)).toBe(true);
+            if (Math.abs(started - 320) < STEP || Math.abs(started - 500) < STEP) deferred++;
+          } else {
+            expect(world.elapsed - started).toBeCloseTo(60, 8);
+            expect(world.sea).toBe("clear");
+            expect(world.seaLeft).toBe(0);
+          }
+        }
+      }
+      if (!times.some(t => Math.abs(t - 150) < STEP)) skipped++;
+      expect(overlap).toBe(false);
+      expect(times.length).toBeLessThanOrEqual(4);
+      expect(peakEvents).toBeLessThanOrEqual(2);
+    }
+    expect(starts).toBeGreaterThan(12);
+    expect(skipped).toBeGreaterThan(0);
+    expect(deferred).toBeGreaterThan(0);
+  });
+
+  it("replays weather from its own stream even with different fish and chest activity", () => {
+    function timeline(world: World): WorldEvent[] {
+      const events: WorldEvent[] = [];
+      for (let i = 0; i < 660 / STEP; i++) {
+        world.update(STEP);
+        events.push(...world.drainEvents().filter(e => e.type === "sea"));
+      }
+      return events;
+    }
+    const quiet = timeline(weatherWorld(17, { chestChance: 0 }));
+    const busy = timeline(weatherWorld(17, { startFish: 10, spawnRateMult: 1, goldenRate: 1 }));
+    expect(busy).toEqual(quiet);
+    expect(quiet.length).toBeGreaterThan(0);
+  });
+
+  it("changes existing bloom HP proportionately and releases storm offsets when weather ends", () => {
+    let blooms = 0;
+    let storms = 0;
+    for (let seed = 0; seed < 12; seed++) {
+      const world = weatherWorld(seed);
+      const fish = world.spawn("normal")!;
+      fish.hp = fish.maxHp / 2;
+      fish.speedMult = 0;
+      fish.orbit = 0.45;
+      for (let step = 0; step < 220 / STEP; step++) {
+        world.update(STEP);
+        for (const event of world.drainEvents()) {
+          if (event.type !== "sea") continue;
+          if (event.state === "bloom") {
+            blooms++;
+            expect(fish.maxHp).toBe(FISH.normal.hp * (event.phase === "start" ? 1.5 : 1));
+            expect(fish.hp).toBe(fish.maxHp / 2);
+          }
+          if (event.state === "storm" && event.phase === "end") storms++;
+        }
+      }
+      expect(world.sea).toBe("clear");
+      expect(Math.hypot(fish.state.windOx ?? 0, fish.state.windOy ?? 0)).toBeLessThan(0.3);
+    }
+    expect(blooms).toBeGreaterThan(0);
+    expect(storms).toBeGreaterThan(0);
+  });
+
+  it("announces an active state's end only once when a trip finishes", () => {
+    let checked = false;
+    for (let seed = 0; seed < 12 && !checked; seed++) {
+      const world = weatherWorld(seed);
+      run(world, 151);
+      const state = world.sea;
+      if (state === "clear") continue;
+      world.drainEvents();
+      world.finish();
+      world.finish();
+      run(world, 100);
+      expect(world.drainEvents()).toEqual([{ type: "sea", phase: "end", state }]);
+      checked = true;
+    }
+    expect(checked).toBe(true);
+  });
+});
+
+it("bounds a storm after spawns, schools, ability movement and boat pulls", () => {
+  const stats = toolsStats();
+  stats.netDamage = 0;
+  stats.rigging.damage = 0;
+  stats.rigging.seineDamage = 0;
+  const world = new World(stats, createRng(29), 320, 568, { round: 7, final: false, sea: "storm" });
+  let bounded = true;
+  for (let step = 0; step < 10 / STEP; step++) {
+    if (world.chumReady) world.chum();
+    world.update(STEP);
+    const { cx, cy, rx, ry } = world.swimArea();
+    for (const fish of world.fish) {
+      bounded &&= Math.hypot((fish.x - cx) / rx, (fish.y - cy) / ry) <= 1 + 1e-9 &&
+        Math.hypot(fish.x - cx, fish.y - cy) >= 70 - 1e-9;
+    }
+    world.drainEvents();
+  }
+  expect(bounded).toBe(true);
+});
+
+it("releases the wind's offset state completely after an endless storm", () => {
+  let checked = false;
+  for (let seed = 0; seed < 12 && !checked; seed++) {
+    const world = new World({ ...BASE_STATS, startFish: 0, spawnRateMult: 0, goldenRate: 0 },
+      createRng(seed), 800, 600, { round: 1, final: false, endless: true });
+    const fish = world.spawn("normal")!;
+    fish.angle = 0;
+    fish.orbit = 1;
+    fish.speedMult = 0;
+    run(world, 151);
+    if (world.sea !== "storm") continue;
+    run(world, 89);
+    expect(fish.state.windOx).toBeUndefined();
+    expect(fish.state.windOy).toBeUndefined();
+    expect(fish.offsetX).toBeCloseTo(0, 8);
+    expect(fish.offsetY).toBeCloseTo(0, 8);
+    checked = true;
+  }
+  expect(checked).toBe(true);
 });
