@@ -1,4 +1,5 @@
 import type { SaveData } from "../save";
+import type { Biome } from "./biome";
 import { BASE_STATS } from "./stats";
 import { applyUpgrades } from "./tech/tree";
 
@@ -34,12 +35,16 @@ export const ACHIEVEMENTS: readonly Achievement[] = [
   { id: "final", name: "Master of the Sea", description: "Finish the Final Round", icon: "crown" },
   { id: "endless-10", name: "Lost at Sea", description: "Spend 10 minutes in one Endless session", icon: "clock" },
   { id: "endless-30", name: "Sea Legs", description: "Spend 30 minutes in one Endless session", icon: "wave" },
+  { id: "biome-trench", name: "Into the Deep", description: "Reach the Abyssal Trench in one trip", icon: "anchor" },
+  { id: "biome-graveyard", name: "Grave Robber", description: "Open 5 chests in the Sunken Graveyard in one trip", icon: "chest" },
 ];
 
 /** Optional live-session facts available before its save is recorded. */
 export interface AchievementMoment {
   endlessSessionMs?: number;
   allBounties?: boolean;
+  biomesReached?: readonly Biome[];
+  graveyardChests?: number;
 }
 
 /** Qualifying badges not already granted; old saves receive fish and Final Round badges too. */
@@ -62,6 +67,8 @@ export function newAchievements(save: SaveData, moment: AchievementMoment = {}):
     final: save.finalRoundDone,
     "endless-10": endlessMs >= 10 * 60 * 1000,
     "endless-30": endlessMs >= 30 * 60 * 1000,
+    "biome-trench": moment.biomesReached?.includes("trench") === true,
+    "biome-graveyard": (moment.graveyardChests ?? 0) >= 5,
   };
   return ACHIEVEMENTS.filter((achievement) => {
     if (Object.hasOwn(save.achievements, achievement.id)) return false;
