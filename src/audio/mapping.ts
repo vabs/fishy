@@ -2,6 +2,7 @@
  * How game state becomes audio parameters: which music chapter plays, how a catch is pitched, how
  * loud a batch of catches is and how much of the combo layer to bring in. Pure, so it's tested.
  */
+import type { Biome } from "../game/biome";
 import { SCALE_SIZE } from "./theory";
 
 /**
@@ -87,4 +88,10 @@ export function comboLevel({ mult, max, sinceCapture, window, frenzy = false }: 
   const floor = frenzy ? FRENZY_COMBO_FLOOR : 0;
   if (window <= 0 || max <= 1 || sinceCapture > window) return floor;
   return Math.max(floor, Math.min(1, Math.max(0, (mult - 1) / (max - 1))));
+}
+
+
+/** Endless trips follow the sea's chapter instead of upgrade milestones. */
+export function biomeChapter(biome: Biome): number {
+  return { reef: 0, trench: 2, graveyard: 1 }[biome];
 }

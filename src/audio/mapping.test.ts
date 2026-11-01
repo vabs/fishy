@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { TECH_NODES } from "../game/tech";
-import { CHAPTERS, FRENZY_COMBO_FLOOR, batchLevel, catchDegree, catchStreamLevel, chapterFor, comboLevel } from "./mapping";
+import { CHAPTERS, FRENZY_COMBO_FLOOR, biomeChapter, batchLevel, catchDegree, catchStreamLevel, chapterFor, comboLevel } from "./mapping";
 
 describe("chapterFor", () => {
   it("starts in the first chapter", () => {
@@ -86,4 +86,9 @@ describe("comboLevel", () => {
     expect(comboLevel({ ...live, mult: 2, frenzy: true })).toBe(1);
     expect(comboLevel({ ...live, frenzy: false })).toBeCloseTo(0.5);
   });
+});
+
+
+it("maps endless biomes to Shallows, Deep and Currents independently of upgrade order", () => {
+  expect(["reef", "trench", "graveyard"].map(b => CHAPTERS[biomeChapter(b as "reef" | "trench" | "graveyard")]!.name)).toEqual(["Shallows", "Deep", "Currents"]);
 });

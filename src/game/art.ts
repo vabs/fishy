@@ -2,9 +2,11 @@
 export interface ArtSet {
   sea: HTMLImageElement | null;
   boat: HTMLImageElement | null;
+  trench: HTMLImageElement | null;
+  graveyard: HTMLImageElement | null;
 }
 
-const art: ArtSet = { sea: null, boat: null };
+const art: ArtSet = { sea: null, boat: null, trench: null, graveyard: null };
 const listeners = new Set<() => void>();
 let started = false;
 
@@ -12,7 +14,7 @@ let started = false;
 export function loadArt(): ArtSet {
   if (started || typeof Image === "undefined") return art;
   started = true;
-  for (const [key, file] of [["sea", "sea-tile.webp"], ["boat", "boat.png"]] as const) {
+  for (const [key, file] of [["sea", "sea-tile.webp"], ["boat", "boat.png"], ["trench", "sea-trench.webp"], ["graveyard", "sea-graveyard.webp"]] as const) {
     const image = new Image();
     image.decoding = "async";
     image.onload = () => {

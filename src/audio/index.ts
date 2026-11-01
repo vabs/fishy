@@ -1,7 +1,10 @@
+import type { Biome } from "../game/biome";
+import { weatherLightning } from "../game/fx";
+import type { SeaState } from "../game/sea";
 import type { FxEvent, World, WorldEvent } from "../game/world";
 import { urgencyLevel } from "./dynamics";
 import { AudioEngine } from "./engine";
-import { chapterFor, comboLevel } from "./mapping";
+import { biomeChapter, chapterFor, comboLevel } from "./mapping";
 import { Music } from "./music";
 import { loadAudioSettings, type AudioSettings } from "./settings";
 import { Sfx } from "./sfx";
@@ -37,7 +40,7 @@ export interface GameAudio {
   update(change: Partial<AudioSettings>): void;
   onChange(listener: (settings: AudioSettings) => void): () => void;
   /** A screen was shown. `final` is whether the round being played (or just finished) is the Final Round. */
-  screen(screen: Screen, context: { final: boolean; endless?: boolean; upgrades: Readonly<Record<string, number>> }): void;
+  screen(screen: Screen, context: { final: boolean; endless?: boolean; biome?: Biome; upgrades: Readonly<Record<string, number>> }): void;
   /** A bounty was just completed. */
   bounty(): void;
   /** An achievement was just earned. */
@@ -80,6 +83,10 @@ export function createGameAudio(): GameAudio {
   let lastCaptureAt = Number.NEGATIVE_INFINITY;
   let roundActive = false;
   let roundFinal = false;
+  let lastWorld: World | null = null;
+  let flashing = false;
+  let endlessBiome: Biome | undefined;
+  let weatherPlaying = false;
 
   function fx(event: FxEvent): void {
     switch (`${event.kind}:${event.name}`) {
@@ -110,14 +117,19 @@ export function createGameAudio(): GameAudio {
     update: (change) => engine.update(change),
     onChange: (listener) => engine.onChange(listener),
 
-    screen(screen, { final, endless = false, upgrades }) {
+    screen(screen, { final, endless = false, biome, upgrades }) {
       // Only a finished round (or endless session) gets the stinger. Pausing shows the hub mix
       // and must stay silent, so it leaves the round active.
       if (screen === "summary" && roundActive) {
         music.stinger(roundFinal);
         roundActive = false;
       }
-      music.setChapter(chapterFor(upgrades));
+      const resuming = screen === "round" && roundActive;
+      if (endless) endlessBiome = biome ?? (resuming || screen !== "round" ? endlessBiome : undefined) ?? "reef";
+      else if (screen !== "hub" || !roundActive) endlessBiome = undefined;
+      weatherPlaying = screen === "round";
+      music.setChapter(endlessBiome ? biomeChapter(endlessBiome) : chapterFor(upgrades));
+      if (!weatherPlaying) { sfx.stopWeather(); music.setFog(false); }
       switch (screen) {
         case "title":
           music.setMode("title");
@@ -142,11 +154,31 @@ export function createGameAudio(): GameAudio {
 
     purchase(nodeId, upgrades) {
       sfx.purchase(nodeId.endsWith(".unlock"));
-      music.setChapter(chapterFor(upgrades));
+      music.setChapter(endlessBiome ? biomeChapter(endlessBiome) : chapterFor(upgrades));
     },
 
     frame(events, world) {
-      if (!engine.running) return;
+      // Retain chapter and weather intent even when muted; the next audible frame uses current state.
+      let eventSea: SeaState | undefined;
+      for (const event of events) {
+        if (event.type === "biome") { endlessBiome = event.biome; music.setChapter(biomeChapter(event.biome)); }
+        else if (event.type === "sea") eventSea = event.phase === "start" ? event.state : "clear";
+      }
+      const biome = world?.biome;
+      if (biome) { endlessBiome = biome.biome; music.setChapter(biomeChapter(biome.biome)); }
+      if (!engine.running) { sfx.stopWeather(); flashing = false; return; }
+      if (weatherPlaying && world !== lastWorld) {
+        sfx.weather("clear", { x: 0, y: 0 });
+        flashing = false;
+        lastWorld = world;
+      }
+      const sea = !weatherPlaying || world?.over ? "clear" : world?.sea ?? eventSea ?? "clear";
+      music.setFog(sea === "fog");
+      if (weatherPlaying) sfx.weather(sea, world?.wind ?? { x: 0, y: 0 });
+      const reduced = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const flash = sea === "storm" && !!world && weatherLightning(world.elapsed, reduced) > 0;
+      if (flash && !flashing) sfx.thunder();
+      if (weatherPlaying) flashing = flash;
       const frameTime = timings ? engine.ctx!.currentTime : 0;
       let catches = 0;
       let combo = 0;

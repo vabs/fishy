@@ -17,8 +17,11 @@ function canvasRecorder() {
   const transforms: number[][] = [];
   const translations: number[][] = [];
   const images: number[][] = [];
+  const imagePaints: { image: CanvasImageSource; alpha: number; args: number[] }[] = [];
   const curves: number[][] = [];
   const scales: number[][] = [];
+  const moves: number[][] = [];
+  const gradients: { radii: number[]; stops: [number, string][] }[] = [];
   const noop = () => {};
   const target = {
     shadowBlur: 0,
@@ -28,6 +31,7 @@ function canvasRecorder() {
     lineWidth: 1,
     globalCompositeOperation: "source-over",
     globalAlpha: 1,
+    clip: noop,
     beginPath() { currentArc = undefined; },
     stroke() { paints.push({ blur: this.shadowBlur, style: this.strokeStyle, alpha: this.globalAlpha, width: this.lineWidth, arc: currentArc }); },
     fillRect() { fills.push({ color: this.fillStyle, blend: this.globalCompositeOperation, alpha: this.globalAlpha }); },
@@ -38,14 +42,20 @@ function canvasRecorder() {
     setTransform(...values: number[]) { transforms.push(values); },
     translate(...values: number[]) { translations.push(values); },
     quadraticCurveTo(...values: number[]) { curves.push(values); },
+    moveTo(...values: number[]) { moves.push(values); },
     scale(...values: number[]) { scales.push(values); },
-    drawImage(_image: CanvasImageSource, ...values: number[]) { images.push(values); },
-    createRadialGradient: () => ({ addColorStop: noop }),
+    drawImage(image: CanvasImageSource, ...values: number[]) { images.push(values); imagePaints.push({ image, alpha: this.globalAlpha, args: values }); },
+    createRadialGradient: (...radii: number[]) => {
+      const stops: [number, string][] = [];
+      gradients.push({ radii, stops });
+      return { addColorStop: (offset: number, color: string) => stops.push([offset, color]) };
+    },
     createLinearGradient: () => ({ addColorStop: noop }),
+    createPattern: () => null,
   };
   const ctx = new Proxy(target, { get: (object, key) => Reflect.get(object, key) ?? noop }) as unknown as CanvasRenderingContext2D;
   const canvas = { getContext: () => ctx, style: {} } as unknown as HTMLCanvasElement;
-  return { canvas, ctx, paints, fills, arcs, circles, ellipses, transforms, translations, images, curves, scales, renderer: new Renderer(canvas) };
+  return { canvas, ctx, paints, fills, arcs, circles, ellipses, transforms, translations, images, imagePaints, curves, scales, moves, gradients, renderer: new Renderer(canvas) };
 }
 
 const scene = { world: null, pointer: null, stats: BASE_STATS };
@@ -209,7 +219,8 @@ describe("burst rendering", () => {
 
 describe("renderer feel math", () => {
   it("leaves timed rounds untinted and interpolates a continuous day cycle", async () => {
-    const { seaTint } = await import("./render");
+    const { seaLight } = await import("./render");
+    const seaTint = (timeOfDay?: number) => seaLight({ biome: "reef", sea: "clear", timeOfDay });
     expect(seaTint(undefined).alpha).toBe(0);
     expect(seaTint(0.5).night).toBe(1);
     expect(seaTint(0).night).toBe(0);
@@ -332,11 +343,12 @@ it("projects coin origins into CSS pixels below the HUD on a scaled viewport", (
 
 describe("visual review corrections", () => {
   it("uses a darkening blend for dusk and dawn without whitening the water", async () => {
-    const { seaTint } = await import("./render");
+    const { seaLight } = await import("./render");
+    const seaTint = (timeOfDay?: number) => seaLight({ biome: "reef", sea: "clear", timeOfDay });
     for (const phase of [0.25, 0.75]) {
       const { renderer, fills } = canvasRecorder();
       renderer.draw({ ...scene, timeOfDay: phase }, 0);
-      const overlay = fills.find((fill) => fill.color === seaTint(phase).color);
+      const overlay = fills.find((fill) => fill.color === seaTint(phase).tint);
       expect(overlay?.blend).toBe("multiply");
     }
   });
@@ -745,4 +757,248 @@ it("keeps chum plumes cached and drifts only a few bits inward while the current
   circles.length = 0;
   renderer.draw({ ...scene, world, stats }, 0.1);
   expect(circles.filter(c => c[2] === 1.2)).toHaveLength(0);
+});
+
+
+describe("sea lighting and visibility", () => {
+  it("preserves the clear reef day and night and caps every sea's darkness and contrast", async () => {
+    const { seaLight } = await import("./render");
+    expect(seaLight({ biome: "reef", sea: "clear" })).toMatchObject({ alpha: 0, night: 0, lantern: 0 });
+    expect(seaLight({ biome: "reef", sea: "clear", timeOfDay: 0.5 })).toEqual({ tint: "rgb(65, 84, 157)", alpha: 0.46, night: 1, lantern: 1 });
+    // Measured average RGB of the three shipped tiles, independent of the lighting implementation.
+    const averages = { reef: [42, 127, 149], trench: [64, 102, 148], graveyard: [66, 131, 127] };
+    const luminance = (rgb: number[]) => rgb.map(v => { v /= 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; })
+      .reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i]!, 0);
+    for (const biome of ["reef", "trench", "graveyard"] as const) {
+      for (const sea of ["clear", "storm", "fog", "bloom"] as const) {
+        for (let i = 0; i <= 100; i++) {
+          const light = seaLight({ biome, sea, timeOfDay: i / 100 });
+          expect(light.alpha).toBeLessThanOrEqual(0.46);
+          const tint = light.tint.match(/[\d.]+/g)!.map(Number);
+          const rgb = averages[biome].map((v, j) => v * (1 - light.alpha + light.alpha * tint[j]! / 255));
+          expect((luminance(rgb) + 0.05) / (luminance([16, 31, 44]) + 0.05), `${biome}/${sea}/${i}`).toBeGreaterThanOrEqual(2);
+        }
+      }
+    }
+  });
+
+  it("uses the nearer of boat and net for fog visibility, including lantern upgrades", async () => {
+    const { fogSilhouetteAlpha } = await import("./render");
+    expect(fogSilhouetteAlpha({ x: 700, y: 0 }, { x: 0, y: 0 }, null, BASE_STATS)).toBe(0.15);
+    expect(fogSilhouetteAlpha({ x: 700, y: 0 }, { x: 0, y: 0 }, { x: 700, y: 0 }, BASE_STATS)).toBe(1);
+    expect(fogSilhouetteAlpha({ x: 100, y: 0 }, { x: 0, y: 0 }, null, BASE_STATS)).toBe(1);
+    const stats = { ...BASE_STATS, boat: { ...BASE_STATS.boat, lanternRadius: 210 } };
+    expect(fogSilhouetteAlpha({ x: 300, y: 0 }, { x: 0, y: 0 }, null, stats)).toBe(1);
+  });
+
+  it("crossfades texture weights and light continuously at biome boundaries", async () => {
+    const { biomeLayers, blendSeaLight, seaLight } = await import("./render");
+    expect(biomeLayers()).toEqual([{ biome: "reef", alpha: 1 }]);
+    expect(biomeLayers({ biome: "trench", next: "graveyard", blend: 0.5 })).toEqual([{ biome: "trench", alpha: 1 }, { biome: "graveyard", alpha: 0.5 }]);
+    expect(biomeLayers({ biome: "trench", next: "graveyard", blend: 1 })).toEqual([{ biome: "graveyard", alpha: 1 }]);
+    const a = seaLight({ biome: "trench", sea: "storm", timeOfDay: 0.5 });
+    const b = seaLight({ biome: "graveyard", sea: "storm", timeOfDay: 0.5 });
+    expect(blendSeaLight(a, b, 0)).toEqual(a);
+    expect(blendSeaLight(a, b, 1)).toEqual(b);
+    expect(blendSeaLight(a, b, 0.5).alpha).toBeLessThanOrEqual(0.46);
+  });
+
+  it.each(["storm", "fog", "bloom"] as const)("reuses both cached %s layers without repainting them", async (state) => {
+    const { weatherLayers } = await import("./fx");
+    const created: HTMLCanvasElement[] = [];
+    vi.stubGlobal("document", { createElement: () => { const canvas = canvasRecorder().canvas; created.push(canvas); return canvas; } });
+    const layers = weatherLayers(state);
+    expect(layers).toHaveLength(2);
+    expect(layers[0]).not.toBe(layers[1]);
+    const allocations = created.length;
+    for (let i = 0; i < 100; i++) expect(weatherLayers(state)).toBe(layers);
+    expect(created).toHaveLength(allocations);
+  });
+});
+
+
+describe("weather rendering integration", () => {
+  async function setup(sea: "clear" | "fog" = "clear") {
+    const { World } = await import("./world");
+    const { createRng } = await import("./rng");
+    const recorder = canvasRecorder();
+    const caches: ReturnType<typeof canvasRecorder>[] = [];
+    vi.stubGlobal("document", { createElement: () => { const cache = canvasRecorder(); caches.push(cache); return cache.canvas; } });
+    const world = new World({ ...BASE_STATS, startFish: 0 }, createRng(31), 1280, 800, { round: 24, final: false, sea });
+    return { ...recorder, world, caches };
+  }
+
+  it("fades only silhouettes in fog, preserves rims and draws the lens and chest at full strength", async () => {
+    const { renderer, world, imagePaints } = await setup("fog");
+    world.spawn("normal", { at: { x: 1100, y: 650 } });
+    world.spawn("normal", { at: { x: 200, y: 200 } });
+    for (const fish of world.fish) fish.age = 2;
+    world.chest = { x: 1000, y: 600, vx: 0, vy: 0, hp: 3, maxHp: 6, age: 2, hitFlash: 0 };
+    renderer.draw({ ...scene, world, pointer: { x: 200, y: 200 } }, 0);
+    const fishImages = imagePaints.filter(p => p.args[2] === FISH_SPECS.normal.def.size * 1.1);
+    expect(fishImages.map(p => p.alpha)).toEqual([0.15, 1, 1]); // Far silhouette, net silhouette, coloured lens.
+    expect(imagePaints.filter(p => p.alpha === 0.55)).toHaveLength(2); // The thin cached rims.
+    expect(imagePaints.at(-1)?.alpha).toBe(1); // Chest is above the fog pass.
+  });
+
+  it("caches both texture canvases through a changing transition and discards them only on resize", async () => {
+    const { renderer, caches, imagePaints } = await setup();
+    renderer.resize(640, 480, 1);
+    const biome = { biome: "trench", next: "graveyard", blend: 0.25 } as const;
+    renderer.draw({ ...scene, biome, timeOfDay: 0.5 }, 0);
+    const first = imagePaints.filter(p => p.args.length === 2).slice(-2);
+    expect(first.map(p => p.alpha)).toEqual([1, 0.25]);
+    const count = caches.length;
+    imagePaints.length = 0;
+    renderer.draw({ ...scene, biome: { ...biome, blend: 0.75 }, timeOfDay: 0.5 }, 0);
+    expect(caches).toHaveLength(count);
+    const second = imagePaints.filter(p => p.args.length === 2).slice(-2);
+    expect(second.map(p => p.image)).toEqual(first.map(p => p.image));
+    expect(second.map(p => p.alpha)).toEqual([1, 0.75]);
+    renderer.resize(800, 600, 1);
+    renderer.draw({ ...scene, biome }, 0);
+    expect(caches.length).toBeGreaterThan(count);
+  });
+
+  it("shares soft, infrequent lightning timing and suppresses flashes with reduced motion", async () => {
+    const { weatherLightning } = await import("./fx");
+    expect(weatherLightning(11)).toBe(0);
+    expect(weatherLightning(11.325)).toBeCloseTo(0.1);
+    expect(weatherLightning(25.325)).toBeCloseTo(0.1);
+    expect(weatherLightning(11.325, true)).toBe(0);
+    expect(weatherLightning(12)).toBe(0);
+    expect(weatherLightning(19.325)).toBe(0);
+  });
+});
+
+
+it("starts each wind ripple as a separate subpath instead of joining distant arcs", () => {
+  const { renderer, ellipses, moves } = canvasRecorder();
+  vi.stubGlobal("document", { createElement: () => canvasRecorder().canvas });
+  renderer.resize(640, 480, 1);
+  renderer.draw({ ...scene, sea: "storm" }, 0.1);
+  const ripples = ellipses.filter(e => e[2] === 7 && e[3] === 1.6);
+  expect(ripples).toHaveLength(28);
+  for (const e of ripples) {
+    const start = [e[0]! + Math.cos(e[4]!) * 7, e[1]! + Math.sin(e[4]!) * 7];
+    expect(moves.some(m => Math.hypot(m[0]! - start[0]!, m[1]! - start[1]!) < 0.001)).toBe(true);
+  }
+});
+
+
+it.each(["storm", "fog", "bloom"] as const)("holds both %s layers still with reduced motion and keeps their pattern cache", (sea) => {
+  vi.stubGlobal("matchMedia", () => ({ matches: true }));
+  vi.stubGlobal("document", { createElement: () => canvasRecorder().canvas });
+  const { renderer, ctx, translations, ellipses } = canvasRecorder();
+  const pattern = vi.spyOn(ctx, "createPattern").mockReturnValue({} as CanvasPattern);
+  renderer.resize(640, 480, 1);
+  pattern.mockClear();
+  translations.length = 0;
+  renderer.draw({ ...scene, sea }, 0.1);
+  const first = [...translations];
+  expect(pattern).toHaveBeenCalledTimes(2);
+  translations.length = 0;
+  renderer.draw({ ...scene, sea }, 1);
+  expect(translations).toEqual(first);
+  expect(pattern).toHaveBeenCalledTimes(2);
+  if (sea === "storm") expect(ellipses.filter(e => e[2] === 7 && e[3] === 1.6)).toHaveLength(0);
+});
+
+
+describe("weather visual review regressions", () => {
+  it("draws two clearly visible rain depths and fading downwind whitecaps without frame allocations", async () => {
+    const caches: ReturnType<typeof canvasRecorder>[] = [];
+    vi.stubGlobal("document", { createElement: () => { const cache = canvasRecorder(); caches.push(cache); return cache.canvas; } });
+    const { renderer, ctx } = canvasRecorder();
+    renderer.resize(1280, 800, 1);
+    const patterns = [{}, {}] as CanvasPattern[];
+    let index = 0;
+    vi.spyOn(ctx, "createPattern").mockImplementation(() => patterns[index++ % 2]!);
+    const paints: number[] = [];
+    vi.spyOn(ctx, "fillRect").mockImplementation(() => { if (patterns.includes(ctx.fillStyle as CanvasPattern)) paints.push(ctx.globalAlpha); });
+    renderer.draw({ ...scene, sea: "storm" }, 0.5);
+    expect(paints).toHaveLength(2);
+    for (const alpha of paints) { expect(alpha).toBeGreaterThanOrEqual(0.25); expect(alpha).toBeLessThanOrEqual(0.35); }
+    const count = caches.length;
+    renderer.draw({ ...scene, sea: "storm" }, 0.5);
+    expect(caches).toHaveLength(count);
+    const { whitecapPose } = await import("./fx");
+    const a = whitecapPose(0, 0.4, { x: 30, y: 10 }, 1280, 800);
+    const b = whitecapPose(0, 0.5, { x: 30, y: 10 }, 1280, 800);
+    expect(b.x - a.x).toBeCloseTo(3);
+    expect(b.y - a.y).toBeCloseTo(1);
+    expect(a.alpha).toBeGreaterThan(0);
+    expect(whitecapPose(0, 0, { x: 30, y: 10 }, 1280, 800).alpha).toBe(0);
+  });
+
+  it("feathers the fog itself across 140 pixels with a reusable radial mask, without a circular clip", async () => {
+    const { paintFogPool } = await import("./fx");
+    const caches: ReturnType<typeof canvasRecorder>[] = [];
+    vi.stubGlobal("document", { createElement: () => { const cache = canvasRecorder(); caches.push(cache); return cache.canvas; } });
+    const mask = paintFogPool(200);
+    expect(mask.width).toBe(680);
+    const gradient = caches[0]!.gradients[0]!;
+    expect(gradient.radii).toEqual([340, 340, 200, 340, 340, 340]);
+    expect(gradient.stops).toEqual([[0, "rgba(0, 0, 0, 1)"], [1, "rgba(0, 0, 0, 0)"]]);
+    const { renderer, ctx } = canvasRecorder();
+    renderer.resize(1280, 800, 1);
+    vi.spyOn(ctx, "createPattern").mockReturnValue({} as CanvasPattern);
+    const clip = vi.spyOn(ctx, "clip");
+    renderer.draw({ ...scene, sea: "fog", pointer: { x: 300, y: 300 } }, 0.1);
+    expect(clip).not.toHaveBeenCalled();
+    const count = caches.length;
+    const submissions = caches.flatMap(c => c.imagePaints).filter(p => p.args.length === 4);
+    expect(submissions.length).toBeGreaterThanOrEqual(2); // Boat and net erase the same cached feather.
+    renderer.draw({ ...scene, sea: "fog", pointer: { x: 400, y: 300 } }, 0.1);
+    expect(caches).toHaveLength(count);
+  });
+
+  it("makes a daytime storm darker than clear water while retaining every biome's contrast", async () => {
+    const { seaLight } = await import("./render");
+    for (const biome of ["reef", "trench", "graveyard"] as const) {
+      const light = seaLight({ biome, sea: "storm", timeOfDay: 0 });
+      const tint = light.tint.match(/[\d.]+/g)!.map(Number);
+      const transmission = tint.map(v => 1 - light.alpha + light.alpha * v / 255);
+      expect(transmission[1]).toBeLessThan(biome === "trench" ? 0.85 : 0.8);
+      expect(transmission[2]).toBeGreaterThan(transmission[0]!);
+    }
+  });
+});
+
+it("drifts fog continuously across a tile wrap even when the layer is rotated and scaled", () => {
+  const pattern = {} as CanvasPattern;
+  const samples: number[] = [];
+  vi.stubGlobal("document", { createElement: () => {
+    const { canvas, ctx } = canvasRecorder();
+    // Minimal affine Canvas platform: sample a periodic pigment at one fixed screen pixel.
+    let m = [1, 0, 0, 1, 0, 0];
+    const stack: number[][] = [];
+    Object.assign(ctx, {
+      save() { stack.push([...m]); }, restore() { m = stack.pop()!; },
+      setTransform(...values: number[]) { m = values; },
+      translate(x: number, y: number) { m[4]! += m[0]! * x + m[2]! * y; m[5]! += m[1]! * x + m[3]! * y; },
+      scale(x: number, y: number) { m[0]! *= x; m[1]! *= x; m[2]! *= y; m[3]! *= y; },
+      rotate(angle: number) {
+        const [a, b, c, d] = m as [number, number, number, number];
+        const cos = Math.cos(angle), sin = Math.sin(angle);
+        m[0] = a * cos + c * sin; m[1] = b * cos + d * sin;
+        m[2] = c * cos - a * sin; m[3] = d * cos - b * sin;
+      },
+      fillRect() {
+        if (ctx.fillStyle !== pattern) return;
+        const [a, b, c, d, e, f] = m as [number, number, number, number, number, number];
+        const x = 20 - e, y = 30 - f, det = a * d - b * c;
+        samples.push(Math.cos((d * x - c * y) / det * Math.PI * 2 / 512) + Math.sin((a * y - b * x) / det * Math.PI * 2 / 512));
+      },
+    });
+    return canvas;
+  } });
+  const { renderer, ctx } = canvasRecorder();
+  renderer.resize(1280, 800, 1);
+  vi.spyOn(ctx, "createPattern").mockReturnValue(pattern);
+  renderer.draw({ ...scene, sea: "fog" }, 512 / 7.5 - 0.0001);
+  const before = [...samples]; samples.length = 0;
+  renderer.draw({ ...scene, sea: "fog" }, 0.0002);
+  expect(before).toHaveLength(2); expect(samples).toHaveLength(2);
+  for (let i = 0; i < 2; i++) expect(Math.abs(samples[i]! - before[i]!)).toBeLessThan(0.001);
 });

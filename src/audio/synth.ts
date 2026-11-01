@@ -349,3 +349,34 @@ export function steelDrum(ctx: AudioContext, dest: AudioNode, o: PluckOptions): 
   }
   return end;
 }
+
+/** A low, continuous wind bed. One noise buffer and graph survive the entire storm. */
+export function windNoise(ctx: AudioContext, dest: AudioNode): NoiseRiser {
+  const out = voice(ctx, dest);
+  const filter = ctx.createBiquadFilter();
+  filter.type = "bandpass"; filter.Q.value = 0.45;
+  filter.frequency.value = 300;
+  filter.connect(out);
+  const source = ctx.createBufferSource();
+  source.buffer = noiseBuffer(ctx); source.loop = true;
+  source.connect(filter); source.start(ctx.currentTime);
+  cleanUp(source, filter, out);
+  let stopped = false;
+  return {
+    setLevel(level) {
+      if (stopped) return;
+      const gust = Math.min(1, Math.max(0, level));
+      filter.frequency.setTargetAtTime(300 + gust * 500, ctx.currentTime, 0.15);
+      out.gain.setTargetAtTime(0.025 + gust * 0.03, ctx.currentTime, 0.12);
+    },
+    stop() {
+      if (stopped) return;
+      stopped = true;
+      const now = ctx.currentTime;
+      out.gain.cancelScheduledValues(now);
+      out.gain.setValueAtTime(out.gain.value, now);
+      out.gain.linearRampToValueAtTime(0, now + 0.15);
+      source.stop(now + 0.16);
+    },
+  };
+}
