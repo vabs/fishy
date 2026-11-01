@@ -2,6 +2,7 @@ import { CHEST, chestInNet, chestTime, chestValue, launchChest, moveChest, type 
 import { FISH, FISH_KINDS, FISH_SPECS, type FishDef, type FishKind } from "./fish";
 import { GOLDEN, goldenSwim, newGoldenState, type GoldenState } from "./golden";
 import { createRng, pickWeighted, range, type Rng } from "./rng";
+import { castTraps, resizeTraps, RIGGING, type Trap } from "./rigging";
 import { spawnRate, type Stats } from "./stats";
 
 const TAU = Math.PI * 2;
@@ -41,6 +42,8 @@ const FRENZY_START = 0.35;
 const FRENZY_BAND = 70;
 /** Fish pour in no closer to the swimming area's sides than this, as a fraction of its half-width. */
 const FRENZY_REACH = 0.96;
+
+export { RIGGING, type Trap } from "./rigging";
 
 export interface Point {
   x: number;
@@ -124,6 +127,7 @@ export type WorldEvent =
   | { type: "golden-escape"; kind: FishKind; x: number; y: number; heading: number }
   /** The net opened the treasure chest. `value` is the money it paid. */
   | { type: "chest-open"; x: number; y: number; value: number; reward: ChestReward }
+  | { type: "trap-cast"; traps: readonly Trap[] }
   | FxEvent;
 
 export interface SpawnOptions {
@@ -175,6 +179,7 @@ export interface FrenzyWave {
 export class World {
   fish: Fish[] = [];
   shots: Shot[] = [];
+  traps: Trap[] = [];
   timeLeft: number;
   /** Seconds since the round started. */
   elapsed = 0;
@@ -231,6 +236,8 @@ export class World {
   private readonly firstWave: FrenzyWave | null;
   /** Compensated elapsed sum in endless, keeping wave boundaries on their fixed steps for hours. */
   private elapsedError = 0;
+  private riggingStream: Rng | null = null;
+  private nextRecast = RIGGING.endlessRecast;
 
   constructor(
     readonly stats: Stats,
@@ -255,6 +262,7 @@ export class World {
       (this.round.round >= CHEST.fromRound && (stats.chestChance > 0 || this.round.guarantee?.chest));
     if (this.endless) this.chestAt = range(this.eventRng, ...ENDLESS.chestGap);
     else if (chestRound) this.chestAt = chestTime(this.round, stats, this.eventRng);
+    this.castRigging();
   }
 
   get width(): number {
@@ -345,6 +353,7 @@ export class World {
       fish.offsetY *= sy;
       this.place(fish);
     }
+    this.traps = resizeTraps(this.traps, this.swimArea(), width, height, sx, sy);
     for (const shot of this.shots) {
       shot.x = Math.max(shot.radius, Math.min(width - shot.radius, shot.x * sx));
       shot.y = Math.max(shot.radius, Math.min(height - shot.radius, shot.y * sy));
@@ -385,6 +394,14 @@ export class World {
       this.elapsed += dt;
     }
     this.announceFrenzy();
+    if (this.endless && this.elapsed >= this.nextRecast) {
+      this.castRigging();
+      this.nextRecast = (Math.floor(this.elapsed / RIGGING.endlessRecast) + 1) * RIGGING.endlessRecast;
+    }
+    for (const trap of this.traps) {
+      trap.age += dt;
+      trap.cooldown = Math.max(0, trap.cooldown - dt);
+    }
     for (const kind of FISH_KINDS) FISH_SPECS[kind].update?.(this, dt);
     this.moveFish(dt);
     this.escapeGolden();
@@ -520,6 +537,14 @@ export class World {
   private get eventRng(): Rng {
     this.eventStream ??= createRng(Math.floor(this.rng() * 0x1_0000_0000));
     return this.eventStream;
+  }
+
+  private castRigging(): void {
+    if (this.stats.rigging.count <= 0) return;
+    this.riggingStream ??= createRng(Math.floor(this.rng() * 0x1_0000_0000));
+    this.traps = castTraps(this.swimArea(), this.width, this.height, this.stats.rigging, this.riggingStream);
+    // Snapshot the cast: age and cooldown keep changing on the live traps.
+    this.emit({ type: "trap-cast", traps: this.traps.map(trap => ({ ...trap })) });
   }
 
   private pickKind(rng: Rng = this.rng): FishKind | undefined {

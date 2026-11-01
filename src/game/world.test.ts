@@ -726,3 +726,31 @@ describe("Endless population and stability", () => {
     expect(world.drainEvents()).toEqual([]);
   });
 });
+
+describe("World trap casting", () => {
+  it("casts on round start and each endless minute, without drawing again from the world stream", () => {
+    const stats = { ...BASE_STATS, startFish: 0, spawnRateMult: 0, goldenRate: 0,
+      rigging: { ...BASE_STATS.rigging, count: 4, seine: true } };
+    const world = new World(stats, createRng(51), 1280, 800, { round: 1, final: false, endless: true });
+    const first = world.traps.map(t => [t.x, t.y]);
+    expect(world.drainEvents().filter(e => e.type === "trap-cast")).toHaveLength(1);
+    run(world, 60 - STEP);
+    expect(world.traps.map(t => [t.x, t.y])).toEqual(first);
+    world.update(STEP);
+    expect(world.traps.map(t => [t.x, t.y])).not.toEqual(first);
+    expect(world.drainEvents().filter(e => e.type === "trap-cast")).toHaveLength(1);
+    run(world, 60);
+    expect(world.drainEvents().filter(e => e.type === "trap-cast")).toHaveLength(1);
+  });
+
+  it("keeps timed nets in place, ages them and scales them on resize", () => {
+    const world = makeWorld({ startFish: 0, roundSeconds: 200, rigging: { ...BASE_STATS.rigging, count: 1 } });
+    const first = { ...world.traps[0]! };
+    run(world, 70);
+    expect(world.traps[0]).toMatchObject({ x: first.x, y: first.y });
+    expect(world.traps[0]!.age).toBeCloseTo(70);
+    world.resize(880, 660);
+    expect(world.traps[0]!.x).toBeCloseTo(first.x * 1.1);
+    expect(world.traps[0]!.y).toBeCloseTo(first.y * 1.1);
+  });
+});
