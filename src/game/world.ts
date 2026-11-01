@@ -85,7 +85,7 @@ export interface Fish {
   state: Record<string, number>;
 }
 
-export type CaptureSource = "net" | "electric" | "epic" | "star" | "whirlpool";
+export type CaptureSource = "net" | "electric" | "epic" | "star" | "whirlpool" | "trap" | "seine";
 
 /** A projectile, e.g. a launched Star fish. Moved and drawn by the type that owns it. */
 export interface Shot {
@@ -128,6 +128,7 @@ export type WorldEvent =
   /** The net opened the treasure chest. `value` is the money it paid. */
   | { type: "chest-open"; x: number; y: number; value: number; reward: ChestReward }
   | { type: "trap-cast"; traps: readonly Trap[] }
+  | { type: "trap-snap"; trapId: number; x: number; y: number; hits: number }
   | FxEvent;
 
 export interface SpawnOptions {
@@ -180,6 +181,8 @@ export class World {
   fish: Fish[] = [];
   shots: Shot[] = [];
   traps: Trap[] = [];
+  /** Fish caught directly by trap nets and seine ropes this round. */
+  trapCatches = 0;
   timeLeft: number;
   /** Seconds since the round started. */
   elapsed = 0;
@@ -401,6 +404,7 @@ export class World {
     for (const trap of this.traps) {
       trap.age += dt;
       trap.cooldown = Math.max(0, trap.cooldown - dt);
+      if (trap.cooldown < 1e-9) trap.cooldown = 0;
     }
     for (const kind of FISH_KINDS) FISH_SPECS[kind].update?.(this, dt);
     this.moveFish(dt);
@@ -409,6 +413,7 @@ export class World {
     this.spawnGoldenFish(dt);
     this.floatChest(dt);
     this.tickNet(dt);
+    this.snapTraps();
     this.processCaptures();
     if (!this.endless) this.timeLeft = Math.max(0, this.timeLeft - dt);
   }
@@ -537,6 +542,18 @@ export class World {
   private get eventRng(): Rng {
     this.eventStream ??= createRng(Math.floor(this.rng() * 0x1_0000_0000));
     return this.eventStream;
+  }
+
+  private snapTraps(): void {
+    const stats = this.stats.rigging;
+    for (const trap of this.traps) {
+      if (trap.cooldown > 0) continue;
+      const nearby = this.fishNear(trap, trap.radius).slice(0, stats.haul);
+      if (nearby.length === 0) continue;
+      for (const fish of nearby) this.damage(fish, stats.damage, "trap");
+      trap.cooldown = stats.resetSeconds * (this.frenzyActive ? stats.frenzyResetMult : 1);
+      this.emit({ type: "trap-snap", trapId: trap.id, x: trap.x, y: trap.y, hits: nearby.length });
+    }
   }
 
   private castRigging(): void {
@@ -743,7 +760,9 @@ export class World {
     const frenzyMult = frenzy ? this.stats.frenzyValueMult : 1;
     for (const { fish, source } of this.captureQueue.splice(0, MAX_CAPTURES_PER_STEP)) {
       this.updateCombo();
-      const sourceMult = source === "net" ? 1 : this.stats.abilityValueMult;
+      const rigging = source === "trap" || source === "seine";
+      if (rigging) this.trapCatches++;
+      const sourceMult = source === "net" || rigging ? 1 : this.stats.abilityValueMult;
       const goldenMult = fish.golden ? this.stats.goldenValueMult : 1;
       const value =
         FISH[fish.kind].value * this.stats.fish[fish.kind].valueMult * this.stats.valueMult * sourceMult * frenzyMult *

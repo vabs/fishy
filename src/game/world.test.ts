@@ -754,3 +754,103 @@ describe("World trap casting", () => {
     expect(world.traps[0]!.y).toBeCloseTo(first.y * 1.1);
   });
 });
+
+/** A quiet sea with a known net position, independent of the placement random stream. */
+function trapWorld(tweak?: (stats: Stats) => void, round?: RoundOptions): World {
+  const stats = structuredClone(BASE_STATS);
+  Object.assign(stats, { startFish: 0, spawnRateMult: 0, goldenRate: 0, roundSeconds: 100 });
+  Object.assign(stats.rigging, { count: 1, radius: 40, damage: 2, resetSeconds: 1, haul: 1 });
+  tweak?.(stats);
+  const world = new World(stats, createRng(42), 800, 600, round);
+  world.traps = [{ id: 1, x: 600, y: 300, radius: 40, cooldown: 0, partner: null, age: 0 }];
+  world.drainEvents();
+  return world;
+}
+
+function stillFish(world: World, x = 600, y = 300, kind: Fish["kind"] = "normal"): Fish {
+  const fish = world.spawn(kind, { at: { x, y } })!;
+  fish.speedMult = 0;
+  return fish;
+}
+
+describe("Trap snaps", () => {
+  it("hits the nearest haul, waits to re-arm, and counts only trap captures", () => {
+    const world = trapWorld();
+    const far = stillFish(world, 620);
+    const near = stillFish(world, 603);
+    world.update(STEP);
+    expect(near.captured).toBe(true);
+    expect(far.hp).toBe(far.maxHp);
+    expect(world.trapCatches).toBe(1);
+    expect(world.traps[0]!.cooldown).toBe(1);
+    expect(world.drainEvents()).toContainEqual({ type: "trap-snap", trapId: 1, x: 600, y: 300, hits: 1 });
+    run(world, 1 - STEP);
+    expect(far.captured).toBe(false);
+    world.update(STEP);
+    expect(far.captured).toBe(true);
+    expect(world.trapCatches).toBe(2);
+    const other = stillFish(world, 700);
+    world.capture(other, "net");
+    world.update(STEP);
+    expect(world.trapCatches).toBe(2);
+  });
+
+  it("supports an unlimited haul and applies armour through normal damage", () => {
+    const world = trapWorld(s => { s.rigging.haul = Infinity; s.ability.rare.armor = 1; });
+    for (let i = 0; i < 5; i++) stillFish(world, 600 + i);
+    const rare = stillFish(world, 610, 300, "rare");
+    world.update(STEP);
+    expect(world.trapCatches).toBe(5);
+    expect(rare.hp).toBe(rare.maxHp - 1);
+    expect(rare.hits).toBe(1);
+    expect(world.drainEvents()).toContainEqual({ type: "trap-snap", trapId: 1, x: 600, y: 300, hits: 6 });
+  });
+
+  it("halves the reset only for snaps during frenzy", () => {
+    const world = trapWorld(s => { s.rigging.frenzyResetMult = 0.5; s.roundSeconds = 20; }, { round: 5, final: false });
+    world.elapsed = 7;
+    stillFish(world);
+    world.update(STEP);
+    expect(world.frenzyActive).toBe(true);
+    expect(world.traps[0]!.cooldown).toBe(0.5);
+    const next = stillFish(world);
+    run(world, 0.5 - STEP);
+    expect(next.captured).toBe(false);
+    world.update(STEP);
+    expect(next.captured).toBe(true);
+    world.elapsed = 14;
+    run(world, 0.5);
+    stillFish(world);
+    world.update(STEP);
+    expect(world.traps[0]!.cooldown).toBe(1);
+  });
+
+  it("pays trap captures without the ability bonus, including golden fish", () => {
+    const world = trapWorld(s => { s.abilityValueMult = 9; s.rigging.haul = Infinity; s.valueMult = 3; });
+    stillFish(world);
+    const golden = world.spawn("normal", { at: { x: 600, y: 300 }, golden: true })!;
+    golden.speedMult = 0;
+    world.update(STEP);
+    expect(world.earned).toBe(33);
+    expect(world.bonusCount.golden).toBe(1);
+    expect(world.trapCatches).toBe(2);
+    expect(world.drainEvents().filter(e => e.type === "capture").every(e => e.source === "trap")).toBe(true);
+  });
+
+  it.each(["electric", "epic", "monster", "star", "goober"] as const)("fires a trapped %s's own capture ability", kind => {
+    const world = trapWorld(s => { s.rigging.damage = 100; s.ability.epic.chance = 1; });
+    const fish = stillFish(world, 600, 300, kind);
+    world.traps[0]!.x = fish.x;
+    world.traps[0]!.y = fish.y;
+    const nearby = stillFish(world, fish.x + 60, fish.y);
+    world.update(STEP);
+    expect(fish.captured).toBe(true);
+    expect(world.trapCatches).toBe(1);
+    if (kind === "star") expect(world.shots.length).toBeGreaterThan(0);
+    else if (kind === "goober") expect(world.fish.some(f => f.credit === "goober")).toBe(true);
+    else {
+      if (kind === "electric") expect(nearby.hits).toBeGreaterThan(0);
+      else { world.update(STEP); expect(nearby.captured).toBe(true); }
+    }
+  });
+});
