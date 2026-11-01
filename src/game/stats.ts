@@ -55,6 +55,53 @@ export interface Abilities {
   };
 }
 
+/**
+ * Trap nets: cast at random spots in the fishing area (never the corners) at the start of every
+ * round. An armed net snaps when a fish swims over it, then needs `resetSeconds` to re-arm.
+ */
+export interface RiggingStats {
+  /** Trap nets cast each round. 0 until the Rigging lane is unlocked. */
+  count: number;
+  /** Seconds a net needs to re-arm after it snaps. */
+  resetSeconds: number;
+  /** Net radius, px. */
+  radius: number;
+  /** Damage each snap deals to every fish it hits. */
+  damage: number;
+  /** Most fish one snap can hit. Infinity hits every fish inside. */
+  haul: number;
+  /** Nets 1–2 and 3–4 are joined by a rope that hits fish crossing it. */
+  seine: boolean;
+  /** Damage the seine rope deals to a fish crossing it. */
+  seineDamage: number;
+  /** Pull towards each armed net on fish within `baitRange`, px/s. 0 means no bait. */
+  baitPull: number;
+  /** px */
+  baitRange: number;
+  /** A net catches the treasure chest and holds it this long, s. 0 means nets don't snag. */
+  snagSeconds: number;
+  /** Multiplier on reset time while a Feeding Frenzy runs (0.5 is twice as fast). 1 is off. */
+  frenzyResetMult: number;
+}
+
+/** The boat's own tools. */
+export interface BoatStats {
+  /** Chum can be thrown (Space or the HUD button). */
+  chum: boolean;
+  /** Seconds between chum throws. */
+  chumCooldown: number;
+  /** Seconds the chum keeps pulling fish in. */
+  chumSeconds: number;
+  /** Fish within this distance of the boat drift towards it while chum is in the water, px. */
+  chumRadius: number;
+  /** px/s */
+  chumPull: number;
+  /** Fish within this distance of the boat swim slower, px. 0 means no lantern. */
+  lanternRadius: number;
+  /** Speed multiplier for fish in the lantern's light (0.7 is 30% slower). */
+  lanternSlow: number;
+}
+
 /** Everything about a round that upgrades can change. The sim reads only this. */
 export interface Stats {
   roundSeconds: number;
@@ -113,6 +160,8 @@ export interface Stats {
 
   fish: Record<FishKind, FishStats>;
   ability: Abilities;
+  rigging: RiggingStats;
+  boat: BoatStats;
 }
 
 const locked: FishStats = { rate: 0, rateMult: 1, valueMult: 1 };
@@ -165,6 +214,29 @@ export const BASE_STATS: Stats = {
     goober: { tier: 0, count: 2 },
     monster: { pullRadius: 140, pullStrength: 40 },
     star: { bounces: 3, damage: 3, speed: 500, radius: 14, count: 1 },
+  },
+
+  rigging: {
+    count: 0,
+    resetSeconds: 5,
+    radius: 34,
+    damage: 1,
+    haul: 1,
+    seine: false,
+    seineDamage: 1,
+    baitPull: 0,
+    baitRange: 110,
+    snagSeconds: 0,
+    frenzyResetMult: 1,
+  },
+  boat: {
+    chum: false,
+    chumCooldown: 20,
+    chumSeconds: 4,
+    chumRadius: 220,
+    chumPull: 60,
+    lanternRadius: 0,
+    lanternSlow: 0.7,
   },
 };
 
