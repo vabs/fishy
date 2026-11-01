@@ -147,6 +147,53 @@ describe("sound effect routing and cleanup", () => {
   });
 });
 
+describe("rigging and boat sounds", () => {
+  it.each(["trapSnaps", "seineHit", "snag", "chum", "trapCast"] as const)("rate-limits %s and disconnects all sources", (kind) => {
+    vi.stubGlobal("PeriodicWave", Wave);
+    const ctx = new Context();
+    const out = new Node();
+    const sfx = new Sfx({ running: true, ctx, sfx: out } as unknown as AudioEngine, () => ({ tonic: 0, mode: "major" }));
+    if (kind === "trapSnaps") sfx.trapSnaps(4);
+    else sfx[kind]();
+    const sources = ctx.sources.length;
+    expect(sources).toBeGreaterThan(0);
+    for (let i = 0; i < 100; i++) {
+      if (kind === "trapSnaps") sfx.trapSnaps(4);
+      else sfx[kind]();
+    }
+    expect(ctx.sources).toHaveLength(sources);
+    expect(ctx.nodes.some(node => node.connections.has(out))).toBe(true);
+    ctx.currentTime = 2;
+    if (kind === "trapSnaps") sfx.trapSnaps(4);
+    else sfx[kind]();
+    expect(ctx.sources.length).toBeGreaterThan(sources);
+    ctx.finish();
+  });
+
+  it("plays exactly three soft plops for a cast, in the current key", () => {
+    vi.stubGlobal("PeriodicWave", Wave);
+    const ctx = new Context();
+    const sfx = new Sfx({ running: true, ctx, sfx: new Node() } as unknown as AudioEngine, () => ({ tonic: 0, mode: "major" }));
+    sfx.trapCast();
+    const plops = ctx.sources.filter(source => source.type === "sine");
+    expect(plops).toHaveLength(3);
+    expect(new Set(plops.map(source => source.startAt)).size).toBe(3);
+    expect(plops[0]!.frequency.value).toBeCloseTo(65.406, 2); // C3 plop resolves to C2.
+    ctx.finish();
+  });
+
+  it("does not reserve a snap voice for an empty batch or make sounds while stopped", () => {
+    const ctx = new Context();
+    const engine = { running: true, ctx, sfx: new Node() };
+    const sfx = new Sfx(engine as unknown as AudioEngine, () => ({ tonic: 2, mode: "major" }));
+    sfx.trapSnaps(0);
+    expect(ctx.sources).toHaveLength(0);
+    engine.running = false;
+    sfx.trapSnaps(4); sfx.seineHit(); sfx.snag(); sfx.chum(); sfx.trapCast();
+    expect(ctx.sources).toHaveLength(0);
+  });
+});
+
 async function startMusic(mode: "hub" | "round" | "endless" = "hub", chapters: unknown[] = []): Promise<{ music: Music; ctx: Context }> {
   vi.stubGlobal("PeriodicWave", Wave);
   vi.stubGlobal("window", { setInterval: () => 1 });

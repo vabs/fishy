@@ -127,6 +127,8 @@ export function createGameAudio(): GameAudio {
       if (!engine.running) return;
       let catches = 0;
       let combo = 0;
+      let snaps = 0;
+      let seine = false, snag = false, chum = false, cast = false;
       for (const event of events) {
         if (event.type === "capture") {
           catches++;
@@ -138,7 +140,18 @@ export function createGameAudio(): GameAudio {
         else if (event.type === "golden") sfx.shimmer();
         else if (event.type === "golden-escape") sfx.plop();
         else if (event.type === "chest-open") sfx.treasure();
+        else if (event.type === "trap-snap") snaps++;
+        else if (event.type === "seine-hit") seine = true;
+        else if (event.type === "snag") snag = true;
+        else if (event.type === "chum") chum = true;
+        else if (event.type === "trap-cast" && event.traps.length > 0) cast = true;
       }
+      // Several nets or rope hits in one step share one voice on the existing effects bus.
+      if (cast) sfx.trapCast();
+      if (snaps > 0) sfx.trapSnaps(snaps);
+      if (seine) sfx.seineHit();
+      if (snag) sfx.snag();
+      if (chum) sfx.chum();
       sfx.catches(catches, combo);
       sfx.flush();
       if (world) {
