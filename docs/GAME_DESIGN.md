@@ -363,8 +363,8 @@ Optional challenges for the next timed round, posted in the hub before it starts
   best-round record or the next round's estimate.
 - Determinism: the board's random numbers come from a seed hashed from the save's creation time and
   the round number, and nothing else. The board is stored in the save, so reloading and buying
-  upgrades keep it. A purchase that completes the tree clears it, since the Final Round has no bounties; a stale
-  earn bounty in a Bloom forecast is repaired once.
+  upgrades keep it. A purchase that completes the tree clears it, since the Final Round has no
+  bounties; a stale earn bounty in a Bloom forecast is repaired once.
 - Guarantees: before the round starts, the board tells the simulation what it needs. A chest
   bounty skips the chest chance roll and brings the chest in between 20% and 40% of the base round
   length; a golden fish bounty spawns a golden fish at 35% of it if none has appeared.

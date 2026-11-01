@@ -140,7 +140,7 @@ round's earnings; a missed one just pays nothing.
 | Catch some of one fish type | Catch 20 Rare fish | Any unlocked type |
 | Reach a combo | Reach combo ×1.5 | Once the Combo upgrade is bought |
 | Net many fish in one sweep | Net 8 fish in one sweep | Always |
-| Earn an amount | Earn $31,162 | After your first earnings: 110–130% of your last round |
+| Earn an amount | Earn $31,162 | After your first earnings: 110–130% of your last round; never in a Bloom |
 | Catch a golden fish | Catch a golden fish | From round 2 |
 | Open the treasure chest | Open the treasure chest | From round 3 |
 | Catch fish in the wave | Catch 40 fish in the Feeding Frenzy | Frenzy rounds |
@@ -231,8 +231,8 @@ round or Endless trip ends.
 | Grave Robber | Open 5 chests in the Sunken Graveyard in one trip |
 
 The two biome badges are checked when a trip ends. All but the bounty and Final Round badges can
-be earned in the Endless Sea too. Achievements are
-worked out from your saved stats, so a save from before they existed gets the ones it already
+be earned in the Endless Sea too. Achievements are worked out from your saved stats, so a save
+from before they existed gets the ones it already
 qualifies for (first catches, fish totals, Master of the Sea) when it loads or is imported. Play
 Again keeps every badge you've earned; the counts towards the rest start again with the new game.
 
