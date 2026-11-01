@@ -24,8 +24,7 @@ import {
  * Pacing estimate: plays a whole game with a bot through the real World, shopping after every
  * round, and prints the timeline. Not part of `npm test`; run it after changing costs:
  *   PACING=1 npx vitest run src/game/tech/pacing.test.ts --silent=false
- * Ability upgrades only pay off once the fish types implement them, so real games get faster as
- * they land.
+ * Trap nets work automatically; the bot also throws chum as soon as it is ready.
  */
 
 const WIDTH = 1280;
@@ -82,12 +81,16 @@ function playRound(
   frenzyEarned: number;
   golden: number;
   treasure: number;
+  chumThrows: number;
+  trapCatches: number;
 } {
   const world = new World(applyUpgrades(BASE_STATS, upgrades), createRng(seed), WIDTH, HEIGHT, { round, final: false });
   let pointer: Point = { x: WIDTH / 2, y: HEIGHT / 2 };
   let target: Point | null = null;
   let retarget = 0;
+  let chumThrows = 0;
   while (!world.over && world.elapsed < MAX_ROUND_SECONDS) {
+    if (world.chumReady && world.chum()) chumThrows++;
     retarget -= STEP;
     if (retarget <= 0) {
       target = botTarget(world, pointer);
@@ -111,6 +114,8 @@ function playRound(
     frenzyEarned: world.frenzyEarned,
     golden: world.bonusEarned.golden,
     treasure: world.bonusEarned.treasure,
+    chumThrows,
+    trapCatches: world.trapCatches,
   };
 }
 
@@ -150,6 +155,9 @@ describe.runIf(import.meta.env.PACING)("pacing", () => {
     let frenzyEarned = 0;
     let golden = 0;
     let treasure = 0;
+    let chumThrows = 0;
+    let trapCatches = 0;
+    let trapUnlockedAt = 0;
     const lines: string[] = [];
     const milestones: string[] = [];
     const maxedAt: string[] = [];
@@ -164,11 +172,14 @@ describe.runIf(import.meta.env.PACING)("pacing", () => {
       frenzyEarned += round.frenzyEarned;
       golden += round.golden;
       treasure += round.treasure;
+      chumThrows += round.chumThrows;
+      trapCatches += round.trapCatches;
       const result = shop(upgrades, money, round.earned);
       upgrades = result.upgrades;
       money = result.money;
       const now = minutes(roundSeconds + rounds * HUB_SECONDS);
       for (const id of result.bought) {
+        if (id === "rigging.unlock") trapUnlockedAt = roundSeconds + rounds * HUB_SECONDS;
         if (id.endsWith(".unlock")) milestones.push(`${id} at round ${rounds} (${now})`);
         if (isMaxed(getNode(id)!, upgrades)) maxedAt.push(`${id} maxed at ${now}`);
       }
@@ -198,6 +209,7 @@ describe.runIf(import.meta.env.PACING)("pacing", () => {
         ...lines,
         ...milestones,
         `Golden fish earned ${share(golden)}, treasure chests ${share(treasure)}`,
+        `Chum thrown ${chumThrows} times; trap nets and seines caught ${trapCatches} fish`,
         "Last nodes maxed:",
         ...maxedAt.slice(-15),
         `Complete: ${isTreeComplete(upgrades)} after ${rounds} rounds`,
@@ -206,5 +218,11 @@ describe.runIf(import.meta.env.PACING)("pacing", () => {
       ].join("\n"),
     );
     expect(isTreeComplete(upgrades)).toBe(true);
+    // Pre-tools main: 69.9 min / 84 rounds. Allow at most 15% more campaign time.
+    expect(total).toBeLessThanOrEqual(69.9 * 60 * 1.15);
+    expect(trapUnlockedAt / 60).toBeGreaterThan(15);
+    expect(trapUnlockedAt / 60).toBeLessThan(35);
+    expect(chumThrows).toBeGreaterThan(0);
+    expect(trapCatches).toBeGreaterThan(0);
   });
 });
