@@ -2353,3 +2353,93 @@ button:active:enabled {
 @media (prefers-reduced-motion: reduce) {
   #chum-button.is-ready { animation: none; }
 }
+
+/* Weather is named and marked with an icon, including when compact hubs hide their hint. */
+#start-button.has-weather { position: relative; }
+.weather-badge {
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0 8px;
+  border: 1px solid var(--brass);
+  border-radius: 10px;
+  background: var(--sea-deep);
+  color: var(--ink);
+  font: 800 10px/20px var(--body);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+#start-button.has-weather.has-frenzy::after { top: auto; bottom: -12px; }
+
+/* One measured stack keeps simultaneous weather, biome and Frenzy announcements apart. */
+.round-banners { display: contents; }
+.round-banners.is-live {
+  position: fixed;
+  z-index: 5;
+  top: calc(var(--viewport-top) + var(--safe-top) + 140px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  width: min(360px, calc(100vw - var(--safe-left) - var(--safe-right) - 24px));
+  pointer-events: none;
+}
+.round-banners.is-live .frenzy-banner {
+  position: relative;
+  inset: auto;
+  width: 100%;
+  transform: none;
+  animation: state-banner-in 0.3s ease-out;
+}
+.round-banners .state-banner {
+  display: block;
+  padding: 10px 14px;
+  color: #ffe0a4;
+  font: 400 20px/1.25 var(--display);
+  overflow-wrap: anywhere;
+}
+.round-banners .state-banner[hidden] { display: none; }
+@keyframes state-banner-in {
+  from { opacity: 0; translate: 0 -8px; }
+}
+.hud-biome { color: #ffdc9b; font-size: 12px; font-weight: 800; text-align: center; }
+.hud-biome-next { color: #dfdbc9; font-size: 10px; font-variant-numeric: tabular-nums; }
+.hud-weather {
+  grid-column: 1 / -1;
+  justify-self: center;
+  padding: 3px 12px;
+  border: 1px solid #d9a44188;
+  border-radius: 8px;
+  background: #0d3b4ff0;
+  color: #fff1cd;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.hud-weather[hidden] { display: none; }
+.panel .endless-biomes { color: #705137; font-size: 14px; }
+@media (max-width: 760px) {
+  .round-banners { width: min(300px, calc(100vw - var(--safe-left) - var(--safe-right) - 24px)); }
+  .round-banners .state-banner { font-size: 18px; }
+  #hud[data-mode="endless"] .hud-endless,
+  #hud[data-mode="endless"] .hud-catch { min-width: 0; flex: 1; }
+  .hud-biome { font-size: 11px; }
+  .hud-biome-next { font-size: 9px; }
+}
+@media (max-height: 500px) {
+  .round-banners .state-banner { padding-block: 6px; font-size: 17px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .round-banners.is-live .frenzy-banner { animation: none; }
+}
+
+/* Weather icons are inline SVG so they never fall back to emoji or empty boxes. */
+.weather-badge-icon,
+.weather-banner-icon {
+  display: inline-flex;
+  vertical-align: -0.15em;
+}
+.weather-badge-icon svg,
+.weather-banner-icon svg { display: block; }

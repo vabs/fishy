@@ -66,7 +66,7 @@
           >
             Achievements
             <span id="title-achievements-count" class="count-badge"
-              >0 / 22</span
+              >0 / 24</span
             >
           </button>
           <button id="title-settings" class="secondary-button" type="button">
@@ -89,6 +89,8 @@
         </div>
         <div id="hud-endless" class="hud-endless" hidden>
           <span class="hud-label">Endless Sea</span>
+          <span id="hud-biome" class="hud-biome"></span>
+          <span id="hud-biome-next" class="hud-biome-next"></span>
           <strong><span id="hud-endless-fish">0</span> fish</strong>
           <span
             ><span id="hud-endless-time">0:00</span> at sea · best
@@ -118,6 +120,7 @@
           Ⅱ
         </button>
       </div>
+      <div id="hud-weather" class="hud-weather" hidden></div>
       <div
         id="hud-bounties"
         class="bounties is-hud"
@@ -130,15 +133,20 @@
       Move your net over the fish. It catches them on its own.
     </p>
 
-    <div id="frenzy-banner" class="frenzy-banner" role="status" hidden>
-      <span class="frenzy-title">Feeding Frenzy!</span>
-      <span class="frenzy-detail"
-        ><span id="frenzy-value"></span>
-        <span id="frenzy-time" aria-hidden="true"></span
-      ></span>
-      <span class="frenzy-bar" aria-hidden="true"
-        ><span id="frenzy-bar-fill" class="frenzy-bar-fill"></span
-      ></span>
+    <div id="round-banners" class="round-banners">
+      <div id="frenzy-banner" class="frenzy-banner" role="status" hidden>
+        <span class="frenzy-title">Feeding Frenzy!</span>
+        <span class="frenzy-detail"
+          ><span id="frenzy-value"></span>
+          <span id="frenzy-time" aria-hidden="true"></span
+        ></span>
+        <span class="frenzy-bar" aria-hidden="true"
+          ><span id="frenzy-bar-fill" class="frenzy-bar-fill"></span
+        ></span>
+      </div>
+
+      <div id="sea-banner" class="frenzy-banner state-banner" role="status" hidden></div>
+      <div id="biome-banner" class="frenzy-banner state-banner" role="status" hidden></div>
     </div>
 
     <section id="hub" hidden>
@@ -293,6 +301,7 @@
         <dt>Best combo</dt>
         <dd id="endless-combo">×1.0</dd>
       </dl>
+      <p id="endless-biomes" class="endless-biomes"></p>
       <div
         id="endless-records"
         class="endless-records"
@@ -319,7 +328,7 @@
           <span class="logbook-kicker">Treasures of the journey</span>
           <h2 id="achievements-title">Your achievements</h2>
         </div>
-        <span id="achievements-count" class="count-badge">0 / 22</span>
+        <span id="achievements-count" class="count-badge">0 / 24</span>
         <button
           id="achievements-close"
           class="secondary-button"

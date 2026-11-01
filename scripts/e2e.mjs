@@ -93,7 +93,7 @@ try {
   step("achievements open and close back to the title with focus restored");
   await page.click("#title-achievements");
   await page.locator("#achievements-panel").waitFor({ state: "visible" });
-  assert.equal(await page.locator(".achievement-card").count(), 22);
+  assert.equal(await page.locator(".achievement-card").count(), 24);
   await page.keyboard.press("Escape");
   assert.ok(await page.locator("#achievements-panel").isHidden());
   assert.ok(await page.locator("#title").isVisible());
@@ -162,13 +162,16 @@ try {
   await page.waitForSelector("#frenzy-banner", { state: "hidden", timeout: 15_000 });
   await page.waitForSelector("#summary-panel:not([hidden])", { timeout: 30_000 });
   assert.equal(await text(page, "#summary-title"), "Round 5 complete");
-  assert.match(await text(page, "#summary-frenzy"), /^Feeding Frenzy: \+\$[\d,]+ from [\d,]+ fish$/);
+  assert.match(await text(page, "#summary-frenzy"), /^Feeding Frenzy:?\s+\+\$[\d,]+\s+from [\d,]+ fish$/);
   await page.click("#continue-button");
   round = 6;
   await page.waitForSelector("#hub:not([hidden])");
   assert.equal(await text(page, "#hub-round"), `Round ${round} next`);
   assert.doesNotMatch(await text(page, "#hub-hint"), /Feeding Frenzy/);
   assert.equal(await page.locator("#start-button.has-frenzy").count(), 0, "Frenzy badge on a plain round");
+
+  await checkWeatherAndBiomes(browser, dev);
+  await page.bringToFront();
 
   step("a maxed tree offers the Final Round");
   const { TECH_NODES } = await dev.load("/src/game/tech/index.ts");
@@ -193,7 +196,7 @@ try {
   await page.waitForSelector("#summary-panel:not([hidden])", { timeout: 120_000 });
   assert.equal(await text(page, "#summary-title"), "Final Round complete");
   await continueVisible(page);
-  assert.match(await text(page, "#summary-frenzy"), /^Feeding Frenzy: /);
+  assert.match(await text(page, "#summary-frenzy"), /^Feeding Frenzy:?\s/);
   await page.click("#continue-button");
   await page.waitForSelector("#end-panel:not([hidden])");
   assert.equal(await text(page, "#end-rounds"), String(round));
@@ -316,4 +319,47 @@ async function checkBoatTools(browser, dev, maxed) {
   await tools.waitForFunction(() => window.__fishy.world.chumActive);
   assert.deepEqual(tools.errors, [], "tool page errors");
   await tools.context().close();
+}
+
+/** Weather travels from a stable hub forecast through the round to the ledger; trips keep biome records. */
+async function checkWeatherAndBiomes(browser, dev) {
+  step("round 7 forecasts a forced storm, announces it and records its bonus");
+  const { createSave } = await dev.load("/src/save/index.ts");
+  const page = await newPage(browser);
+  const save = { ...createSave("Weather Watch"), round: 7, money: 1000, upgrades: { "net.radius": 1 } };
+  await page.addInitScript((data) => localStorage.setItem("fishy.save", data), JSON.stringify(save));
+  await page.goto(`${dev.url}?sea=storm`);
+  await page.click("#title-play");
+  await page.locator("#hub").waitFor({ state: "visible" });
+  assert.match(await text(page, "#start-button .weather-badge"), /storm/i);
+  assert.match(await text(page, "#hub-hint"), /Storm this round: fish drift with the wind/);
+  await page.reload();
+  await page.click("#title-play");
+  assert.equal(await page.locator("#start-button").getAttribute("data-sea"), "storm");
+  await page.click("#start-button");
+  await page.locator("#sea-banner").waitFor({ state: "visible" });
+  assert.match(await text(page, "#sea-banner"), /Storm · catches ×1.2/);
+  assert.equal(await page.evaluate(() => window.__fishy.world.sea), "storm");
+  await chaseFish(page, { steps: 60 });
+  await page.locator("#summary-panel").waitFor({ state: "visible", timeout: 30000 });
+  const row = page.locator('#summary-bonuses [data-key="sea"]');
+  assert.match(await row.innerText(), /Storm bonus/);
+  assert.match(await row.locator(".summary-extra-amount").innerText(), /^\+\$/);
+  await continueVisible(page);
+
+  step("an Endless trip at 301 seconds names the Trench, announces it and lists visited biomes");
+  await page.goto(`${dev.url}?endlessTime=301`);
+  await page.click("#title-endless");
+  await page.locator('#hud[data-mode="endless"]').waitFor({ state: "visible" });
+  assert.equal(await text(page, "#hud-biome"), "Abyssal Trench");
+  assert.match(await text(page, "#hud-biome-next"), /to next biome/);
+  assert.match(await text(page, "#biome-banner"), /Entering the Abyssal Trench/);
+  assert.ok(await page.locator("#hud-weather").isVisible());
+  assert.match(await text(page, "#hud-weather"), /Clear|Storm|Fog|Algal Bloom/);
+  await page.click("#pause-button");
+  await page.click("#harbour-button");
+  assert.match(await text(page, "#endless-biomes"), /Shallow Reef · Abyssal Trench/);
+  assert.ok(await page.evaluate(() => JSON.parse(localStorage.getItem("fishy.save")).achievements["biome-trench"]));
+  assert.deepEqual(page.errors, [], "weather/biome page errors");
+  await page.context().close();
 }

@@ -84,6 +84,24 @@ try {
   await chaseFish(endless, { steps: 65, netRadius });
   await save(await endless.screenshot(), "endless");
 
+  // Weather and biome examples use real sessions and their dev-only entry overrides.
+  const storm = await newPage(browser);
+  await storm.addInitScript((data) => localStorage.setItem("fishy.save", data), JSON.stringify({ ...midSave, round: 7 }));
+  await storm.goto(`${dev.url}?fish=${ALL_FISH}&sea=storm`);
+  await storm.click("#title-play");
+  await storm.click("#start-button");
+  await storm.locator("#sea-banner").waitFor({ state: "visible" });
+  await storm.waitForTimeout(700);
+  await save(await storm.screenshot(), "storm");
+
+  const trench = await newPage(browser);
+  await trench.addInitScript((data) => localStorage.setItem("fishy.save", data), JSON.stringify(midSave));
+  await trench.goto(`${dev.url}?fish=${ALL_FISH}&endlessTime=301`);
+  await trench.click("#title-endless");
+  await trench.waitForFunction(() => document.querySelector("#hud-biome")?.textContent === "Abyssal Trench");
+  await trench.waitForTimeout(700);
+  await save(await trench.screenshot(), "trench");
+
   // The end: a finished game.
   const done = await newPage(browser);
   const doneSave = withBadges({
@@ -99,7 +117,7 @@ try {
   await done.waitForTimeout(400);
   await save(await done.screenshot(), "end");
 
-  const errors = [first, mid, endless, done].flatMap((page) => page.errors);
+  const errors = [first, mid, endless, storm, trench, done].flatMap((page) => page.errors);
   if (errors.length) throw new Error(`Page errors:\n${errors.join("\n")}`);
 } finally {
   await browser.close();

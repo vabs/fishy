@@ -30,7 +30,7 @@ aboard" for a new player, "Welcome back" for a returning one) and four buttons.
 - **Endless Sea** starts an Endless trip. It's disabled, with "Play your first round to unlock"
   under it, until the save has played a round or has an Endless session on record, so it stays
   open after Play Again for anyone who has used it.
-- **Achievements** opens the logbook of badges and shows the earned count ("7 / 22").
+- **Achievements** opens the logbook of badges and shows the earned count ("7 / 24").
 - **Settings** opens the same Settings drawer as the hub.
 
 A first visit goes name prompt → three how-to-play slides → title screen. The hub's ⌂ button
@@ -161,6 +161,42 @@ wears a Frenzy badge (compact screens hide the hint). In the round a "Feeding Fr
 under the HUD with the value bonus, the seconds left and a bar that empties; the sea takes a light
 tint and a line of foam marks the front; a sting plays and the music lifts. The round summary adds
 a line with the money and fish the wave brought in, which the per-type rows already include.
+
+## Sea States
+
+`src/game/sea.ts` defines weather, passed into the timed World through `RoundOptions.sea`:
+
+| State | Simulation | Catch payout | Counter |
+| --- | --- | --- | --- |
+| Clear | No change | ×1 | — |
+| Storm | Offset drift at 22–45 px/s on a smooth 6 s gust cycle; offsets spring back at 0.6/s and stay in bounds | ×1.2 | Chum's 60 px/s pull, Bait and downwind trap nets |
+| Fog | Far silhouettes fade, retaining their outline and at least 0.15 alpha | ×1.15 | Lantern Lure and the moving net |
+| Algal Bloom | Spawn ×1.25, swim speed ×0.75, HP ×1.5 | ×1 | Net damage, Strong Mesh and Electric chains |
+
+- `seaStateFor(createdAt, round, final)` uses an FNV hash of `createdAt:round`. Starting at round 6,
+  eligible rounds have a 35% chance of weather; equal weights choose Storm, Fog or Bloom, excluding
+  the previous round's non-clear state. Every fifth round and the Final Round stay clear. There is
+  no new save field and clear rounds keep their original seeded simulation sequence.
+- Wind changes fish offsets, never their orbit coordinates. Golden fish drift too; chests keep
+  their own paths. The spring settles a school about 35–75 px downwind.
+- Fog uses distance to the nearer of boat and net. The clear radius is
+  `max(90 + lanternRadius, netRadius × 2.5)`; outside it alpha falls by distance / 160 to a minimum
+  of 0.15. Each Lantern Lure level adds 70 px. Inside the net, fish colour and HP bars are unchanged;
+  golden glints and chests remain visible.
+- Weather payouts multiply every fish catch, including ability, golden, trap and seine catches.
+  `world.seaEarned` records just the added Storm/Fog money, already included in earnings. Bloom has
+  no bonus multiplier; it adds fish instead. Bloom excludes earn bounties, including stale boards
+  carried into the feature, because those targets depend on the previous round.
+- The hub gives Start Round an icon and a named weather badge, with an explanatory hint on larger
+  screens. A three-second banner announces the state under the HUD/checklist; simultaneous Frenzy,
+  weather and biome banners stack. Pausing freezes banner lifetimes. The bonus ledger lists
+  Feeding Frenzy, Trap nets, weather (Storm bonus +$, Fog bonus +$, or Algal Bloom), then Bounties.
+- Endless uses a separate weather RNG stream: every 150 s there is a 50% chance of a 60 s state,
+  excluding the previous non-clear state. A pending state waits until it can run without overlapping
+  a Frenzy wave. Its start gets a banner and the HUD gives its name and seconds left; clear weather
+  has no active countdown. Weather rolls leave existing chest and Frenzy timings alone.
+- Weather has no new controls. Reduced motion holds rain/fog/algae still and removes lightning;
+  combined sea lighting keeps silhouettes readable in both palettes.
 
 ## Movement
 
@@ -313,7 +349,7 @@ Optional challenges for the next timed round, posted in the hub before it starts
   | catch | Catch 20 Rare fish | 35–60% of the type's expected catches (spawn rate × round length, plus its share of the starting fish) | Each unlocked type |
   | combo | Reach combo ×1.5 | ×1.2 up to the current combo cap, in steps of 0.1; before round 8 the low end is likelier | Once Combo is bought |
   | haul | Net 8 fish in one sweep | 4 up to a ceiling of 4–12 that grows with net size and fish density | Always |
-  | earn | Earn $31,162 | 110–130% of recent earnings | Once there are recent earnings |
+  | earn | Earn $31,162 | 110–130% of recent earnings | Once there are recent earnings, except Bloom rounds |
   | golden | Catch a golden fish | 1 | From round 2 |
   | chest | Open the treasure chest | 1 | From round 3 |
   | frenzy | Catch 40 fish in the Feeding Frenzy | 35–55% of the fish the wave is expected to bring in | Frenzy rounds |
@@ -327,8 +363,8 @@ Optional challenges for the next timed round, posted in the hub before it starts
   best-round record or the next round's estimate.
 - Determinism: the board's random numbers come from a seed hashed from the save's creation time and
   the round number, and nothing else. The board is stored in the save, so reloading and buying
-  upgrades keep it. The one exception: a purchase that completes the tree clears it, since the
-  Final Round has no bounties.
+  upgrades keep it. A purchase that completes the tree clears it, since the Final Round has no
+  bounties; a stale earn bounty in a Bloom forecast is repaired once.
 - Guarantees: before the round starts, the board tells the simulation what it needs. A chest
   bounty skips the chest chance roll and brings the chest in between 20% and 40% of the base round
   length; a golden fish bounty spawns a golden fish at 35% of it if none has appeared.
@@ -390,9 +426,38 @@ player's current upgrades and the same simulation as a round.
   achievements), and updates the Endless records: sessions, total fish, total time, best earnings,
   most fish, longest trip and best combo. Play Again keeps the Endless records.
 
+## Biomes
+
+`src/game/biome.ts` gives Endless a deterministic loop: each biome lasts 300 s, in the order Reef,
+Trench, Graveyard, then Reef again. Timed rounds have no biome modifiers.
+
+| Biome | Elapsed time in each 900 s loop | Multipliers for unlocked fish and events | Music chapter |
+| --- | --- | --- | --- |
+| Shallow Reef | 0–300 s | Normal and Uncommon spawn ×1.2 | Shallows |
+| Abyssal Trench | 300–600 s | Rare spawn ×2, Electric spawn ×1.5, golden rate ×1.5 | Deep |
+| Sunken Graveyard | 600–900 s | Goober and Monster spawn ×1.5; chest gap ×⅓ (20–33⅓ s before other timing rules) | Currents |
+
+- Spawn modifiers change at the boundary and apply only to unlocked kinds. Existing fish stay.
+  Graveyard chest timing shortens the remaining scheduled gap on entry; a floating chest still
+  holds up the next one.
+- `biomeAt(elapsed)` supplies the current/next biome, progress and an eight-second visual blend
+  during the end of the current biome. One `seaLight({ biome, timeOfDay, sea })` combines biome,
+  the 240 s day/night cycle and weather, with a darkness cap to keep silhouettes readable.
+- At each boundary the HUD names the biome and counts down to the next one; a banner reads e.g.
+  “Entering the Abyssal Trench”. `audio.screen` receives `biome?: Biome` on trip start, transitions
+  and resume, so Endless chapters follow biomes through the usual bar-line music crossfade.
+- `world.biomesReached` tracks visits and `world.graveyardChests` counts chests opened in that biome.
+  The trip logbook lists visited biome names in first-visit order. At trip end these facts enter
+  `AchievementMoment` as `{ biomesReached, graveyardChests }`; no cumulative save fields are added.
+- DEV only: `?sea=storm|fog|bloom` forces the next timed forecast, bounties and weather while the
+  option remains in the URL. `?endlessTime=N` runs an Endless trip forward N seconds at 60 Hz
+  without input, discarding past effects; active weather and the current biome are announced on
+  entry. All clocks, biome visits and any automatic trap catches remain real simulation results.
+  Invalid/negative offsets do nothing. `?endlessTime=301` previews the Trench, `601` the Graveyard.
+
 ## Achievements
 
-22 badges (`src/game/achievements.ts`). Each has a permanent id, a name, a one-line description and
+24 badges (`src/game/achievements.ts`). Each has a permanent id, a name, a one-line description and
 an icon: a fish sprite, or a glyph (net, star, coin, chest, gold, wave, scroll, anchor, clock,
 crown, combo) drawn inside a brass medallion.
 
@@ -406,11 +471,13 @@ crown, combo) drawn inside a brass medallion.
 | Bounties | Clean Sweep (every bounty in a round), Bounty Hunter (25 bounties) |
 | Campaign | Master of the Sea (finish the Final Round) |
 | Endless | Lost at Sea (10 minutes in one trip), Sea Legs (30 minutes in one trip) |
+| Biomes | Into the Deep (`biome-trench`: reach the Trench in one trip), Grave Robber (`biome-graveyard`: open 5 Graveyard chests in one trip) |
 
 - Achievements are worked out from the save, not from events: `newAchievements(save)` lists every
   badge the save qualifies for but hasn't been granted, and `grantAchievements` stamps each with
-  the time earned. Two live facts can also be passed in, for a check made before the save is
-  written: whether every bounty this round was completed, and how long the current trip has lasted.
+  the time earned. Live facts can also be passed in: whether every bounty this round was completed,
+  the current trip duration, its biomes reached and its Graveyard chest count. The two biome badges
+  are checked at trip end; they need no cumulative save fields.
 - The game checks at the end of every round and Endless trip, and once a minute during a trip so
   Lost at Sea and Sea Legs unlock the moment they're reached. Each new badge gets a toast ("Achievement
   unlocked" and its name over the medallion) for 3 s, one after another, and a short brass
@@ -423,7 +490,7 @@ crown, combo) drawn inside a brass medallion.
 - Badges are kept by Play Again. They're stored as id → ISO time; unknown ids are kept, so a save
   from a newer version doesn't lose them. Ids are permanent, including `combo-2` and `combo-3`,
   whose numbers aren't their thresholds.
-- The logbook shows all 22: earned ones on a gold medallion with the date, locked ones on a
+- The logbook shows all 24: earned ones on a gold medallion with the date, locked ones on a
   tarnished one with the description, a padlock and "Locked". The title screen, the hub and the
   logbook show the earned count.
 
@@ -489,11 +556,12 @@ changes the simulation, the net's hit area or its timing.
 - Each fish's unlock gates the rest of its nodes. Fish unlock in order: Uncommon → Rare →
   Electric → Epic → Goober → Monster → Star.
 - Pacing target: finishing the tree takes roughly 1–1.5 hours. `src/game/tech/pacing.test.ts`
-  checks it by playing a whole game with a bot, which finishes in about 74.6 minutes / 89 rounds,
-  including 10 s per round in the hub. The pre-tools baseline was 69.9 minutes / 84 rounds:
-  the new campaign is 6.7% longer. Trap Net arrives at round 41, about 22.2 minutes. The bot benefits from traps
-  and throws chum whenever ready; the check caps campaign time at 115% of baseline and keeps
-  Trap Net between 15 and 35 minutes. Golden fish,
+  checks it by playing a whole game with a bot using `seaStateFor` and a fixed creation stamp.
+  Main before weather wiring measured 74.6 minutes / 89 rounds; with weather it takes 73.1 minutes /
+  87 rounds (about 2% faster), including 10 s per round in the hub. Weather must keep campaign
+  time within ±3% of that main baseline. No weather multipliers needed retuning. The bot benefits
+  from traps and throws chum whenever ready. Trap Net arrives at 21.6 minutes / round 40, compared
+  with 22.2 minutes / round 41 on main; the check keeps it between 15 and 35 minutes. Golden fish,
   chests and Feeding Frenzy waves are part of that; to make room for them, upgrades over $2,000
   cost more the pricier they are (×1.2 at $10k, ×1.6 at $100k, ×1.9 at $500k).
 
@@ -669,7 +737,8 @@ every note fits.
     and a melody whose density changes every 16 bars instead of building up.
   - Three chapters (start, Electric fish, the Monster) change the bed in the hub so it doesn't wear
     thin over a whole game; their generated melodies use a steel drum, a kalimba and a marimba. The
-    beds are CC0 loop files once chosen, and generated in code until then.
+    beds are CC0 loop files once chosen, and generated in code until then. Endless chapters instead
+    follow Shallow Reef (Shallows), Abyssal Trench (Deep) and Sunken Graveyard (Currents).
 - **Sound effects** are generated in code and in key: catches climb the scale with the combo, and
   each ability (current, star, whirlpool, goober), time bonus, Feeding Frenzy wave, golden fish,
   chest and purchase has its own sound. A completed bounty plays three bright notes and a bell; an
