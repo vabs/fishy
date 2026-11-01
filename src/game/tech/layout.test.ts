@@ -35,9 +35,9 @@ describe("layoutTree", () => {
     const points = [...layout.nodes.entries()];
     for (const [i, [a, p]] of points.entries()) {
       for (const [b, q] of points.slice(i + 1)) {
-        // 1 is exactly on the edge of the footprint ellipse; allow a sliver for lanes that curve.
+        // 1 is exactly on the edge of the footprint ellipse; allow only floating-point rounding.
         const reach = Math.hypot((p.x - q.x) / sx, (p.y - q.y) / sy);
-        expect(reach, `${a} and ${b}`).toBeGreaterThanOrEqual(0.97);
+        expect(reach, `${a} and ${b}`).toBeGreaterThanOrEqual(1 - 1e-9);
       }
     }
   });
