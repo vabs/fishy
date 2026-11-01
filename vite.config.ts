@@ -6,5 +6,7 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["src/**/*.test.ts"],
+    // The long simulation tests take ~1.5 s locally but share a small CI runner with ~40 files.
+    testTimeout: 20000,
   },
 });
