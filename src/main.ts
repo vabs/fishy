@@ -18,7 +18,7 @@ import { fishColors, onPaletteChange, setPalette } from "./game/palette";
 import { Renderer } from "./game/render";
 import { buildChestSprites, buildSprites } from "./game/shapes";
 import { BIOME, biomeLabel, type Biome } from "./game/biome";
-import { seaBlurb, seaLabel, seaStateFor, type SeaState } from "./game/sea";
+import { SEA, seaBlurb, seaLabel, seaStateFor, type SeaState } from "./game/sea";
 import { createRng } from "./game/rng";
 import { BASE_STATS, type Stats } from "./game/stats";
 import { summaryRows, type SummaryRow } from "./game/summary";
@@ -486,7 +486,7 @@ function endRound(finished: World): void {
     detail: `${finished.trapCatches.toLocaleString("en-US")} fish` });
   if (finished.sea !== "clear") extras.push({ key: "sea", icon: finished.sea,
     label: finished.sea === "bloom" ? "Algal Bloom" : `${seaLabel(finished.sea)} bonus`,
-    detail: finished.sea === "storm" ? "from the rough-weather bonus" : finished.sea === "fog" ? "from the fog bonus" : undefined,
+    detail: finished.sea === "storm" ? `catches ×${SEA.stormValue}` : finished.sea === "fog" ? `catches ×${SEA.fogValue}` : undefined,
     amount: finished.sea === "bloom" ? undefined : finished.seaEarned });
   if (activeBounties.length > 0) extras.push({ key: "bounties", icon: "bounties", label: "Bounties", amount: bounties.reward });
   renderSummaryExtras(summary.bonuses, extras);
