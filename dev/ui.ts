@@ -5,6 +5,7 @@ import "../src/ui/audio-controls.css";
 import "../src/ui/display-controls.css";
 import "../src/ui/save-controls.css";
 import { renderBounties, type BountyItem } from "../src/ui/bounties-view";
+import { renderSummaryExtras, type SummaryExtra } from "../src/ui/summary-extras";
 import {
   renderAchievements,
   paintBadgeIcon,
@@ -73,6 +74,7 @@ const scenes = [
   "frenzy",
   "pause",
   "summary",
+  "summary-full",
   "endless",
   "achievements",
   "toast",
@@ -161,11 +163,6 @@ text("hud-combo", "Combo ×1.8");
 text("hud-endless-fish", "248");
 text("hud-endless-time", "08:42");
 text("hud-endless-best", "×2.0");
-text("summary-title", "Round 15 complete");
-text("summary-earned", "$3,045");
-text("summary-total", "$3,045");
-text("summary-fish", "202");
-text("summary-frenzy", "Feeding Frenzy: +$842 from 56 fish");
 text("frenzy-value", "Every catch ×1.5");
 text("frenzy-time", "· 4s");
 el("frenzy-bar-fill").style.transform = "scaleX(.72)";
@@ -197,21 +194,54 @@ const rowFish: [FishKind, number, number][] = [
   ["electric", 8, 296],
   ["normal", 16, 248],
 ];
-for (const [kind, count, amount] of rowFish) {
-  const row = document.createElement("tr");
-  const name = document.createElement("td");
-  const label = document.createElement("span");
-  label.className = "summary-fish";
-  const canvas = document.createElement("canvas");
-  canvas.dataset.icon = `fish:${kind}`;
-  label.append(canvas, FISH[kind].name);
-  name.append(label);
-  const caught = document.createElement("td");
-  caught.textContent = String(count);
-  const money = document.createElement("td");
-  money.textContent = formatMoney(amount);
-  row.append(name, caught, money);
-  el("summary-rows").append(row);
+const fullRowFish: [FishKind | "golden" | "treasure", number, number][] = [
+  ["star", 22, 72936], ["goober", 70, 33786], ["electric", 63, 31619],
+  ["monster", 8, 27930], ["golden", 7, 23436], ["rare", 67, 22763],
+  ["epic", 53, 22414], ["uncommon", 345, 15505], ["treasure", 1, 15000], ["normal", 64, 1790],
+];
+function showSummary(full: boolean): void {
+  const fish = full ? fullRowFish : rowFish;
+  const rewards: BountyItem[] = full ? [
+    { label: "Open the treasure chest", value: 0, target: 1, done: false, reward: 7800 },
+    { label: "Net 8 fish in one sweep", value: 12, target: 8, done: true, reward: 6400 },
+    { label: "Catch 22 Rare fish", value: 67, target: 22, done: true, reward: 5000 },
+  ] : summaryBounties;
+  const bountyReward = rewards.reduce((total, bounty) => total + (bounty.done ? bounty.reward : 0), 0);
+  const fishEarnings = fish.reduce((total, [, , amount]) => total + amount, 0);
+  text("summary-title", full ? "Round 50 complete" : "Round 15 complete");
+  text("summary-earned", formatMoney(fishEarnings + bountyReward));
+  text("summary-total", formatMoney(fishEarnings));
+  text("summary-fish", fish.reduce((total, [kind, count]) => total + (kind === "treasure" ? 0 : count), 0).toLocaleString("en-US"));
+  const extras: SummaryExtra[] = [
+    { key: "frenzy", icon: "frenzy", label: "Feeding Frenzy:", detail: "from 56 fish", amount: full ? 32842 : 842 },
+  ];
+  if (full) extras.push(
+    { key: "traps", icon: "traps", label: "Trap nets:", detail: "65 fish" },
+    { key: "sea", icon: "storm", label: "Storm bonus", amount: 12735 },
+  );
+  extras.push({ key: "bounties", icon: "bounties", label: "Bounties", amount: bountyReward });
+  renderSummaryExtras(el("summary-bonuses"), extras);
+  renderBounties(el("summary-bounties"), rewards, "summary");
+  el("summary-rows").replaceChildren(...fish.map(([kind, count, amount]) => {
+    const row = document.createElement("tr");
+    const name = document.createElement("td");
+    const label = document.createElement("span");
+    label.className = "summary-fish";
+    const canvas = document.createElement("canvas");
+    canvas.dataset.icon = kind === "golden" ? "gold" : kind === "treasure" ? "chest" : `fish:${kind}`;
+    canvas.setAttribute("aria-hidden", "true");
+    label.append(canvas, kind === "golden" ? "Golden fish" : kind === "treasure" ? "Treasure chest" : FISH[kind].name);
+    name.append(label);
+    const caught = document.createElement("td");
+    caught.textContent = count.toLocaleString("en-US");
+    const money = document.createElement("td");
+    money.textContent = formatMoney(amount);
+    row.append(name, caught, money);
+    paintBadgeIcon(canvas, canvas.dataset.icon);
+    return row;
+  }));
+  el("summary-panel").hidden = false;
+  el("summary-panel").querySelector(".summary-body")!.scrollTop = 0;
 }
 
 // Sound controls are local gallery controls; no audio engine or storage is started.
@@ -458,7 +488,6 @@ function showScene(): void {
   document.body.dataset.galleryScene = scene;
   renderBounties(el("hub-bounties"), bounties, "hub");
   renderBounties(el("hud-bounties"), bounties, "hud");
-  renderBounties(el("summary-bounties"), summaryBounties, "summary");
   if (["hub", "settings"].includes(scene)) {
     el("hub").hidden = false;
     tree.update(state);
@@ -479,10 +508,8 @@ function showScene(): void {
     el("pause-panel").hidden = scene !== "pause";
     // Preview the endless-only return action alongside the ordinary resume button.
     el("harbour-button").hidden = scene !== "pause";
-  } else if (scene === "summary") {
-    el("summary-panel").hidden = false;
-    el("summary-frenzy").hidden = false;
-  } else if (scene === "endless") el("endless-panel").hidden = false;
+  } else if (scene === "summary" || scene === "summary-full") showSummary(scene === "summary-full");
+  else if (scene === "endless") el("endless-panel").hidden = false;
   else if (scene === "achievements") el("achievements-panel").hidden = false;
   else if (scene === "end") el("end-panel").hidden = false;
   else if (scene === "toast") {
