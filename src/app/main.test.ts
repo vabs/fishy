@@ -77,6 +77,7 @@ it("routes title, hub, bounties and Endless while banking only timed rewards", a
   expect(el("hud-bounties").hidden).toBe(false);
   advance();
   const timed = state.scene!.world!;
+  expect(el("chum-button").hidden).toBe(true);
   timed.earned = 80; timed.caught = { normal: 2 }; timed.bonusCount.treasure = 1;
   timed.maxComboMult = 1.6; timed.bestTickCatches = 10; timed.bestStarHits = 11;
   timed.timeLeft = .001;

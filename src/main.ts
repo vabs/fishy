@@ -2,6 +2,8 @@ import "./style.css";
 import "./app/feedback.css";
 import { bountyBoard, bountyFacts, bountyResult } from "./app/bounties";
 import { endlessRecordsDiff, endlessUnlocked, formatSeaTime } from "./app/endless";
+import { takeToolHint } from "./app/tool-hints";
+import { isChumKey, mountChumControl } from "./ui/chum-control";
 import { ACHIEVEMENTS, grantAchievements, newAchievements, type AchievementMoment } from "./game/achievements";
 import { bountyGuarantees, type Bounty } from "./game/bounties";
 import { renderBounties } from "./ui/bounties-view";
@@ -65,6 +67,7 @@ const summary = {
   title: element("#summary-title"),
   earned: element("#summary-earned"),
   frenzy: element("#summary-frenzy"),
+  traps: element("#summary-traps"),
   table: element("#summary-table"),
   rows: element("#summary-rows"),
   fish: element("#summary-fish"),
@@ -128,6 +131,13 @@ mountAudioControls(element("#hub-audio"), audio, "hub");
 const display = mountDisplayControls(element("#hub-display"), element("#hub-haptics"));
 let save: SaveData;
 let world: World | null = null;
+// Read-only access to the current session for dev pages and browser regression checks.
+if (import.meta.env.DEV) Object.defineProperty(window, "__fishy", {
+  configurable: true, get: () => ({ world, pointer }),
+});
+const chumControl = mountChumControl(element<HTMLButtonElement>("#chum-button"), () => {
+  if (screen === "round" && !paused && !document.querySelector("dialog[open]")) world?.chum();
+});
 /** Stats of the round being played, or the base stats between rounds. */
 let stats: Stats = BASE_STATS;
 let pointer: Point | null = null;
@@ -152,6 +162,7 @@ let achievementOpener: HTMLElement | null = null;
 let achievementBackground: HTMLElement | null = null;
 let toolsOpener: HTMLElement = toolsToggle;
 let countUp: { amount: number; start: number } | null = null;
+let trapHint = false;
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 const timeParam = import.meta.env.DEV ? new URLSearchParams(location.search).get("time") : null;
 const devTime = timeParam !== null && Number.isFinite(Number(timeParam)) ? Number(timeParam) : undefined;
@@ -365,11 +376,13 @@ function beginSession(endless: boolean): void {
   world = new World(stats, createRng(Date.now()), viewport.worldWidth, viewport.worldHeight, {
     round: playingRound, final: finalRound, endless, guarantee: bountyGuarantees(activeBounties),
   });
+  trapHint = !endless && stats.rigging.count > 0 && takeToolHint(save.createdAt, "trap");
+  if (stats.boat.chum && takeToolHint(save.createdAt, "chum")) showToast("Press Space or tap the bucket to throw chum");
   updateHud();
   resize();
   accumulator = 0;
   lastFrame = performance.now();
-  roundHint.textContent = touchLayout.matches
+  roundHint.textContent = trapHint ? "Trap nets snap shut on fish that swim over them" : touchLayout.matches
     ? "Hold and drag to fish. Your net floats above your finger."
     : "Move your net over the fish. It catches them on its own.";
 }
@@ -423,6 +436,8 @@ function endRound(finished: World): void {
   summary.frenzy.textContent = finished.frenzy
     ? `Feeding Frenzy: +${formatMoney(finished.frenzyEarned)} from ${finished.frenzyCaught.toLocaleString("en-US")} fish`
     : "";
+  summary.traps.hidden = finished.trapCatches === 0;
+  summary.traps.textContent = `Trap nets: ${finished.trapCatches.toLocaleString("en-US")} fish`;
   summary.fish.textContent = finished.totalCaught.toLocaleString("en-US");
   // The table adds up its own rows; bounty money shows in the headline and the Bounties chip.
   summary.total.textContent = formatMoney(finished.earned);
@@ -604,6 +619,7 @@ function setMoney(el: HTMLElement, amount: number): void {
 
 function updateHud(): void {
   if (!world) return;
+  chumControl.update(world, paused);
   const playing = !world.over;
   setText(hud.round, world.endless ? "Endless Sea" : finalRound ? "Final Round" : `Round ${playingRound}`);
   if (!world.endless) {
@@ -620,7 +636,7 @@ function updateHud(): void {
   const earnings = touchLayout.matches ? formatCompactMoney(world.earned) : formatMoney(world.earned);
   setText(hud.earned, `+${earnings}`);
   setText(hud.combo, playing ? combo : "");
-  const showHint = playing && !world.endless && playingRound === 1 && world.totalCaught === 0 && world.elapsed < HINT_SECONDS;
+  const showHint = playing && world.elapsed < HINT_SECONDS && (trapHint || (!world.endless && playingRound === 1 && world.totalCaught === 0));
   if (roundHint.hidden === showHint) roundHint.hidden = !showHint;
   updateFrenzyBanner(world, playing);
   const items = bountyResult(activeBounties, bountyFacts(world)).items;
@@ -695,7 +711,7 @@ function frame(now: number): void {
   }
 
   renderer.draw({ world, pointer, stats, finger, coinTarget,
-    timeOfDay: world?.endless ? devTime ?? (world.elapsed / 240) % 1 : undefined }, paused ? 0 : dt);
+    timeOfDay: world?.endless ? devTime ?? world.timeOfDay : undefined }, paused ? 0 : dt);
   if (renderer.drainCoinArrivals() > 0 && screen === "round" && !reducedMotion.matches) {
     // Cancel/restart through the animation API: no forced layout to retrigger the bump.
     for (const animation of hud.earned.getAnimations()) animation.cancel();
@@ -751,6 +767,10 @@ window.addEventListener("keydown", (event) => {
     if (paused) resumeRound();
     else pauseRound();
   }
+  if (isChumKey(event) && screen === "round" && world?.stats.boat.chum && !world.over && !paused) {
+    event.preventDefault();
+    world.chum();
+  }
 });
 
 resize();
@@ -767,6 +787,7 @@ const tree = mountTechTree(hub.tree, {
     if (!result) return;
     setSave({ ...save, ...result });
     audio.purchase(nodeId, save.upgrades);
+    if (nodeId === "boat.chum" && takeToolHint(save.createdAt, "chum")) showToast("Press Space or tap the bucket to throw chum");
     renderHub();
   },
 });

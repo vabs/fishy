@@ -1462,6 +1462,7 @@ button.secondary-button:active:enabled,
   font-size: 12px;
 }
 #pause-button,
+#chum-button,
 #hud .audio-controls.is-hud .audio-button {
   width: 46px;
   min-width: 46px;
@@ -1760,6 +1761,7 @@ body:has(#end-panel:not([hidden]))::before {
     gap: 8px;
   }
   #pause-button,
+  #chum-button,
   #hud .audio-controls.is-hud .audio-button {
     width: 44px;
     min-width: 44px;
@@ -2371,4 +2373,38 @@ button:active:enabled {
     right: calc(var(--safe-right) + 18px);
     transform: none;
   }
+}
+
+/* The bucket has its own hit area above the sea, beside pause. */
+#chum-button {
+  position: relative;
+  flex-shrink: 0;
+  padding: 0;
+  touch-action: manipulation;
+}
+#chum-button[hidden] { display: none; }
+.chum-bucket { width: 23px; height: 23px; }
+.chum-ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: #70501f;
+  stroke-width: 2.5;
+  pointer-events: none;
+}
+.chum-progress {
+  stroke: #fff3bd;
+  stroke-dasharray: 100;
+  transform: rotate(-90deg);
+  transform-origin: center;
+}
+#chum-button[aria-disabled="true"] .chum-bucket { opacity: 0.55; }
+#chum-button.is-ready { animation: chum-ready 1.5s ease-in-out infinite alternate; }
+@keyframes chum-ready {
+  to { box-shadow: inset 0 1px #fff2b4, 0 3px #70501f, 0 0 12px #ffe1a6; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #chum-button.is-ready { animation: none; }
 }
