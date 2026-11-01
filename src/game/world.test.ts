@@ -854,3 +854,60 @@ describe("Trap snaps", () => {
     }
   });
 });
+
+function seineWorld(): World {
+  const world = trapWorld(s => { s.rigging.seine = true; });
+  world.traps = [
+    { id: 1, x: 600, y: 210, radius: 40, cooldown: 99, partner: 1, age: 0 },
+    { id: 2, x: 600, y: 390, radius: 40, cooldown: 99, partner: 0, age: 0 },
+  ];
+  return world;
+}
+
+describe("Seine ropes", () => {
+  it("hits only the segment, once per fish per second even with overlapping ropes", () => {
+    const world = seineWorld();
+    world.traps.push(...world.traps.map((trap, index) => ({ ...trap, id: index + 3, partner: index === 0 ? 3 : 2 })));
+    const fish = stillFish(world);
+    fish.hp = 100;
+    const beyond = stillFish(world, 600, 450);
+    const away = stillFish(world, 630);
+    world.update(STEP);
+    expect(fish.hits).toBe(1);
+    expect(fish.hp).toBe(100 - world.stats.rigging.seineDamage);
+    expect(beyond.hits).toBe(0);
+    expect(away.hits).toBe(0);
+    run(world, 1 - STEP);
+    expect(fish.hits).toBe(1);
+    world.update(STEP);
+    expect(fish.hits).toBe(2);
+  });
+
+  it("uses normal damage, credits catches and pays without the ability multiplier", () => {
+    const world = seineWorld();
+    world.stats.rigging.seineDamage = 3;
+    world.stats.abilityValueMult = 10;
+    stillFish(world);
+    const rare = stillFish(world, 600, 310, "rare");
+    world.stats.ability.rare.armor = 1;
+    world.update(STEP);
+    expect(world.trapCatches).toBe(1);
+    expect(world.earned).toBe(1);
+    expect(rare.hp).toBe(rare.maxHp - 2);
+    expect(world.drainEvents()).toContainEqual(expect.objectContaining({ type: "capture", source: "seine", value: 1 }));
+  });
+
+  it("bounds hit events and removes cooldowns for fish that leave", () => {
+    const world = seineWorld();
+    for (let i = 0; i < 500; i++) { const fish = stillFish(world); fish.hp = 100; }
+    world.update(STEP);
+    expect(world.fish.every(fish => fish.hits === 1)).toBe(true);
+    const events = world.drainEvents().filter(e => e.type === "seine-hit");
+    expect(events.length).toBeGreaterThan(0);
+    expect(events.length).toBeLessThanOrEqual(4);
+    world.fish.length = 0;
+    world.update(STEP);
+    const state = world as unknown as { seineCooldowns: Map<number, number> };
+    expect(state.seineCooldowns.size).toBe(0);
+  });
+});

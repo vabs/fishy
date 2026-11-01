@@ -2,7 +2,7 @@ import { CHEST, chestInNet, chestTime, chestValue, launchChest, moveChest, type 
 import { FISH, FISH_KINDS, FISH_SPECS, type FishDef, type FishKind } from "./fish";
 import { GOLDEN, goldenSwim, newGoldenState, type GoldenState } from "./golden";
 import { createRng, pickWeighted, range, type Rng } from "./rng";
-import { castTraps, resizeTraps, RIGGING, type Trap } from "./rigging";
+import { castTraps, resizeTraps, RIGGING, segmentDistance, type Trap } from "./rigging";
 import { spawnRate, type Stats } from "./stats";
 
 const TAU = Math.PI * 2;
@@ -129,6 +129,7 @@ export type WorldEvent =
   | { type: "chest-open"; x: number; y: number; value: number; reward: ChestReward }
   | { type: "trap-cast"; traps: readonly Trap[] }
   | { type: "trap-snap"; trapId: number; x: number; y: number; hits: number }
+  | { type: "seine-hit"; x: number; y: number }
   | FxEvent;
 
 export interface SpawnOptions {
@@ -240,6 +241,7 @@ export class World {
   /** Compensated elapsed sum in endless, keeping wave boundaries on their fixed steps for hours. */
   private elapsedError = 0;
   private riggingStream: Rng | null = null;
+  private seineCooldowns = new Map<number, number>();
   private nextRecast = RIGGING.endlessRecast;
 
   constructor(
@@ -414,6 +416,7 @@ export class World {
     this.floatChest(dt);
     this.tickNet(dt);
     this.snapTraps();
+    this.hitSeines();
     this.processCaptures();
     if (!this.endless) this.timeLeft = Math.max(0, this.timeLeft - dt);
   }
@@ -556,9 +559,34 @@ export class World {
     }
   }
 
+  private hitSeines(): void {
+    if (!this.stats.rigging.seine || this.traps.length < 2) return;
+    const live = new Set(this.fish.filter(fish => !fish.captured).map(fish => fish.id));
+    for (const [id, until] of this.seineCooldowns) {
+      if (!live.has(id) || until <= this.elapsed + 1e-9) this.seineCooldowns.delete(id);
+    }
+    let events = 0;
+    for (const [index, trap] of this.traps.entries()) {
+      if (trap.partner === null || trap.partner <= index) continue;
+      const partner = this.traps[trap.partner];
+      if (!partner) continue;
+      for (const fish of this.fish) {
+        if (fish.captured || this.seineCooldowns.has(fish.id) || segmentDistance(fish, trap, partner) > RIGGING.seineReach) continue;
+        this.damage(fish, this.stats.rigging.seineDamage, "seine");
+        if (!fish.captured) this.seineCooldowns.set(fish.id, this.elapsed + RIGGING.seineCooldown);
+        // Damage applies to every fish, but visual cues have a small budget per step.
+        if (events < 4) {
+          this.emit({ type: "seine-hit", x: fish.x, y: fish.y });
+          events++;
+        }
+      }
+    }
+  }
+
   private castRigging(): void {
     if (this.stats.rigging.count <= 0) return;
     this.riggingStream ??= createRng(Math.floor(this.rng() * 0x1_0000_0000));
+    this.seineCooldowns.clear();
     this.traps = castTraps(this.swimArea(), this.width, this.height, this.stats.rigging, this.riggingStream);
     // Snapshot the cast: age and cooldown keep changing on the live traps.
     this.emit({ type: "trap-cast", traps: this.traps.map(trap => ({ ...trap })) });
