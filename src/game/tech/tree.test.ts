@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { FISH_KINDS } from "../fish";
-import { BASE_STATS, cloneStats, spawnRate, type RiggingStats, type Stats } from "../stats";
+import { BASE_STATS, cloneStats, spawnRate, type BoatStats, type RiggingStats, type Stats } from "../stats";
 import {
   TECH_NODES,
   applyUpgrades,
@@ -84,6 +84,66 @@ describe("trap net upgrades", () => {
       const reachesUnlock = (id: string): boolean => id === "rigging.unlock" || node(id).requires.some(reachesUnlock);
       expect(node(id).requires.some(reachesUnlock), id).toBe(true);
     }
+  });
+});
+
+const BOAT_EFFECTS: [string, Partial<BoatStats>[]][] = [
+  ["boat.chum", [{ chum: true }]],
+  ["boat.chumCooldown", [{ chumCooldown: 17 }, { chumCooldown: 14.45 }, { chumCooldown: 12.2825 }]],
+  ["boat.chumReach", [{ chumRadius: 280, chumSeconds: 5 }, { chumRadius: 340, chumSeconds: 6 }]],
+  ["boat.lantern", [{ lanternRadius: 70 }, { lanternRadius: 140 }, { lanternRadius: 210 }]],
+];
+
+describe("boat upgrades", () => {
+  it.each(BOAT_EFFECTS)("applies every documented level of %s", (id, values) => {
+    const upgrade = node(id);
+    expect(upgrade.maxLevel).toBe(values.length);
+    for (const [i, changes] of values.entries()) {
+      const actual = applyUpgrades(BASE_STATS, { [id]: i + 1 }).boat;
+      for (const [field, expected] of Object.entries(changes)) {
+        const value = actual[field as keyof BoatStats];
+        if (typeof expected === "number") expect(value).toBeCloseTo(expected, 8);
+        else expect(value).toBe(expected);
+      }
+    }
+  });
+
+  it("keeps every level independent of all other upgrades", () => {
+    for (const [id, values] of BOAT_EFFECTS) {
+      const upgrade = node(id);
+      for (let level = 1; level <= values.length; level++) {
+        for (const other of TECH_NODES.filter((n) => n.id !== id)) {
+          const forward = cloneStats(BASE_STATS);
+          upgrade.apply(forward, level);
+          other.apply(forward, other.maxLevel);
+          const reverse = cloneStats(BASE_STATS);
+          other.apply(reverse, other.maxLevel);
+          upgrade.apply(reverse, level);
+          expect(forward, `${id} level ${level} with ${other.id}`).toEqual(reverse);
+        }
+      }
+    }
+  });
+
+  it("opens Chum after Trap Net and Lantern before the deeper Rigging tools", () => {
+    expect(isVisible(node("boat.chum"), {})).toBe(false);
+    expect(isVisible(node("boat.chum"), { "rigging.unlock": 1 })).toBe(true);
+    expect(isVisible(node("boat.lantern"), { "boat.chum": 1 })).toBe(true);
+    for (const id of ["boat.chumCooldown", "boat.chumReach"]) {
+      expect(isVisible(node(id), {}), id).toBe(false);
+      const reachesChum = (id: string): boolean => id === "boat.chum" || node(id).requires.some(reachesChum);
+      expect(node(id).requires.some(reachesChum), id).toBe(true);
+    }
+  });
+
+  it("requires all new tools before the Final Round is ready", () => {
+    const oldTree = Object.fromEntries(TECH_NODES.filter((n) => n.branch !== "rigging" && n.branch !== "boat").map((n) => [n.id, n.maxLevel]));
+    expect(isTreeComplete(oldTree)).toBe(false);
+    const stats = applyUpgrades(BASE_STATS, maxedTree());
+    expect(stats.boat).toEqual({
+      chum: true, chumCooldown: 20 * 0.85 ** 3, chumSeconds: 6, chumRadius: 340,
+      chumPull: 60, lanternRadius: 210, lanternSlow: 0.7,
+    });
   });
 });
 

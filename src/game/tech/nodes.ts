@@ -288,6 +288,57 @@ export const TECH_NODES: readonly TechNode[] = [
     },
   },
 
+  // Boat. Tools within reach in the middle of the campaign, beside the Rigging lane.
+  {
+    id: "boat.chum",
+    branch: "boat",
+    name: "Chum the Water",
+    description: "Throw chum with Space or the Chum button to pull nearby fish towards the boat",
+    maxLevel: 1,
+    cost: { base: 6300, growth: 1 },
+    requires: ["rigging.unlock"],
+    apply(stats) {
+      stats.boat.chum = true;
+    },
+  },
+  {
+    id: "boat.chumCooldown",
+    branch: "boat",
+    name: "Quick Chum",
+    description: "Chum is ready again 15% sooner per level",
+    maxLevel: 3,
+    cost: { base: 9400, growth: 1.8 },
+    requires: ["boat.chum"],
+    apply(stats, level) {
+      stats.boat.chumCooldown *= 0.85 ** level;
+    },
+  },
+  {
+    id: "boat.chumReach",
+    branch: "boat",
+    name: "Long Reach",
+    description: "+60 px chum reach and +1 s chum duration per level",
+    maxLevel: 2,
+    cost: { base: 19000, growth: 2 },
+    requires: ["boat.chumCooldown"],
+    apply(stats, level) {
+      stats.boat.chumRadius += 60 * level;
+      stats.boat.chumSeconds += level;
+    },
+  },
+  {
+    id: "boat.lantern",
+    branch: "boat",
+    name: "Lantern Lure",
+    description: "Light +70 px around the boat per level: fish swim 30% slower inside, and drift closer on Endless nights",
+    maxLevel: 3,
+    cost: { base: 9400, growth: 2 },
+    requires: ["boat.chum"],
+    apply(stats, level) {
+      stats.boat.lanternRadius += 70 * level;
+    },
+  },
+
   // Time
   {
     id: "time.round",
@@ -354,7 +405,7 @@ export const TECH_NODES: readonly TechNode[] = [
   {
     id: "spawn.rate",
     branch: "spawning",
-    name: "Chum the Water",
+    name: "Lively Waters",
     description: "Every fish type spawns 10% faster per level",
     maxLevel: 10,
     cost: { base: 17, growth: 1.55 },
