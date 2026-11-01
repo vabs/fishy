@@ -1,4 +1,4 @@
-import { BOAT_CLEARANCE, pullTowards } from "./boat";
+import { BOAT_CLEARANCE, lanternPull, lanternSpeed, pullTowards } from "./boat";
 import { CHEST, chestInNet, chestTime, chestValue, launchChest, moveChest, type Chest, type ChestReward } from "./chest";
 import { FISH, FISH_KINDS, FISH_SPECS, type FishDef, type FishKind } from "./fish";
 import { GOLDEN, goldenSwim, newGoldenState, type GoldenState } from "./golden";
@@ -15,6 +15,8 @@ export const STEP = 1 / 60;
 export const ENDLESS: {
   /** Seconds between the starts of frenzy waves. */
   frenzyEvery: number;
+  /** Seconds in one golden-hour, dusk, night and dawn cycle. */
+  dayLength: number;
   /** Seconds until the first wave. */
   firstFrenzy: number;
   /** Seconds between chest arrivals, waiting if the previous chest is still present. */
@@ -26,7 +28,7 @@ export const ENDLESS: {
    * sea that has filled up to the cap still gets its surprises.
    */
   surgeRoom: number;
-} = { frenzyEvery: 90, firstFrenzy: 45, chestGap: [60, 100], maxFish: 80, surgeRoom: 40 };
+} = { dayLength: 240, frenzyEvery: 90, firstFrenzy: 45, chestGap: [60, 100], maxFish: 80, surgeRoom: 40 };
 
 /** Gap between the swimming area and the screen edge, px. */
 const EDGE_MARGIN = 30;
@@ -130,6 +132,7 @@ export type WorldEvent =
   | { type: "trap-snap"; trapId: number; x: number; y: number; hits: number }
   | { type: "seine-hit"; x: number; y: number }
   | { type: "snag"; x: number; y: number }
+  | { type: "chum"; x: number; y: number }
   | FxEvent;
 
 export interface SpawnOptions {
@@ -243,6 +246,8 @@ export class World {
   private riggingStream: Rng | null = null;
   private seineCooldowns = new Map<number, number>();
   private nextRecast = RIGGING.endlessRecast;
+  private chumLeft = 0;
+  private chumCooldown = 0;
 
   constructor(
     readonly stats: Stats,
@@ -285,6 +290,35 @@ export class World {
   /** True in the endless sandbox. */
   get endless(): boolean {
     return this.round.endless === true;
+  }
+
+  /** Endless day phase: golden hour at 0, night at 0.5; absent in timed rounds. */
+  get timeOfDay(): number | undefined {
+    return this.endless ? (this.elapsed % ENDLESS.dayLength) / ENDLESS.dayLength : undefined;
+  }
+
+  /** True while thrown chum is still pulling fish. */
+  get chumActive(): boolean {
+    return this.stats.boat.chum && !this.over && this.chumLeft > 0;
+  }
+
+  /** Seconds until chum can be thrown again, or Infinity while locked. */
+  get chumCooldownLeft(): number {
+    return this.stats.boat.chum ? this.chumCooldown : Infinity;
+  }
+
+  /** True when chum is unlocked, ready and the sea is still in play. */
+  get chumReady(): boolean {
+    return this.stats.boat.chum && !this.over && this.chumLeft === 0 && this.chumCooldown === 0;
+  }
+
+  /** Throws chum when ready. Cooldown counts from the throw, in play time only. */
+  chum(): boolean {
+    if (!this.chumReady) return false;
+    this.chumLeft = this.stats.boat.chumSeconds;
+    this.chumCooldown = this.stats.boat.chumCooldown;
+    this.emit({ type: "chum", x: this.width / 2, y: this.height / 2 });
+    return true;
   }
 
   /** Ends an endless session. No-op in a timed round. */
@@ -410,6 +444,7 @@ export class World {
     }
     for (const kind of FISH_KINDS) FISH_SPECS[kind].update?.(this, dt);
     this.moveFish(dt);
+    this.pullToBoat(dt);
     this.pullToBait(dt);
     this.escapeGolden();
     this.spawnFish(dt);
@@ -548,6 +583,25 @@ export class World {
     return this.eventStream;
   }
 
+  private pullToBoat(dt: number): void {
+    const stats = this.stats.boat;
+    const active = Math.min(dt, this.chumLeft);
+    this.chumLeft = Math.max(0, this.chumLeft - dt);
+    this.chumCooldown = Math.max(0, this.chumCooldown - dt);
+    if (this.chumLeft < 1e-9) this.chumLeft = 0;
+    if (this.chumCooldown < 1e-9) this.chumCooldown = 0;
+    const night = lanternPull(stats, this.timeOfDay);
+    if (active <= 0 && night <= 0) return;
+    const boat = { x: this.width / 2, y: this.height / 2 };
+    for (const fish of this.fish) {
+      if (fish.captured) continue;
+      const distance = Math.hypot(fish.x - boat.x, fish.y - boat.y);
+      let pull = stats.chum && distance <= stats.chumRadius ? active * stats.chumPull : 0;
+      if (distance <= stats.lanternRadius) pull += night * dt;
+      if (pull > 0) pullTowards(fish, boat, pull, boat);
+    }
+  }
+
   private pullToBait(dt: number): void {
     const { baitPull, baitRange } = this.stats.rigging;
     if (baitPull <= 0 || this.traps.length === 0) return;
@@ -647,15 +701,17 @@ export class World {
 
   private moveFish(dt: number): void {
     const { rx, ry } = this.swimArea();
+    const boat = { x: this.width / 2, y: this.height / 2 };
     for (const fish of this.fish) {
       const spec = FISH_SPECS[fish.kind];
       // Path length per radian at this point on the ellipse, so speed is px/s everywhere.
       const arc = fish.orbit * Math.hypot(rx * Math.sin(fish.angle), ry * Math.cos(fish.angle));
       // A golden fish's extra speed applies to this step only; speedMult belongs to the type.
       const boost = fish.golden ? goldenSwim(this, fish, fish.golden, dt) : 1;
-      fish.angle += (fish.dir * spec.def.speed * fish.speedMult * boost * dt) / Math.max(arc, 1);
-      fish.wobblePhase += spec.def.wobbleSpeed * dt;
-      spec.move?.(this, fish, dt);
+      const swimDt = dt * lanternSpeed(fish, boat, this.stats.boat);
+      fish.angle += (fish.dir * spec.def.speed * fish.speedMult * boost * swimDt) / Math.max(arc, 1);
+      fish.wobblePhase += spec.def.wobbleSpeed * swimDt;
+      spec.move?.(this, fish, swimDt);
       const prevX = fish.x;
       const prevY = fish.y;
       this.place(fish);

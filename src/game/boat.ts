@@ -1,3 +1,4 @@
+import type { BoatStats } from "./stats";
 import type { Fish, Point } from "./world";
 
 /** Minimum distance of a pulled fish's centre from the boat, px. */
@@ -40,4 +41,14 @@ export function pullTowards(fish: Fish, target: Point, distance: number, boat: P
   fish.offsetY += y - oldY;
   fish.x = x;
   fish.y = y;
+}
+
+/** The lantern slows swimming locally without changing a fish type's own speed state. */
+export function lanternSpeed(fish: Point, boat: Point, stats: BoatStats): number {
+  return stats.lanternRadius > 0 && Math.hypot(fish.x - boat.x, fish.y - boat.y) <= stats.lanternRadius ? stats.lanternSlow : 1;
+}
+
+/** Gentle lantern attraction, px/s, during the middle quarter of an endless day. */
+export function lanternPull(stats: BoatStats, timeOfDay: number | undefined): number {
+  return stats.lanternRadius > 0 && timeOfDay !== undefined && timeOfDay >= 0.375 && timeOfDay <= 0.625 ? 12 : 0;
 }
