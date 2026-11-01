@@ -25,13 +25,15 @@ to the Final Round. After your first round the Endless Sea opens: the same sea w
 - **Look through the net.** Outside the net every fish is a dark silhouette, told apart by its
   outline. Inside the net you see it in full colour, with its health bar.
 - **Upgrade.** Between rounds you're in the hub. Spend money in the tech tree: a bigger net,
-  harder hits, faster ticks, longer rounds, new fish and their abilities. Drag to pan; use the
+  harder hits, faster ticks, longer rounds, new fish and their abilities, trap nets and boat tools. Drag to pan; use the
   mouse wheel or pinch to zoom. On touch screens, tap an upgrade to inspect it, then tap **Buy**.
   The ⌂ button goes back to the title screen.
 - **Take on bounties.** From round 2 the hub posts two or three challenges for the next round,
   each paying extra if you complete it. See [Bounties](#bounties).
 - **Pause.** Use the pause button (or press Esc) during a round, then **Resume round** when ready.
   The round also pauses when you leave the tab or app, so you won't lose time in the background.
+- **Throw chum.** Once unlocked in the Boat lane, press **Space** or tap the bucket beside pause.
+  Its ring fills until it's ready again. Trap nets work on their own once unlocked in Rigging.
 - **Finish.** Max out the whole tree to unlock the Final Round.
 - **New here?** First-time players get a three-slide walkthrough before the title screen. Open
   **Settings → How to play** to see it again.
@@ -64,6 +66,33 @@ to the Final Round. After your first round the Endless Sea opens: the same sea w
 
 A fish caught by any of these effects counts as caught by you, so its own ability fires too and
 chains can run through the whole sea.
+
+## Trap nets
+
+Buy **Trap Net** in the Rigging lane after **Huge Net** to cast a stationary net each round.
+Upgrades add up to four. Their spots are random every round, clear of the boat and edges, and
+never in the corners. In the Endless Sea they're cast at fresh spots every minute.
+
+- An armed net snaps when a fish swims over it, hitting the nearest fish inside. It resets on
+  its own after five seconds. Upgrade its size, damage, reset speed and how many fish it hits.
+- **Seine Line** joins nets in pairs; fish crossing the rope take damage, at most once a second.
+- **Bait** draws nearby fish towards armed nets. **Snag** holds a passing treasure chest still
+  for four seconds, once per chest; you still need your moving net to open it.
+- **Frenzy Rigging** halves reset time during a Feeding Frenzy. Trap and seine catches earn the
+  usual combo, golden and Frenzy bonuses and trigger fish abilities; their direct catches pay
+  the same as your moving net. The round summary shows how many fish the traps and ropes caught.
+
+## Boat
+
+The Boat lane opens after Trap Net. **Chum the Water** unlocks the bucket: press **Space** or tap
+it to pull nearby fish towards the boat for four seconds, then wait for its ring to refill.
+The first throw is ready at the start of each round or Endless trip; the twenty-second cooldown
+starts when you throw. Upgrades shorten the wait and increase reach and duration. Pausing freezes
+the cooldown too. The first time you unlock chum, a hint explains the controls.
+
+**Lantern Lure** slows fish near the boat by 30%. Each level lights a wider area, up to 210 px.
+During Endless nights it also gently draws those fish closer. Both tools work in timed rounds
+and the Endless Sea.
 
 ## Surprises
 
@@ -116,7 +145,7 @@ current upgrades and no clock:
   always spills golden fish. Golden fish appear from the start.
 - There are no bounties.
 - Every four minutes the light goes round from golden hour through dusk, night and dawn. At night
-  the water darkens and a lantern glows around the boat. It's only for looks.
+  the water darkens. An upgraded lantern slows nearby fish and draws them towards the boat at night.
 - The HUD shows fish caught, time at sea, your best combo and the trip's earnings.
 - Nothing you earn here goes to your bank, and your money, round and upgrades stay as they were.
   Fish, golden fish, chests and records still count towards lifetime stats and achievements.
@@ -219,10 +248,20 @@ npm run screenshots   # regenerate docs/screenshots (needs Google Chrome)
 
 Tech tree pacing: `PACING=1 npx vitest run src/game/tech/pacing.test.ts --silent=false` plays a
 whole game with a bot and reports how long the tree takes to finish.
+The bot uses trap nets and throws chum whenever ready. With the current prices it takes about
+74.6 minutes over 89 rounds, compared with 69.9 minutes over 84 rounds before these tools;
+Trap Net arrives around 22 minutes. These estimates include ten seconds between rounds.
+
+The tree has Net, Rigging, Boat, Time, Spawning and Economy lanes, plus one for each fish type.
+Rigging and Boat are part of completing the tree for the Final Round.
 
 In dev, `?fish=electric,epic` makes only those types spawn, which is handy for trying one out:
 http://localhost:5173/?fish=electric,epic. `?time=0.5` holds the Endless Sea at one time of day
 (0 golden hour, 0.25 dusk, 0.5 night, 0.75 dawn).
+In the dev server only, `window.__fishy.world` exposes the current simulation (or `null` between
+sessions), including `traps`, `trapCatches`, `chumReady` and `chumCooldownLeft`;
+`window.__fishy.pointer` shows the input position. Browser checks use these rather than searching
+for trap pixels. The hook and query overrides are absent from production builds.
 
 Dev-only pages for working on one screen at a time:
 
@@ -238,6 +277,8 @@ Dev-only pages for working on one screen at a time:
   `?time=0..1` sets the time of day, `?fish=N` the number of fish (16–600, 80 at most in endless,
   96 by default), `?palette=colorBlind` the colour-blind palette, and `?title=1` shows the sea
   and boat with no fish. Its buttons fire a catch burst and time drawing 300 fish.
+  This page owns every upgrade, including trap nets, seine ropes and the lantern;
+  `?endless=1&time=0.5&live=1` shows them in a running night scene.
 
 ### Structure
 
@@ -253,6 +294,7 @@ src/game/
   bounties.ts       Bounty kinds, rolling a board, progress, labels and guarantees
   achievements.ts   The achievement list and which ones a save qualifies for
   golden.ts, chest.ts  Golden fish and treasure chests
+  rigging.ts, boat.ts  Trap placement, seine geometry and boat lure movement
   fish/             One file per fish type (FishSpec): stats, shape and behaviour hooks
     types.ts        FishSpec: onSpawn, move, modifyDamage, onCapture, update, onResize, drawWorld, fx
     index.ts        Registry of all types
