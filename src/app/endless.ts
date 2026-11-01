@@ -1,3 +1,4 @@
+import { STEP, type World } from "../game/world";
 import type { EndlessRecords, SaveData } from "../save";
 
 /** Endless stays unlocked when Play Again retains previous sessions. */
@@ -16,4 +17,14 @@ export function endlessRecordsDiff(before: EndlessRecords, after: EndlessRecords
   const records = [ ["bestEarnings", "Best session earnings"], ["bestFish", "Most fish caught"],
     ["longestMs", "Longest trip"], ["bestCombo", "Best combo"] ] as const;
   return records.filter(([key]) => after[key] > before[key]).map(([, label]) => label);
+}
+
+/** DEV trip preview: run the real clocks and tracking at 60 Hz, discarding historical effects. */
+export function advanceEndless(world: World, seconds: number): void {
+  if (!world.endless || world.over || !Number.isFinite(seconds) || seconds <= 0) return;
+  const target = world.elapsed + seconds;
+  while (world.elapsed < target) {
+    world.update(Math.min(STEP, target - world.elapsed));
+    world.drainEvents();
+  }
 }

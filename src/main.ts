@@ -1,7 +1,7 @@
 import "./style.css";
 import "./app/feedback.css";
 import { bountyBoard, bountyFacts, bountyResult } from "./app/bounties";
-import { endlessRecordsDiff, endlessUnlocked, formatSeaTime } from "./app/endless";
+import { advanceEndless, endlessRecordsDiff, endlessUnlocked, formatSeaTime } from "./app/endless";
 import { takeToolHint } from "./app/tool-hints";
 import { isChumKey, mountChumControl } from "./ui/chum-control";
 import { ACHIEVEMENTS, grantAchievements, newAchievements, type AchievementMoment } from "./game/achievements";
@@ -16,6 +16,8 @@ import { FISH, FISH_KINDS, type FishKind } from "./game/fish";
 import { fishColors, onPaletteChange, setPalette } from "./game/palette";
 import { Renderer } from "./game/render";
 import { buildChestSprites, buildSprites } from "./game/shapes";
+import { BIOME, biomeLabel, type Biome } from "./game/biome";
+import { seaBlurb, seaLabel, seaStateFor, type SeaState } from "./game/sea";
 import { createRng } from "./game/rng";
 import { BASE_STATS, type Stats } from "./game/stats";
 import { summaryRows, type SummaryRow } from "./game/summary";
@@ -37,6 +39,8 @@ const MAX_FRAME_SECONDS = 0.25;
 const TOAST_SECONDS = 6;
 /** The first-round tip disappears after the first catch, or after this long. */
 const HINT_SECONDS = 8;
+const BANNER_SECONDS = 3;
+const SEA_ICONS: Record<SeaState, string> = { clear: "☀", storm: "ϟ", fog: "≋", bloom: "❧" };
 
 function element<T extends HTMLElement>(selector: string): T {
   const el = document.querySelector<T>(selector);
@@ -102,6 +106,12 @@ const frenzyBanner = {
   time: element("#frenzy-time"),
   fill: element("#frenzy-bar-fill"),
 };
+const roundBanners = element("#round-banners");
+roundBanners.classList.add("is-live");
+const seaBanner = element("#sea-banner");
+const biomeBanner = element("#biome-banner");
+let seaBannerUntil = 0;
+let biomeBannerUntil = 0;
 const pausePanel = element("#pause-panel");
 const pauseMessage = element("#pause-message");
 const resumeButton = element<HTMLButtonElement>("#resume-button");
@@ -229,6 +239,8 @@ function showOnly(next: Screen): void {
   if (next !== "round") {
     roundHint.hidden = true;
     frenzyBanner.root.hidden = true;
+    seaBanner.hidden = true;
+    biomeBanner.hidden = true;
     coinTarget = null;
   }
   title.hidden = next !== "title";
@@ -238,9 +250,23 @@ function showOnly(next: Screen): void {
   end.root.hidden = next !== "end";
   endlessPanel.hidden = next !== "endless";
   document.body.classList.toggle("playing", next === "round");
-  audio.screen(next === "endless" ? "summary" : next, {
-    final: finalRound, endless: next === "round" ? hud.root.dataset.mode === "endless" : world?.endless, upgrades: save.upgrades,
-  });
+  // A new round sends its context after the World exists, including a dev biome offset.
+  if (next !== "round") audio.screen(next === "endless" ? "summary" : next, audioContext());
+}
+
+/** Screen and biome share one context, including while a trip is paused or in its logbook. */
+function audioContext(): { final: boolean; endless: boolean; biome?: Biome; upgrades: SaveData["upgrades"] } {
+  const endless = screen === "round" ? hud.root.dataset.mode === "endless" : world?.endless ?? false;
+  return { final: finalRound, endless, biome: world?.biome?.biome ?? (endless ? "reef" : undefined), upgrades: save.upgrades };
+}
+
+/** The same weather supplies the hub, the bounty board and the timed simulation. */
+function nextSea(): SeaState {
+  if (import.meta.env.DEV) {
+    const forced = new URLSearchParams(location.search).get("sea");
+    if (forced === "storm" || forced === "fog" || forced === "bloom") return forced;
+  }
+  return seaStateFor(save.createdAt, save.round, isTreeComplete(save.upgrades));
 }
 
 function showTitle(): void {
@@ -301,7 +327,7 @@ function closeAchievements(): void {
 
 /** Persists a board once; starting directly from Play must roll it too. */
 function prepareBounties(): readonly Bounty[] {
-  const next = bountyBoard(save);
+  const next = bountyBoard(save, nextSea());
   if (next !== save) setSave(next);
   return save.bounties?.list ?? [];
 }
@@ -328,15 +354,30 @@ function renderHub(): void {
   hub.round.textContent = complete ? "Final Round next" : `Round ${save.round} next`;
   setMoney(hub.money, save.money);
   const frenzy = isFrenzyRound({ round: save.round, final: complete });
-  hub.hint.textContent = hint(complete, frenzy);
+  const sea = nextSea();
+  hub.hint.textContent = hint(complete, frenzy, sea);
   hub.start.textContent = complete ? "Final Round" : "Start Round";
   hub.start.classList.toggle("is-final", complete);
   // A badge as well as the hint, which compact screens hide.
   hub.start.classList.toggle("has-frenzy", frenzy);
+  hub.start.classList.toggle("has-weather", sea !== "clear");
+  hub.start.dataset.sea = sea;
+  if (sea !== "clear") {
+    const badge = document.createElement("span");
+    badge.className = "weather-badge";
+    const icon = document.createElement("span");
+    icon.setAttribute("aria-hidden", "true");
+    icon.textContent = SEA_ICONS[sea];
+    badge.append(icon, ` ${seaLabel(sea)}`);
+    hub.start.append(badge);
+  }
   tree.update({ money: save.money, upgrades: save.upgrades });
 }
 
-function hint(complete: boolean, frenzy: boolean): string {
+function hint(complete: boolean, frenzy: boolean, sea: SeaState): string {
+  if (sea === "storm") return "Storm this round: fish drift with the wind.";
+  if (sea === "fog") return "Fog this round: your lantern and net keep fish in sight.";
+  if (sea === "bloom") return "Algal Bloom this round: more fish, slower and tougher.";
   if (complete) return "Every upgrade is yours. One last round to go.";
   // Short, so it fits beside Start Round on a phone.
   if (frenzy) return "Feeding Frenzy this round!";
@@ -367,11 +408,20 @@ function beginSession(endless: boolean): void {
   element("#harbour-button").hidden = !endless;
   renderBounties(element("#hud-bounties"), [], "hud");
   world = null;
+  seaBannerUntil = biomeBannerUntil = 0;
+  seaBanner.hidden = biomeBanner.hidden = true;
   showOnly("round");
   resize();
   world = new World(stats, createRng(Date.now()), viewport.worldWidth, viewport.worldHeight, {
-    round: playingRound, final: finalRound, endless, guarantee: bountyGuarantees(activeBounties),
+    round: playingRound, final: finalRound, endless, sea: endless ? undefined : nextSea(), guarantee: bountyGuarantees(activeBounties),
   });
+  if (endless && import.meta.env.DEV) {
+    const seconds = Number(new URLSearchParams(location.search).get("endlessTime"));
+    advanceEndless(world, seconds);
+    if (seconds > 0 && Number.isFinite(seconds)) announceBiome(world.biome!.biome);
+  }
+  if (world.sea !== "clear") announceSea(world.sea);
+  audio.screen("round", audioContext());
   trapHint = !endless && stats.rigging.count > 0 && takeToolHint(save.createdAt, "trap");
   if (stats.boat.chum && takeToolHint(save.createdAt, "chum")) showToast("Press Space or tap the bucket to throw chum");
   updateHud();
@@ -397,6 +447,7 @@ function finishEndless(): void {
   element("#endless-earned").textContent = formatMoney(finished.earned);
   element("#endless-fish").textContent = finished.totalCaught.toLocaleString("en-US");
   element("#endless-time").textContent = formatSeaTime(finished.elapsed);
+  element("#endless-biomes").textContent = `Biomes visited: ${[...finished.biomesReached].map(biomeLabel).join(" · ")}`;
   element("#endless-combo").textContent = `×${finished.maxComboMult.toFixed(1)}`;
   element("#endless-records").replaceChildren(...endlessRecordsDiff(before, save.endless).map((label) => {
     const chip = document.createElement("span");
@@ -404,7 +455,8 @@ function finishEndless(): void {
     return chip;
   }));
   showOnly("endless");
-  checkAchievements({ endlessSessionMs: durationMs });
+  checkAchievements({ endlessSessionMs: durationMs, biomesReached: [...finished.biomesReached],
+    graveyardChests: finished.graveyardChests });
 }
 
 function endRound(finished: World): void {
@@ -431,6 +483,10 @@ function endRound(finished: World): void {
     detail: `from ${finished.frenzyCaught.toLocaleString("en-US")} fish`, amount: finished.frenzyEarned });
   if (finished.trapCatches > 0) extras.push({ key: "traps", icon: "traps", label: "Trap nets:",
     detail: `${finished.trapCatches.toLocaleString("en-US")} fish` });
+  if (finished.sea !== "clear") extras.push({ key: "sea", icon: finished.sea,
+    label: finished.sea === "bloom" ? "Algal Bloom" : `${seaLabel(finished.sea)} bonus`,
+    detail: finished.sea === "storm" ? "from the rough-weather bonus" : finished.sea === "fog" ? "from the fog bonus" : undefined,
+    amount: finished.sea === "bloom" ? undefined : finished.seaEarned });
   if (activeBounties.length > 0) extras.push({ key: "bounties", icon: "bounties", label: "Bounties", amount: bounties.reward });
   renderSummaryExtras(summary.bonuses, extras);
   summary.fish.textContent = finished.totalCaught.toLocaleString("en-US");
@@ -531,7 +587,7 @@ function resize(): void {
   document.documentElement.style.setProperty("--app-height", `${height}px`);
   document.documentElement.style.setProperty("--viewport-top", `${window.visualViewport?.offsetTop ?? 0}px`);
   const top = document.body.classList.contains("playing") ? hud.root.getBoundingClientRect().height : 0;
-  if (!frenzyBanner.root.hidden) placeFrenzyBanner();
+  placeRoundBanners();
   const safeBottom = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--safe-bottom")) || 0;
   // The contact strip lets a finger reach below the sea while the net stays above it.
   const bottom = safeBottom + (touchLayout.matches && document.body.classList.contains("playing") ? 56 : 0);
@@ -588,7 +644,7 @@ function pauseRound(message = "Your round is paused."): void {
   pauseMessage.textContent = message;
   pausePanel.hidden = false;
   element("#harbour-button").hidden = !world.endless;
-  audio.screen("hub", { final: finalRound, upgrades: save.upgrades });
+  audio.screen("hub", audioContext());
   resumeButton.focus({ preventScroll: true });
 }
 
@@ -599,7 +655,7 @@ function resumeRound(): void {
   pausePanel.hidden = true;
   accumulator = 0;
   lastFrame = performance.now();
-  audio.screen("round", { final: finalRound, endless: world.endless, upgrades: save.upgrades });
+  audio.screen("round", audioContext());
 }
 
 function setText(el: HTMLElement, text: string): void {
@@ -624,7 +680,12 @@ function updateHud(): void {
     setText(element("#hud-endless-fish"), world.totalCaught.toLocaleString("en-US"));
     setText(element("#hud-endless-time"), formatSeaTime(world.elapsed));
     setText(element("#hud-endless-best"), `×${world.maxComboMult.toFixed(1)}`);
+    const biome = world.biome!;
+    setText(element("#hud-biome"), biomeLabel(biome.biome));
+    setText(element("#hud-biome-next"), `${formatSeaTime(Math.ceil(BIOME.length * (1 - biome.progress)))} to next biome`);
+    setText(element("#hud-weather"), `${SEA_ICONS[world.sea]} ${seaLabel(world.sea)}${world.sea === "clear" ? " weather" : ` · ${Math.ceil(world.seaLeft)}s left`}`);
   }
+  element("#hud-weather").hidden = !world.endless;
   hud.root.classList.toggle("is-urgent", !world.endless && playing && world.timeLeft <= 5);
   setMoney(hud.money, save.money);
   const combo = world.combo > 0 ? `Combo ×${world.comboMult.toFixed(1)}` : "";
@@ -634,6 +695,8 @@ function updateHud(): void {
   const showHint = playing && world.elapsed < HINT_SECONDS && (trapHint || (!world.endless && playingRound === 1 && world.totalCaught === 0));
   if (roundHint.hidden === showHint) roundHint.hidden = !showHint;
   updateFrenzyBanner(world, playing);
+  seaBanner.hidden = !playing || world.elapsed >= seaBannerUntil;
+  biomeBanner.hidden = !playing || world.elapsed >= biomeBannerUntil;
   const items = bountyResult(activeBounties, bountyFacts(world)).items;
   renderBounties(element("#hud-bounties"), items.map((b) => ({ ...b, failed: false })), "hud");
   items.forEach((item, index) => {
@@ -655,7 +718,7 @@ function updateFrenzyBanner(world: World, playing: boolean): void {
   const show = playing && wave !== null && world.frenzyActive;
   if (frenzyBanner.root.hidden === show) {
     frenzyBanner.root.hidden = !show;
-    if (show) placeFrenzyBanner();
+    if (show) placeRoundBanners();
   }
   if (!show) return;
   const left = world.frenzyLeft;
@@ -664,9 +727,28 @@ function updateFrenzyBanner(world: World, playing: boolean): void {
   frenzyBanner.fill.style.transform = `scaleX(${(left / (wave.end - wave.start)).toFixed(3)})`;
 }
 
-/** Hangs the frenzy banner just below the HUD, measured now that the HUD shows this round's numbers. */
-function placeFrenzyBanner(): void {
-  frenzyBanner.root.style.top = `${hud.root.getBoundingClientRect().bottom + 6}px`;
+/** Measure on entry/resize, keeping stacked banners clear of the HUD and bounty checklist. */
+function placeRoundBanners(): void {
+  const bounties = element("#hud-bounties");
+  roundBanners.style.top = `${Math.max(hud.root.getBoundingClientRect().bottom,
+    bounties.hidden ? 0 : bounties.getBoundingClientRect().bottom) + 6}px`;
+}
+
+/** Announcements use simulation time, so pausing also pauses their three-second lifetime. */
+function announceSea(sea: SeaState): void {
+  if (!world || sea === "clear") return;
+  seaBanner.textContent = `${SEA_ICONS[sea]} ${seaBlurb(sea)}`;
+  seaBannerUntil = world.elapsed + BANNER_SECONDS;
+  seaBanner.hidden = false;
+  placeRoundBanners();
+}
+
+function announceBiome(biome: Biome): void {
+  if (!world) return;
+  biomeBanner.textContent = `Entering the ${biomeLabel(biome)}`;
+  biomeBannerUntil = world.elapsed + BANNER_SECONDS;
+  biomeBanner.hidden = false;
+  placeRoundBanners();
 }
 
 /** True once per whole minute of a trip, so endless achievement checks stay cheap. */
@@ -697,7 +779,15 @@ function frame(now: number): void {
   }
   if (world) {
     const events = world.drainEvents();
-    for (const event of events) renderer.onEvent(event);
+    for (const event of events) {
+      renderer.onEvent(event);
+      if (screen !== "round") continue;
+      if (event.type === "sea" && event.phase === "start") announceSea(event.state);
+      if (event.type === "biome") {
+        announceBiome(event.biome);
+        audio.screen("round", audioContext());
+      }
+    }
     audio.frame(events, world);
     const captures = events.filter((e) => e.type === "capture").length;
     if (events.some((e) => e.type === "chest-open")) vibrate(30);

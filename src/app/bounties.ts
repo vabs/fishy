@@ -1,5 +1,6 @@
 import { formatCompactMoney } from "../format";
 import { bountyLabel, bountyProgress, rollBounties, type Bounty, type BountyFacts } from "../game/bounties";
+import { seaStateFor, type SeaState } from "../game/sea";
 import { createRng } from "../game/rng";
 import { BASE_STATS } from "../game/stats";
 import { applyUpgrades, isTreeComplete } from "../game/tech";
@@ -14,8 +15,8 @@ export function bountyFacts(world: World): BountyFacts {
     bestTickCatches: world.bestTickCatches, earned: world.earned, frenzyCaught: world.frenzyCaught };
 }
 
-/** Keeps a board stable across reloads and purchases, except when the Final Round unlocks. */
-export function bountyBoard(save: SaveData): SaveData {
+/** Keeps boards stable, clearing Final Round boards and repairing earn bounties in Bloom. */
+export function bountyBoard(save: SaveData, sea: SeaState = seaStateFor(save.createdAt, save.round, isTreeComplete(save.upgrades))): SaveData {
   const final = isTreeComplete(save.upgrades);
   const suppressed = save.round < 2 || final;
   const recentEarnings = save.stats.lastRoundEarnings || save.stats.bestRoundEarnings;
@@ -25,8 +26,8 @@ export function bountyBoard(save: SaveData): SaveData {
   for (const char of `${save.createdAt}:${save.round}`) seed = Math.imul(seed ^ char.charCodeAt(0), 16777619);
   const stats = applyUpgrades(BASE_STATS, save.upgrades);
   const roll = (estimate: number): Bounty[] => rollBounties({ round: save.round, final,
-    upgrades: save.upgrades, stats, recentEarnings: estimate, rng: createRng(seed) });
-  if (existing && !suppressed) {
+    upgrades: save.upgrades, stats, sea, recentEarnings: estimate, rng: createRng(seed) });
+  if (existing && !suppressed && !(sea === "bloom" && existing.some((b) => b.kind === "earn"))) {
     if (!recentEarnings) return save;
     // Old boards have no estimate stamp. Match the deterministic zero roll, or its $6 reward
     // ceiling (20 × .3) if purchases have since changed the candidates/targets.

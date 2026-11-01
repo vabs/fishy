@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createSave } from "../save";
 import { BASE_STATS } from "../game/stats";
 import { createRng } from "../game/rng";
+import { seaStateFor } from "../game/sea";
 import { World } from "../game/world";
 import { TECH_NODES } from "../game/tech";
 import { bountyFacts, bountyBoard, bountyResult, progressText } from "./bounties";
@@ -52,7 +53,7 @@ describe("bounty wiring", () => {
     save.stats.lastRoundEarnings = 1000; save.stats.bestRoundEarnings = 26000;
     expect(bountyBoard(save).bounties!.list.every((b) => b.reward >= 150 && b.reward <= 300)).toBe(true);
     save.bounties = { round: 24, list: [{ id: "custom", kind: "earn", target: 10, reward: 20 }] };
-    expect(bountyBoard(save)).toBe(save);
+    expect(bountyBoard(save, "clear")).toBe(save);
   });
 
   it("suppresses stale boards in round one and after buying the final upgrade", () => {
@@ -60,6 +61,19 @@ describe("bounty wiring", () => {
     expect(bountyBoard({ ...rolled, round: 1 }).bounties?.list).toEqual([]);
     const upgrades = Object.fromEntries(TECH_NODES.map((node) => [node.id, node.maxLevel]));
     expect(bountyBoard({ ...rolled, upgrades }).bounties?.list).toEqual([]);
+  });
+
+  it("omits earn bounties in natural and forced blooms, repairing stale boards once", () => {
+    const save = { ...createSave("Skipper", new Date("2026-01-01")), round: 7 };
+    save.stats.lastRoundEarnings = 1000;
+    save.bounties = { round: 7, list: [{ id: "old-earn", kind: "earn", target: 1200, reward: 200 }] };
+    const forced = bountyBoard(save, "bloom");
+    expect(forced.bounties!.list.some((b) => b.kind === "earn")).toBe(false);
+    expect(bountyBoard(forced, "bloom")).toBe(forced);
+    const round = Array.from({ length: 100 }, (_, i) => i + 6)
+      .find((round) => seaStateFor(save.createdAt, round, false) === "bloom")!;
+    expect(round).toBeDefined();
+    expect(bountyBoard({ ...save, round, bounties: null }).bounties!.list.some((b) => b.kind === "earn")).toBe(false);
   });
 
   it("pays only completed bounties and never calls an empty board perfect", () => {
