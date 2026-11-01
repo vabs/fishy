@@ -1,8 +1,10 @@
+import { SEA, type SeaState } from "../game/sea";
+import type { Point } from "../game/world";
 import type { AudioEngine } from "./engine";
 import { SfxGate, type VoiceLimit } from "./gate";
 import { batchLevel, catchDegree, catchStreamLevel } from "./mapping";
 import { rewardPhrase } from "./patterns";
-import { bass, bell, brass, noise, pluck, pop, run } from "./synth";
+import { bass, bell, brass, noise, pluck, pop, run, windNoise, type NoiseRiser } from "./synth";
 import { degreeToHz, type Key } from "./theory";
 
 /*
@@ -14,9 +16,12 @@ import { degreeToHz, type Key } from "./theory";
 type SfxKind =
   | "catch" | "current" | "bounce" | "launch" | "implode" | "burst" | "bonus" | "chime" | "frenzy" | "shimmer" | "golden"
   | "plop" | "treasure" | "bounty" | "achievement"
-  | "trapSnap" | "seine" | "snag" | "chum" | "trapCast";
+  | "trapSnap" | "seine" | "snag" | "chum" | "trapCast" | "thunder" | "foghorn" | "bubble";
 
 const LIMITS: Record<SfxKind, VoiceLimit> = {
+  thunder: { gap: 8, voices: 1 },
+  foghorn: { gap: 4, voices: 1 },
+  bubble: { gap: 0.5, voices: 1 },
   trapSnap: { gap: 0.12, voices: 2 },
   seine: { gap: 0.35, voices: 1 },
   snag: { gap: 0.6, voices: 1 },
@@ -63,6 +68,9 @@ export class Sfx {
   private gate = new SfxGate(MAX_VOICES, LIMITS);
   /** Start times of recent catch notes, to tell a steady stream from the odd catch. */
   private recentCatches: number[] = [];
+  private wind: NoiseRiser | null = null;
+  private sea: SeaState = "clear";
+  private nextBubble = 0;
 
   constructor(
     private readonly engine: AudioEngine,
@@ -103,6 +111,42 @@ export class Sfx {
       pluck(ctx, voice.out, { time: voice.time, freq: freq * 2, gain: (gain * (level - 1)) / 1.2, decay: 0.22, bright: 0.1 });
     }
     return voice.time;
+  }
+
+  /** Maintains quiet weather on the effects bus; repeated frames never allocate more wind sources. */
+  weather(state: SeaState, wind: Point): void {
+    const ctx = this.ctx;
+    if (state !== this.sea) {
+      this.stopWeather();
+      this.sea = state;
+      this.nextBubble = 0;
+      if (state === "fog") {
+        const voice = this.start("foghorn", 2.4);
+        if (voice) brass(voice.ctx, voice.out, voice.time, this.hz(0, 2), 0.045, 2.4);
+      }
+    }
+    if (!ctx) return;
+    if (state === "storm") {
+      this.wind ??= windNoise(ctx, this.engine.sfx);
+      this.wind.setLevel((Math.hypot(wind.x, wind.y) - SEA.stormBase) / (SEA.stormGust - SEA.stormBase));
+    } else if (state === "bloom" && ctx.currentTime >= this.nextBubble) {
+      this.nextBubble = ctx.currentTime + 0.8;
+      const voice = this.start("bubble", 0.2);
+      if (voice) pop(ctx, voice.out, voice.time, this.hz(2, 4), 0.018);
+    }
+  }
+
+  /** Releases a continuous bed on pause or screen exit; resuming does not replay the foghorn. */
+  stopWeather(): void {
+    this.wind?.stop();
+    this.wind = null;
+  }
+
+  /** A distant, low rumble accompanying the shared soft-lightning envelope. */
+  thunder(): void {
+    const voice = this.start("thunder", 3);
+    if (!voice) return;
+    noise(voice.ctx, voice.out, { time: voice.time, gain: 0.1, attack: 0.45, decay: 2.5, filter: "lowpass", from: 240, to: 65, q: 0.5 });
   }
 
   /** An Electric current: one rising note per jump. */

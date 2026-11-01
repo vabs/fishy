@@ -274,6 +274,7 @@ export class Music {
   private combo = 0;
   private urgency = 0;
   private frenzy = false;
+  private fog = false;
   private riser: NoiseRiser | null = null;
   /** The generated layers' grid, and their next step on it. */
   private layerClock: Clock | null = null;
@@ -332,6 +333,15 @@ export class Music {
     if (chapter === this.chapter) return;
     this.chapter = chapter;
     if (this.manifest) void this.switchBed();
+  }
+
+  /** Weather lowers the existing music cutoff by twenty percent without changing its clock. */
+  setFog(active: boolean): void {
+    if (active === this.fog) return;
+    this.fog = active;
+    if (!this.ctx || !this.current) return;
+    const now = this.ctx.currentTime;
+    glide(this.filter.frequency, now, mixForMode(this.mode).cutoff * (active ? 0.8 : 1), now, now + 0.6, true);
   }
 
   /** How much of the combo layer to play, 0 to 1. */
@@ -423,7 +433,7 @@ export class Music {
     const { filter, buses } = this;
     const mix = mixForMode(this.mode);
     const playing = mix.groove > 0;
-    const cutoff = mix.cutoff;
+    const cutoff = mix.cutoff * (this.fog ? 0.8 : 1);
     const level = mix.bed;
     const layers = playing ? 1 : 0;
     if (instant) {

@@ -408,3 +408,119 @@ describe("music transitions", () => {
     for (const source of ctx.sources) expect(Number.isFinite(source.stopAt)).toBe(true);
   });
 });
+
+describe("weather sound", () => {
+  it("reuses one wind source, follows gust strength and disconnects it on leaving the sea", () => {
+    const ctx = new Context(), out = new Node();
+    const sfx = new Sfx({ running: true, ctx, sfx: out } as unknown as AudioEngine, () => ({ tonic: 2, mode: "major" }));
+    sfx.weather("storm", { x: 22, y: 0 });
+    const source = ctx.sources[0]!;
+    const filter = [...source.connections][0] as Node;
+    const quiet = filter.frequency.value;
+    for (let i = 0; i < 100; i++) sfx.weather("storm", { x: 45, y: 0 });
+    expect(ctx.sources).toHaveLength(1);
+    expect(filter.frequency.value).toBeGreaterThan(quiet);
+    expect(source.loop).toBe(true);
+    sfx.stopWeather();
+    ctx.finish();
+  });
+
+  it("sounds one foghorn per start, keeps bubbles bounded and releases weather voices", () => {
+    vi.stubGlobal("PeriodicWave", Wave);
+    const ctx = new Context();
+    const sfx = new Sfx({ running: true, ctx, sfx: new Node() } as unknown as AudioEngine, () => ({ tonic: 2, mode: "major" }));
+    sfx.weather("fog", { x: 0, y: 0 });
+    const horn = ctx.sources.length;
+    expect(horn).toBeGreaterThan(0);
+    for (let i = 0; i < 100; i++) sfx.weather("fog", { x: 0, y: 0 });
+    expect(ctx.sources).toHaveLength(horn);
+    sfx.stopWeather(); // Pause/resume should not announce the same fog again.
+    sfx.weather("fog", { x: 0, y: 0 });
+    expect(ctx.sources).toHaveLength(horn);
+    ctx.currentTime = 5;
+    sfx.weather("bloom", { x: 0, y: 0 });
+    const bubbles = ctx.sources.length;
+    expect(bubbles).toBeGreaterThan(horn);
+    for (let i = 0; i < 100; i++) sfx.weather("bloom", { x: 0, y: 0 });
+    expect(ctx.sources).toHaveLength(bubbles);
+    ctx.currentTime = 6;
+    sfx.weather("bloom", { x: 0, y: 0 });
+    expect(ctx.sources.length).toBeGreaterThan(bubbles);
+    sfx.weather("clear", { x: 0, y: 0 });
+    ctx.finish();
+  });
+
+  it("muffles the music cutoff by twenty percent without resetting its mode", async () => {
+    const { music, ctx } = await startMusic("endless");
+    const filter = ctx.nodes.find(n => n.type === "lowpass" && n.Q.value === 0.6)!;
+    expect(filter.frequency.value).toBe(9000);
+    music.setFog(true);
+    expect(filter.frequency.value).toBe(7200);
+    music.setMode("hub");
+    expect(filter.frequency.value).toBe(560);
+    music.setFog(false);
+    expect(filter.frequency.value).toBe(700);
+  });
+
+  it("uses the biome on screen entry and biome events even while audio is suspended", async () => {
+    const { audio, ctx } = gameAudio();
+    const chapter = vi.spyOn(Music.prototype, "setChapter");
+    audio.screen("round", { final: false, endless: true, biome: "reef", upgrades: { "monster.unlock": 1 } });
+    expect(chapter).toHaveBeenLastCalledWith(0);
+    ctx.state = "suspended";
+    audio.frame([{ type: "biome", biome: "trench" }], null);
+    expect(chapter).toHaveBeenLastCalledWith(2);
+    audio.frame([{ type: "biome", biome: "graveyard" }], null);
+    expect(chapter).toHaveBeenLastCalledWith(1);
+    chapter.mockRestore();
+  });
+
+  it("plays thunder with a flash once, respects reduced motion and stops wind on pause", async () => {
+    const { World } = await import("../game/world");
+    const { createRng } = await import("../game/rng");
+    const { BASE_STATS } = await import("../game/stats");
+    const { audio, ctx } = gameAudio();
+    audio.screen("round", { final: false, upgrades: {} });
+    const world = new World({ ...BASE_STATS, startFish: 0 }, createRng(3), 1280, 800, { round: 24, final: false, sea: "storm" });
+    world.elapsed = 11.325;
+    const thunder = vi.spyOn(Sfx.prototype, "thunder");
+    audio.frame([], world);
+    audio.frame([], world);
+    expect(thunder).toHaveBeenCalledTimes(1);
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    world.elapsed = 25.325;
+    audio.frame([], world);
+    expect(thunder).toHaveBeenCalledTimes(1);
+    audio.screen("hub", { final: false, upgrades: {} });
+    const sources = ctx.sources.length;
+    audio.frame([], world); // main keeps pumping the same World while its pause panel is open.
+    expect(ctx.sources).toHaveLength(sources);
+    expect(ctx.sources.find(s => s.loop)!.stopAt).toBeLessThan(Infinity);
+    thunder.mockRestore();
+  });
+});
+
+
+it("keeps fog and its chapter paused across frames, then resumes without a second horn", async () => {
+  const { World } = await import("../game/world");
+  const { createRng } = await import("../game/rng");
+  const { BASE_STATS } = await import("../game/stats");
+  const { audio } = gameAudio();
+  const chapter = vi.spyOn(Music.prototype, "setChapter");
+  const fog = vi.spyOn(Music.prototype, "setFog");
+  const world = new World({ ...BASE_STATS, startFish: 0 }, createRng(3), 1280, 800, { round: 24, final: false, endless: true, sea: "fog" });
+  world.elapsed = 601;
+  world.update(1 / 60);
+  expect(world.sea).toBe("fog");
+  audio.screen("round", { final: false, endless: true, biome: "graveyard", upgrades: { "monster.unlock": 1 } });
+  audio.frame([], world);
+  audio.screen("hub", { final: false, upgrades: { "monster.unlock": 1 } });
+  expect(chapter).toHaveBeenLastCalledWith(1);
+  audio.frame([], world);
+  expect(fog).toHaveBeenLastCalledWith(false);
+  audio.screen("round", { final: false, endless: true, upgrades: { "monster.unlock": 1 } });
+  expect(chapter).toHaveBeenLastCalledWith(1);
+  audio.frame([], world);
+  expect(fog).toHaveBeenLastCalledWith(true);
+  chapter.mockRestore(); fog.mockRestore();
+});

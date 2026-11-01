@@ -13,11 +13,12 @@ vi.mock("./engine", () => ({ AudioEngine: class {
   listen() {}
 } }));
 vi.mock("./music", () => ({ Music: class {
+  setFog() {}
   setUrgency() {}
   setFrenzy() {}
   pump() {}
 } }));
-vi.mock("./sfx", () => ({ Sfx: class { constructor() { Object.assign(this, sounds); } } }));
+vi.mock("./sfx", () => ({ Sfx: class { weather() {} stopWeather() {} constructor() { Object.assign(this, sounds); } } }));
 
 const snap = (id: number): WorldEvent => ({ type: "trap-snap", trapId: id, x: 100, y: 200, hits: 8 });
 const cast: WorldEvent = { type: "trap-cast", traps: [{ id: 1, x: 100, y: 200, radius: 42, partner: null, age: 0, cooldown: 0 }] };
