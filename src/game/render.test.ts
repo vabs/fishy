@@ -414,3 +414,75 @@ it("prepaints caustic masks once and creates no new gradients while drawing", ()
   for (let i = 0; i < 100; i++) renderer.draw(scene, 1 / 60);
   expect(gradients.reduce((sum, spy) => sum + spy.mock.calls.length, 0)).toBe(before);
 });
+
+describe("trap presentation", () => {
+  it("fills the re-arm arc from empty to ready and clamps invalid reset durations", async () => {
+    const { cooldownArcFraction } = await import("./fx");
+    expect(cooldownArcFraction(6, 6)).toBe(0);
+    expect(cooldownArcFraction(3, 6)).toBe(0.5);
+    expect(cooldownArcFraction(0, 6)).toBe(1);
+    expect(cooldownArcFraction(8, 6)).toBe(0);
+    expect(cooldownArcFraction(-1, 6)).toBe(1);
+    expect(cooldownArcFraction(1, 0)).toBe(1);
+  });
+
+  async function setup(reduced = false) {
+    vi.stubGlobal("matchMedia", () => ({ matches: reduced }));
+    vi.stubGlobal("document", { createElement: () => canvasRecorder().canvas });
+    const { World } = await import("./world");
+    const { cloneStats } = await import("./stats");
+    const { createRng } = await import("./rng");
+    const stats = cloneStats(BASE_STATS);
+    stats.startFish = 0;
+    stats.rigging.resetSeconds = 6;
+    const world = new World(stats, createRng(1), 1280, 800);
+    world.traps = [{ id: 1, x: 300, y: 250, radius: 42, cooldown: 3, partner: null, age: 2 }];
+    return { ...canvasRecorder(), world, stats };
+  }
+
+  it("draws a brass half arc on a cooling trap, and keeps its sprite cached", async () => {
+    const { renderer, world, stats, paints, images } = await setup();
+    renderer.draw({ ...scene, world, stats }, 0);
+    const arc = paints.find(p => p.style === "#c69b52" && p.arc);
+    expect(arc?.arc?.[2]).toBe(42);
+    expect(arc?.arc?.[4]! - arc?.arc?.[3]!).toBeCloseTo(Math.PI);
+    expect(images).toHaveLength(1);
+    renderer.draw({ ...scene, world, stats }, 0);
+    expect(images).toHaveLength(2);
+  });
+
+  it("cinches a snapping trap and returns to its radius without changing simulation state", async () => {
+    const { renderer, world, stats, images } = await setup();
+    renderer.onEvent({ type: "trap-snap", trapId: 1, x: 300, y: 250, hits: 1 });
+    const before = structuredClone(world.traps);
+    renderer.draw({ ...scene, world, stats }, 0.1);
+    const cinched = images[0]![2]!;
+    images.length = 0;
+    renderer.draw({ ...scene, world, stats }, 0.4);
+    expect(images[0]![2]).toBeGreaterThan(cinched);
+    expect(world.traps).toEqual(before);
+  });
+
+  it("throws new nets from the boat, but lands them immediately with reduced motion", async () => {
+    for (const reduced of [false, true]) {
+      const { renderer, world, stats, images } = await setup(reduced);
+      world.traps[0]!.age = 0;
+      renderer.draw({ ...scene, world, stats }, 0);
+      const image = images[0]!;
+      const center = image[0]! + image[2]! / 2;
+      expect(center).toBe(reduced ? 300 : 640);
+    }
+  });
+
+  it("briefly reveals surviving fish inside a snap in full colour", async () => {
+    const { renderer, world, stats, images } = await setup();
+    world.spawn("normal", { at: { x: 300, y: 250 } });
+    world.fish[0]!.age = 2;
+    renderer.onEvent({ type: "trap-snap", trapId: 1, x: 300, y: 250, hits: 1 });
+    renderer.draw({ ...scene, world, stats }, 0.01);
+    expect(images.length).toBe(3); // Silhouette, full-colour flash, trap.
+    images.length = 0;
+    renderer.draw({ ...scene, world, stats }, 0.4);
+    expect(images.length).toBe(2);
+  });
+});

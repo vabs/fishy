@@ -1,11 +1,12 @@
 import { formatMoney } from "../format";
 import { CHEST, chestInNet, coinBurst, type Chest } from "./chest";
 import { FISH, FISH_KINDS, FISH_SPECS, MAX_FISH_SIZE, type FishKind } from "./fish";
-import { causticCells, coinFlight, drawGlow, shakeOffset, type Effect } from "./fx";
+import { causticCells, coinFlight, cooldownArcFraction, drawGlow, shakeOffset, waterSplash, type Effect } from "./fx";
 import { loadArt, onArtReady } from "./art";
 import { diveEffect, sparklePath, glintBurst } from "./golden";
 import { fishColors, getPalette, type PaletteName } from "./palette";
 import { buildChestSprites, buildSprites, type ChestSprites, type FishSprites } from "./shapes";
+import type { Trap } from "./rigging";
 import type { Stats } from "./stats";
 import type { Fish, FxEvent, Point, World, WorldEvent } from "./world";
 import type { GameViewport } from "./viewport";
@@ -85,6 +86,21 @@ export function seaTint(timeOfDay?: number): { color: string; alpha: number; nig
 /** Normalized combo arc, shortened as the simulation's combo window drains. */
 export function comboRingLevel(mult: number, max: number, window: number): number {
   return max <= 1 ? 0 : Math.min(1, Math.max(0, (mult - 1) / (max - 1))) * Math.min(1, Math.max(0, window));
+}
+
+interface TrapVisual {
+  snapAge: number;
+  reset: number;
+  cooling: boolean;
+  readyAge: number;
+  reveal: boolean;
+}
+
+interface TrapReveal extends Point {
+  kind: FishKind;
+  heading: number;
+  golden: boolean;
+  age: number;
 }
 
 interface FlyingCoin {
@@ -167,6 +183,9 @@ export class Renderer {
   private catches: CatchSprite[] = [];
   private lastNetTick: (Point & { age: number }) | null = null;
   private netCinch = 0;
+  private trapSprites = new Map<number, HTMLCanvasElement>();
+  private trapVisuals = new Map<number, TrapVisual>();
+  private trapReveals: TrapReveal[] = [];
   private readonly reducedMotion = typeof matchMedia === "function" ? matchMedia("(prefers-reduced-motion: reduce)") : null;
   private effects: { effect: Effect; age: number; event: FxEvent }[] = [];
   private bonusEffects: { effect: Effect; age: number }[] = [];
@@ -221,6 +240,9 @@ export class Renderer {
     // Sprites are rendered at device resolution, which may have changed.
     this.sprites.clear();
     this.chestSprites = null;
+    this.trapSprites.clear();
+    this.trapVisuals.clear();
+    this.trapReveals.length = 0;
     this.floaters = [];
     this.particles = [];
     this.pulses = [];
@@ -247,6 +269,16 @@ export class Renderer {
 
   onEvent(event: WorldEvent): void {
     switch (event.type) {
+      case "trap-cast":
+        this.trapVisuals.clear();
+        this.trapReveals.length = 0;
+        break;
+      case "trap-snap":
+        if (this.trapVisuals.size < 16 || this.trapVisuals.has(event.trapId)) {
+          this.trapVisuals.set(event.trapId, { snapAge: 0, reset: 0, cooling: true, readyAge: 1, reveal: true });
+        }
+        this.addBonusEffect(waterSplash(event.x, event.y));
+        break;
       case "tick":
         this.lastNetTick = { x: event.x, y: event.y, age: 0 };
         if (event.hits > 0 && !this.reducedMotion?.matches) this.netCinch = PULSE_SECONDS;
@@ -255,6 +287,9 @@ export class Renderer {
         }
         break;
       case "capture": {
+        if (event.source === "trap" && !this.reducedMotion?.matches && this.trapReveals.length < 96) {
+          this.trapReveals.push({ x: event.x, y: event.y, kind: event.kind, heading: 0, golden: !!event.golden, age: 0 });
+        }
         this.captureBatch++;
         const pending = this.pendingCoins.at(-1);
         if (this.pendingCoins.length >= 40 && pending) pending.count++;
@@ -395,7 +430,7 @@ export class Renderer {
     const ctx = this.ctx;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     if (this.background) ctx.drawImage(this.background, 0, 0);
-    const tint = seaTint(timeOfDay);
+    const tint = seaTint(timeOfDay ?? world?.timeOfDay);
     this.night = tint.night;
     if (tint.alpha > 0) {
       ctx.globalCompositeOperation = "multiply";
@@ -419,6 +454,10 @@ export class Renderer {
     if (world) {
       for (const fish of world.fish) this.drawFish(fish, "silhouette");
       this.resetTransform();
+    }
+    if (world) {
+      this.drawTrapReveals(world);
+      this.drawTraps(world);
     }
     const netActive = world && !world.over && pointer;
     if (netActive) this.drawLens(world, pointer, stats.netRadius);
@@ -462,6 +501,123 @@ export class Renderer {
     ctx.globalAlpha = Math.min(1, fish.age / FADE_IN_SECONDS);
     ctx.drawImage(sprites[variant], -sprites.width / 2, -sprites.height / 2, sprites.width, sprites.height);
     ctx.globalAlpha = 1;
+  }
+
+  /** Cached secondary rope, faint mesh and four striped buoys, in device resolution. */
+  private trapSprite(radius: number): HTMLCanvasElement {
+    const cached = this.trapSprites.get(radius);
+    if (cached) return cached;
+    const canvas = document.createElement("canvas");
+    const scale = this.dpr * this.viewScale;
+    const size = (radius + 7) * 2;
+    canvas.width = canvas.height = Math.ceil(size * scale);
+    const ctx = canvas.getContext("2d")!;
+    ctx.scale(scale, scale);
+    ctx.translate(size / 2, size / 2);
+    ctx.save();
+    ctx.beginPath(); ctx.arc(0, 0, radius, 0, TAU); ctx.clip();
+    ctx.rotate(Math.PI / 4);
+    ctx.strokeStyle = "rgba(223, 231, 205, 0.12)";
+    ctx.lineWidth = 0.7;
+    ctx.beginPath();
+    const spacing = Math.max(12, radius / 4);
+    for (let d = -radius * 2; d <= radius * 2; d += spacing) {
+      ctx.moveTo(d, -radius * 2); ctx.lineTo(d, radius * 2);
+      ctx.moveTo(-radius * 2, d); ctx.lineTo(radius * 2, d);
+    }
+    ctx.stroke(); ctx.restore();
+    ctx.beginPath(); ctx.arc(0, 0, radius, 0, TAU);
+    ctx.strokeStyle = "rgba(15, 40, 43, 0.65)"; ctx.lineWidth = 3.8; ctx.stroke();
+    ctx.strokeStyle = "#ac956c"; ctx.lineWidth = 2; ctx.stroke();
+    ctx.setLineDash([1.5, 3]); ctx.strokeStyle = "#675c43"; ctx.lineWidth = 0.7; ctx.stroke();
+    ctx.setLineDash([]);
+    for (let i = 0; i < 4; i++) {
+      ctx.save();
+      const a = i * TAU / 4 + Math.PI / 4;
+      ctx.translate(Math.cos(a) * radius, Math.sin(a) * radius);
+      ctx.rotate(a);
+      ctx.fillStyle = "#f2e4c5"; ctx.strokeStyle = "#514635"; ctx.lineWidth = 0.8;
+      ctx.beginPath(); ctx.ellipse(0, 0, 4, 2.7, 0, 0, TAU); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = "#a9503d"; ctx.fillRect(-1.2, -2.2, 2.4, 4.4);
+      ctx.restore();
+    }
+    if (this.trapSprites.size >= 16) this.trapSprites.clear();
+    this.trapSprites.set(radius, canvas);
+    return canvas;
+  }
+
+  private trapPosition(trap: Trap, world: World): Point {
+    const t = this.reducedMotion?.matches ? 1 : Math.min(1, trap.age / 0.65);
+    return {
+      x: world.width / 2 + (trap.x - world.width / 2) * t,
+      y: world.height / 2 + (trap.y - world.height / 2) * t - Math.sin(t * Math.PI) * 65,
+    };
+  }
+
+  private drawTraps(world: World): void {
+    const ctx = this.ctx;
+    for (const trap of world.traps) {
+      let visual = this.trapVisuals.get(trap.id);
+      if (!visual) {
+        visual = { snapAge: 1, reset: 0, cooling: trap.cooldown > 0, readyAge: 1, reveal: false };
+        this.trapVisuals.set(trap.id, visual);
+      }
+      if (trap.cooldown > 0 && visual.reset === 0) {
+        visual.reset = Math.max(trap.cooldown, world.stats.rigging.resetSeconds * (world.frenzyActive ? world.stats.rigging.frenzyResetMult : 1));
+      }
+      if (visual.cooling && trap.cooldown === 0) {
+        visual.readyAge = 0;
+        visual.reset = 0;
+      }
+      visual.cooling = trap.cooldown > 0;
+      const point = this.trapPosition(trap, world);
+      const cinch = this.reducedMotion?.matches ? 0 : Math.sin(Math.PI * Math.min(1, visual.snapAge / 0.3));
+      const radius = trap.radius * (1 - cinch * 0.28);
+      if (trap.cooldown === 0) {
+        const breathe = this.reducedMotion?.matches ? 0.06 : 0.06 + Math.sin(this.time * 1.3 + trap.id) * 0.025;
+        drawGlow(ctx, "238, 218, 163", point.x, point.y, radius * 1.4, breathe);
+      }
+      const size = (trap.radius + 7) * 2 * (1 - cinch * 0.28);
+      ctx.drawImage(this.trapSprite(trap.radius), point.x - size / 2, point.y - size / 2, size, size);
+      if (trap.cooldown > 0) {
+        ctx.strokeStyle = "#c69b52"; ctx.lineWidth = 1.3 / this.viewScale;
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, radius, -Math.PI / 2, -Math.PI / 2 + TAU * cooldownArcFraction(trap.cooldown, visual.reset));
+        ctx.stroke();
+      }
+      if (!this.reducedMotion?.matches && visual.readyAge < 0.4) {
+        ctx.fillStyle = "#fff1cd";
+        ctx.globalAlpha = Math.sin(visual.readyAge / 0.4 * Math.PI);
+        ctx.beginPath(); sparklePath(ctx, trap.x, trap.y - trap.radius, 4, 0); ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      if (!this.reducedMotion?.matches && trap.age >= 0.65 && trap.age < 1.15) {
+        ctx.save(); waterSplash(trap.x, trap.y, trap.radius).draw(ctx, (trap.age - 0.65) / 0.5); ctx.restore();
+      }
+    }
+    // Recasts and resized-away traps cannot leave growing state behind.
+    for (const id of this.trapVisuals.keys()) if (!world.traps.some(trap => trap.id === id)) this.trapVisuals.delete(id);
+  }
+
+  private drawTrapReveals(world: World): void {
+    if (this.reducedMotion?.matches) return;
+    for (const trap of world.traps) {
+      const visual = this.trapVisuals.get(trap.id);
+      if (!visual?.reveal) continue;
+      visual.reveal = false;
+      for (const fish of world.fish) {
+        if (fish.captured || Math.hypot(fish.x - trap.x, fish.y - trap.y) > trap.radius || this.trapReveals.length >= 96) continue;
+        this.trapReveals.push({ x: fish.x, y: fish.y, kind: fish.kind, heading: fish.heading, golden: !!fish.golden, age: visual.snapAge });
+      }
+    }
+    const ctx = this.ctx;
+    for (const fish of this.trapReveals) {
+      const sprite = this.sprite(fish.kind);
+      ctx.save(); ctx.translate(fish.x, fish.y); ctx.rotate(fish.heading);
+      ctx.globalAlpha = Math.min(1, (0.3 - fish.age) / 0.12);
+      ctx.drawImage(fish.golden ? sprite.golden : sprite.full, -sprite.width / 2, -sprite.height / 2, sprite.width, sprite.height);
+      ctx.restore();
+    }
   }
 
   /** Inside the net, fish are drawn in full colour over their silhouettes. */
@@ -771,6 +927,9 @@ export class Renderer {
 
   private advanceEffects(dt: number): void {
     this.shakeAge += dt;
+    for (const visual of this.trapVisuals.values()) { visual.snapAge += dt; visual.readyAge += dt; }
+    for (const fish of this.trapReveals) fish.age += dt;
+    this.trapReveals = this.reducedMotion?.matches ? [] : this.trapReveals.filter(fish => fish.age < 0.3);
     this.comboPulse = Math.max(0, this.comboPulse - dt);
     for (const ripple of this.ripples) ripple.age += dt;
     let kept = 0;

@@ -106,3 +106,34 @@ export function drawGlow(ctx: CanvasRenderingContext2D, channels: string, x: num
   ctx.drawImage(sprite, x - radius, y - radius, radius * 2, radius * 2);
   ctx.globalAlpha = previous;
 }
+
+/** Re-arm progress, from empty at the snap to one when ready. */
+export function cooldownArcFraction(cooldown: number, resetSeconds: number): number {
+  return resetSeconds <= 0 ? 1 : Math.max(0, Math.min(1, 1 - cooldown / resetSeconds));
+}
+
+/** A small, deterministic foam burst; callers omit it for reduced motion. */
+export function waterSplash(x: number, y: number, radius = 24): Effect {
+  return {
+    life: 0.5,
+    draw(ctx, t) {
+      ctx.strokeStyle = `rgba(232, 251, 255, ${0.65 * (1 - t)})`;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.ellipse(x, y, radius * (0.3 + t), radius * (0.2 + t * 0.6), 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = "#e8fbff";
+      ctx.globalAlpha *= 0.7 * (1 - t);
+      ctx.beginPath();
+      for (let i = 0; i < 8; i++) {
+        const angle = i * Math.PI / 4 + 0.2;
+        const distance = radius * (0.2 + t * 0.8);
+        const px = x + Math.cos(angle) * distance;
+        const py = y + Math.sin(angle) * distance * 0.6 - Math.sin(t * Math.PI) * 10;
+        ctx.moveTo(px + 1.5, py);
+        ctx.arc(px, py, 1.5, 0, Math.PI * 2);
+      }
+      ctx.fill();
+    },
+  };
+}
