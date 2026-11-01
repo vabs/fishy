@@ -3,6 +3,8 @@
 | logo.webp | Cream and wood Fishy wordmark with rope, brass and fish detail | Generated for Fishy (no third-party assets) |
 | title-sea.webp | Golden-hour open sea and small wooden fishing boat | Generated for Fishy (no third-party assets) |
 | sea-tile.webp | Seamless, low-contrast teal gameplay water | Generated for Fishy (no third-party assets) |
+| sea-trench.webp | Seamless, low-contrast indigo-blue water with sparse soft bioluminescent specks | Generated for Fishy (no third-party assets) |
+| sea-graveyard.webp | Seamless, low-contrast murky green-teal water with faint submerged timbers and ship ribs | Generated for Fishy (no third-party assets) |
 | boat.png | Top-down wooden fishing boat with fisher, lantern, rope and basket | Generated for Fishy (no third-party assets) |
 | chart.webp | Light parchment sea chart with quiet centre | Generated for Fishy (no third-party assets) |
 | compass.webp | Decorative brass and ink compass rose | Generated for Fishy (no third-party assets) |
