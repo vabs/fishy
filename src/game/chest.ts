@@ -48,6 +48,10 @@ export interface Chest {
   hitFlash: number;
   /** Seconds since it appeared. */
   age: number;
+  /** A trap may hold each chest only once. */
+  snagged?: boolean;
+  /** Seconds left held by a trap; absent before its first snag. */
+  snagLeft?: number;
 }
 
 /**
@@ -91,8 +95,10 @@ export function launchChest(width: number, height: number, rng: Rng): Chest {
 
 /** Drifts the chest on. False once it has floated off the far edge. */
 export function moveChest(chest: Chest, dt: number, width: number, height: number): boolean {
-  chest.x += chest.vx * dt;
-  chest.y += chest.vy * dt;
+  const held = Math.min(dt, chest.snagLeft ?? 0);
+  if (chest.snagLeft !== undefined) chest.snagLeft = Math.max(0, chest.snagLeft - dt);
+  chest.x += chest.vx * (dt - held);
+  chest.y += chest.vy * (dt - held);
   chest.age += dt;
   chest.hitFlash = Math.max(0, chest.hitFlash - dt);
   const margin = CHEST.size / 2 + 4;

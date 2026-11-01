@@ -911,3 +911,44 @@ describe("Seine ropes", () => {
     expect(state.seineCooldowns.size).toBe(0);
   });
 });
+
+describe("Bait and snag", () => {
+  it("pulls towards the nearest armed net within range using fish offsets", () => {
+    const world = trapWorld(s => { s.rigging.baitPull = 60; s.rigging.baitRange = 180; });
+    world.traps.push({ id: 2, x: 550, y: 300, radius: 40, cooldown: 0, partner: null, age: 0 });
+    const fish = stillFish(world, 680);
+    const outside = stillFish(world, 200);
+    world.update(STEP);
+    expect(fish.offsetX).toBeCloseTo(-1);
+    expect(fish.offsetY).toBeCloseTo(0);
+    expect(outside.offsetX).toBe(0);
+    for (const trap of world.traps) trap.cooldown = 10;
+    world.update(STEP);
+    expect(fish.offsetX).toBeCloseTo(-1);
+  });
+
+  it("never pulls a fish through the boat towards a far-side net", () => {
+    const world = trapWorld(s => { s.rigging.baitPull = 10000; s.rigging.baitRange = 1000; });
+    const fish = stillFish(world, 200);
+    run(world, 1);
+    expect(fish.x).toBeCloseTo(330);
+    expect(Math.hypot(fish.x - 400, fish.y - 300)).toBeGreaterThanOrEqual(70 - 1e-8);
+  });
+
+  it("snags a chest just once and lets it drift after the hold expires", () => {
+    const world = trapWorld(s => { s.rigging.snagSeconds = 1; });
+    world.chest = { x: 600, y: 300, vx: 45, vy: 0, hp: 10, maxHp: 10, age: 0, hitFlash: 0 };
+    world.update(STEP);
+    const x = world.chest.x;
+    run(world, 1 - STEP);
+    expect(world.chest.x).toBeCloseTo(x, 10);
+    expect(world.chest.age).toBeCloseTo(1);
+    run(world, 0.2);
+    expect(world.chest.x).toBeGreaterThan(x);
+    expect(world.drainEvents().filter(e => e.type === "snag")).toHaveLength(1);
+    const next = { ...world.chest, x: 600, age: 0, snagged: false, snagLeft: 0 };
+    world.chest = next;
+    world.update(STEP);
+    expect(world.drainEvents().filter(e => e.type === "snag")).toHaveLength(1);
+  });
+});

@@ -1,3 +1,4 @@
+import { BOAT_CLEARANCE, pullTowards } from "./boat";
 import { CHEST, chestInNet, chestTime, chestValue, launchChest, moveChest, type Chest, type ChestReward } from "./chest";
 import { FISH, FISH_KINDS, FISH_SPECS, type FishDef, type FishKind } from "./fish";
 import { GOLDEN, goldenSwim, newGoldenState, type GoldenState } from "./golden";
@@ -29,8 +30,6 @@ export const ENDLESS: {
 
 /** Gap between the swimming area and the screen edge, px. */
 const EDGE_MARGIN = 30;
-/** Fish never orbit closer to the centre than this, so they stay clear of the boat, px. */
-const BOAT_CLEARANCE = 70;
 /** Captures handled per step. Any beyond this wait for the next step. */
 const MAX_CAPTURES_PER_STEP = 200;
 const HIT_FLASH_SECONDS = 0.12;
@@ -130,6 +129,7 @@ export type WorldEvent =
   | { type: "trap-cast"; traps: readonly Trap[] }
   | { type: "trap-snap"; trapId: number; x: number; y: number; hits: number }
   | { type: "seine-hit"; x: number; y: number }
+  | { type: "snag"; x: number; y: number }
   | FxEvent;
 
 export interface SpawnOptions {
@@ -410,6 +410,7 @@ export class World {
     }
     for (const kind of FISH_KINDS) FISH_SPECS[kind].update?.(this, dt);
     this.moveFish(dt);
+    this.pullToBait(dt);
     this.escapeGolden();
     this.spawnFish(dt);
     this.spawnGoldenFish(dt);
@@ -545,6 +546,23 @@ export class World {
   private get eventRng(): Rng {
     this.eventStream ??= createRng(Math.floor(this.rng() * 0x1_0000_0000));
     return this.eventStream;
+  }
+
+  private pullToBait(dt: number): void {
+    const { baitPull, baitRange } = this.stats.rigging;
+    if (baitPull <= 0 || this.traps.length === 0) return;
+    const boat = { x: this.width / 2, y: this.height / 2 };
+    for (const fish of this.fish) {
+      if (fish.captured) continue;
+      let closest: Trap | undefined;
+      let distance = baitRange;
+      for (const trap of this.traps) {
+        if (trap.cooldown > 0) continue;
+        const d = Math.hypot(fish.x - trap.x, fish.y - trap.y);
+        if (d < distance) { distance = d; closest = trap; }
+      }
+      if (closest) pullTowards(fish, closest, baitPull * dt, boat);
+    }
   }
 
   private snapTraps(): void {
@@ -754,6 +772,13 @@ export class World {
     if (this.chestAt !== null && this.elapsed >= this.chestAt && (!this.endless || !this.chest)) {
       this.chestAt = this.endless ? this.elapsed + range(this.eventRng, ...ENDLESS.chestGap) : null;
       this.chest = launchChest(this._width, this._height, this.eventRng);
+    }
+    const chest = this.chest;
+    if (chest && !chest.snagged && this.stats.rigging.snagSeconds > 0 &&
+      this.traps.some(trap => chestInNet(chest, trap, trap.radius))) {
+      chest.snagged = true;
+      chest.snagLeft = this.stats.rigging.snagSeconds;
+      this.emit({ type: "snag", x: chest.x, y: chest.y });
     }
     if (this.chest && !moveChest(this.chest, dt, this._width, this._height)) this.chest = null;
   }
