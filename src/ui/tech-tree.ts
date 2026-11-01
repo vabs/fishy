@@ -98,6 +98,34 @@ const ICONS: Record<string, string> = {
   "net.damage": '<path d="M-6 0 H6"/><rect x="-10" y="-6" width="4" height="12" rx="1.2"/><rect x="6" y="-6" width="4" height="12" rx="1.2"/><path d="M-11.5 -2.5 V2.5 M11.5 -2.5 V2.5"/>',
   "net.critChance": '<circle r="8"/><circle r="2.8"/><path d="M0 -11.5v4.5M0 7v4.5M-11.5 0h4.5M7 0h4.5"/>',
   "net.critMult": `<path d="${starPoints(8, 11, 4.6)}"/>`,
+  "rigging.unlock":
+    '<circle cx="-8" cy="-7" r="3"/><circle cx="8" cy="-7" r="3"/><path d="M-8 -4 L-6 9 H6 L8 -4 M-8 -3 H8 M-7 3 H7 M-3 -3 L-2 9 M3 -3 L2 9"/>',
+  "rigging.count":
+    '<circle cx="-9" cy="-6" r="2"/><circle cx="-1" cy="-6" r="2"/><circle cx="1" cy="-2" r="2"/><circle cx="9" cy="-2" r="2"/><path d="M-9 -4 L-8 6 H-2 L-1 -4 M-8 1 H-2 M-5 -4 V6 M1 0 L2 10 H8 L9 0 M2 5 H8 M5 0 V10"/>',
+  "rigging.reset":
+    '<path d="M9 3 A9.5 9.5 0 1 1 6 -7 M7 -11 L6 -6 L11 -5 M0 -5 V0 L4 3"/>',
+  "rigging.mesh":
+    '<rect x="-6" y="-8" width="12" height="16" rx="1"/><path d="M0 -8 V8 M-6 -2 H6 M-6 3 H6 M-11 0 H-7 M-9 -3 L-11 0 L-9 3 M7 0 H11 M9 -3 L11 0 L9 3"/>',
+  "rigging.strength":
+    '<path d="M-11 -8 L-3 0 M3 0 L11 8 M-11 8 L-3 0 M3 0 L11 -8 M-5 -6 C-11 -6 -9 4 -2 5 C4 6 7 -1 3 -4 C-1 -7 -7 0 -3 4 C1 8 8 6 8 1 C8 -2 5 -4 3 -4"/>',
+  "rigging.haul":
+    `<path d="M-10 -2 Q-10 10 0 10 Q10 10 10 -2 M-10 -2 H10 M-5 1 L-3 8 M5 1 L3 8"/><path ${FILLED} d="${fishPath(-3, -7, 0.6)} ${fishPath(5, -5, 0.5)}"/>`,
+  "rigging.seine":
+    '<circle cx="-9" cy="-5" r="2.5"/><circle cx="9" cy="-5" r="2.5"/><path d="M-9 -2.5 Q0 7 9 -2.5 M-9 1 Q0 10 9 1 M-5 0 V4 M0 2 V6 M5 0 V4 M-11 9 Q-8 6 -5 9 T1 9 T7 9 T11 9"/>',
+  "rigging.bait":
+    '<path stroke-width="4" d="M-8 -7 C-1 -12 7 -9 4 -3 C1 2 -6 -2 -6 4 C-6 9 3 11 8 5"/><circle cx="-7" cy="-7" r="1" fill="currentColor" stroke="none"/>',
+  "rigging.snag":
+    '<rect x="-9" y="2" width="18" height="8" rx="1"/><path d="M-9 4 H9 M-5 2 V10 M5 2 V10 M1 -11 V-3 A4 4 0 0 1 -7 -3 V-5 L-4 -2 M-7 -5 L-10 -2"/><rect x="-1.5" y="4" width="3" height="3" fill="currentColor" stroke="none"/>',
+  "rigging.frenzy":
+    '<path d="M-11 -7 Q-6 -12 -3 -7 T5 -7 T11 -7 M-9 -1 H9 L6 10 H-6 Z M-3 -1 L-2 10 M3 -1 L2 10 M-8 4 H8"/>',
+  "boat.chum":
+    '<ellipse cx="-2" cy="-1" rx="7" ry="2.5"/><path d="M-9 -1 L-7 10 H3 L5 -1 M-7 -4 A5 5 0 0 1 3 -4"/><circle cx="8" cy="-9" r="1.5" fill="currentColor"/><circle cx="10" cy="-3" r="1.3" fill="currentColor"/>',
+  "boat.chumCooldown":
+    '<ellipse cx="-3" cy="2" rx="6" ry="2"/><path d="M-9 2 L-7 10 H1 L3 2 M-7 -1 A4 4 0 0 1 1 -1 M-9 -8 H1 M-5 -11 L-1 -8 L-5 -5 M5 -4 L8 -7 L11 -4"/>',
+  "boat.chumReach":
+    '<path stroke-width="2.8" d="M-11 0 H10 M4 -6 L10 0 L4 6"/><path d="M-10 -7 H-5 M-10 7 H-5"/>',
+  "boat.lantern":
+    '<path d="M-2 -8 V-9 A2 2 0 0 1 2 -9 V-8 M-4 -8 H4 L7 -4 H-7 Z M-6 -4 L-5 8 H5 L6 -4 M-7 10 H7"/><path fill="currentColor" stroke="none" d="M0 -2 C-2 1 -4 3 -2 5 C0 8 5 4 2 2 C1 4 0 2 0 -2 Z"/>',
   "time.round": '<circle r="9.5"/><path d="M0 -5.5 V0 L4 3.5"/>',
   "time.round2": '<path d="M8.6 3.5 A9.2 9.2 0 1 1 6.2 -6.8"/><path d="M7.4 -11.2 L6.6 -6.4 L11.2 -5.4"/><path d="M0 -4.5 V0 L3.5 3"/>',
   "time.bonusChance": '<path d="M-6.5 -10.5 H6.5 M-6.5 10.5 H6.5 M-5 -10.5 V-7 L5 7 V10.5 M5 -10.5 V-7 L-5 7 V10.5"/>',
