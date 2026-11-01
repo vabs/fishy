@@ -4,8 +4,8 @@ import { writeFile, mkdir } from "node:fs/promises";
 import { chaseFish, launchChrome, newPage, startDevServer } from "./lib/browser.mjs";
 
 const OUT = "docs/screenshots";
-/** Money spent on the cheapest upgrades first, for the mid-game shots. */
-const MID_GAME_BUDGET = 60_000;
+/** Supporting upgrades for the late-game shots; Rigging and Boat are maxed below. */
+const GAMEPLAY_BUDGET = 2_000_000;
 const ALL_FISH = "normal,uncommon,rare,electric,epic,goober,monster,star";
 
 await mkdir(OUT, { recursive: true });
@@ -32,9 +32,12 @@ try {
   await first.waitForTimeout(2_600);
   await save(await first.screenshot(), "how-to-play");
 
-  // Mid-game: a save with a good part of the tree bought.
+  // A late-game save with trap nets, seine ropes and the lantern bought.
   const mid = await newPage(browser);
-  const upgrades = buyCheapest(tech, MID_GAME_BUDGET);
+  const upgrades = { ...buyCheapest(tech, GAMEPLAY_BUDGET), ...Object.fromEntries(
+    tech.TECH_NODES.filter((node) => node.branch === "rigging" || node.branch === "boat")
+      .map((node) => [node.id, node.maxLevel]),
+  ) };
   const midSave = withBadges({ ...createSave("Skipper"), round: 24, money: 1_850, upgrades,
     stats: { ...createSave("Skipper").stats, totalFish: 800, bestRoundEarnings: 26000,
       fishByType: { normal: 350, uncommon: 250, rare: 80, electric: 60, epic: 40, goober: 20 },
@@ -54,6 +57,7 @@ try {
   await save(await mid.screenshot(), "tech-tree");
 
   await mid.click("#start-button");
+  await mid.waitForFunction(() => window.__fishy?.world?.traps.length > 0 && window.__fishy.world.stats.boat.lanternRadius > 0);
   await mid.waitForTimeout(1_500);
   const netRadius = tech.applyUpgrades(BASE_STATS, upgrades).netRadius;
   let best = { score: -1, image: null };
@@ -76,6 +80,7 @@ try {
   await endless.goto(`${dev.url}?fish=${ALL_FISH}&time=0.5`);
   await endless.click("#title-endless");
   await endless.waitForSelector('#hud[data-mode="endless"]:not([hidden])');
+  await endless.waitForFunction(() => window.__fishy?.world?.traps.length > 0 && window.__fishy.world.stats.boat.lanternRadius > 0);
   await chaseFish(endless, { steps: 65, netRadius });
   await save(await endless.screenshot(), "endless");
 

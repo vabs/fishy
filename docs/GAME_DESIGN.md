@@ -43,6 +43,13 @@ only ticks while the cursor is over the play area. On touch screens, holding and
 the net above the finger to keep fish visible; lifting the finger deactivates it. An extra finger
 does not create another net.
 
+Once Chum the Water is bought, Space or the bucket beside pause throws chum. The round brass
+button only appears while chum is unlocked. Its ring fills during the cooldown, its accessible
+label gives seconds left, and it pulses when ready (no pulse with reduced motion). Touching it
+does not move the net. Space is ignored while typing, in a dialog or while paused; Esc and M
+keep their pause and mute functions. The first unlock shows “Press Space or tap the bucket to
+throw chum”.
+
 The tech tree supports dragging to pan, mouse-wheel or two-finger pinch zoom, and tapping an
 upgrade to inspect it before using Buy. Desktop upgrade details also offer a Buy button, and
 segmented bars show current upgrade levels. Settings (how to play, sound, display, haptics and save
@@ -69,13 +76,64 @@ at 2 to limit rendering work.
 ## Capturing
 
 Every capture goes through one function, `capture(fish, source)`, whatever caused it: the net, an
-Electric current, an Epic fish, a Star fish or a Whirlpool. Captures are queued and processed once
+Electric current, an Epic fish, a Star fish, a Whirlpool, a trap net or a seine rope. Captures are queued and processed once
 per frame, so chain reactions never recurse and the number of effects per frame can be capped.
 
 A fish captured by any source behaves like a fish captured by the net: it pays its value and its
 on-capture effect fires. Fish caught by an ability (Electric current, Epic net, Star shot, Whirlpool)
 pay 1.5× their value, so chain reactions earn money even late in the game, when the net would catch
 nearly every fish anyway.
+Direct trap and seine catches use the net's value multiplier (1×), including the usual global,
+type, golden, combo and Frenzy bonuses. Their on-capture abilities still fire, and those ability
+catches get the usual ability bonus. The summary adds “Trap nets: N fish” beneath the Frenzy
+line when traps or seines caught any fish; this is a count already included in the per-type rows.
+
+## Trap nets
+
+`src/game/rigging.ts`, `src/game/world.ts` and `stats.rigging` define the rules:
+
+- Locked at first (`count = 0`). Trap Net follows Huge Net, casts one net, and More Nets adds
+  three further levels for four nets at most. The first timed round after unlocking shows
+  “Trap nets snap shut on fish that swim over them” for eight seconds.
+- Fresh random positions each round, inside the swimming ellipse at orbit fraction 0.3–0.85
+  (or the area's larger minimum orbit). A net's centre stays at least `70 + radius` px from the
+  boat, and at least its radius from each edge. Reject the four corner zones where both the
+  horizontal and vertical coordinate are within 22% of an edge.
+- Nets are at least 2.4 × their larger radius apart. Seine partners (first–second,
+  third–fourth) must be 140–280 px apart. Placement tries at most 160 candidates per net;
+  impossible positions are omitted. Placement uses a separate seeded stream; rounds without
+  nets keep their old random sequence. Resizing scales valid spots and drops invalid ones.
+- An armed net has cooldown 0. On the first simulation step with an uncaptured fish within
+  its radius, it hits up to its haul limit, nearest first, through the normal damage path.
+  It then waits its reset time, whether those hits captured fish or only damaged them.
+- Base radius 34 px, damage 1, haul 1 and reset 5 s. Wide Mesh adds 6 px per level for three
+  levels (52 px); Strong Mesh adds 1 damage per level for three levels (4 damage). Quick Reset
+  multiplies reset by 0.85 per level for four levels (about 2.61 s). Big Haul first raises haul
+  to 3, then hits every fish within reach.
+- Seine Line joins partners with a rope. Fish within 10 px of the segment take 1 damage,
+  at most once per fish per second across all ropes.
+- Bait pulls fish within 110 px towards an armed net at 15 px/s per level, up to 45 px/s.
+  It stops while the net resets. Lures keep fish at least 70 px from the boat.
+- Snag stops a chest touching a net for 4 s, once per chest, even if the net is resetting.
+  It never damages or opens the chest.
+- Frenzy Rigging multiplies reset time by 0.5 for snaps during a Feeding Frenzy; its value
+  bonus applies to trap and seine catches too.
+- Endless trips recast the nets at fresh random spots every 60 s (`RIGGING.endlessRecast`).
+
+## Boat tools
+
+`src/game/boat.ts`, `src/game/world.ts` and `stats.boat` define two tools, both initially locked:
+
+- Chum the Water follows Trap Net. Each round or Endless trip starts ready. A throw pulls fish
+  within 220 px towards the boat at 60 px/s for 4 s, stopping 70 px from the boat. The cooldown
+  is 20 s between throws, measured from the throw and frozen while paused. A throw is refused
+  while locked, active, cooling down or after the session ends.
+- Quick Chum multiplies cooldown by 0.85 per level for three levels (about 12.28 s). Long Reach
+  adds 60 px of radius and 1 s of duration per level for two levels (340 px and 6 s).
+- Lantern Lure adds 70 px of radius per level for three levels (70, 140, 210 px). Inside that
+  radius, swimming speed is multiplied by 0.7 in both modes. In Endless, between day phases
+  0.375 and 0.625 inclusive, it also pulls fish towards the boat at 12 px/s. Chum and lantern
+  pulls add together and respect the same boat clearance.
 
 ## Spawning
 
@@ -109,8 +167,9 @@ a line with the money and fish the wave brought in, which the per-type rows alre
 - Fish orbit the boat. The orbit is an ellipse fitted to the screen, so wide screens are used fully.
 - A fish can spawn anywhere between just outside the boat and the edge of the play area. Spawn
   distance has no effect on behaviour.
-- Movement is defined only by fish type. Speeds are in pixels per second along the path, so a fish
-  far from the boat moves no faster than the same fish close to it.
+- Each fish type defines its base movement. Speeds are in pixels per second along the path, so
+  distance from the boat does not increase swimming speed. Bait and boat lures add local pulls,
+  and the lantern slows swimming in its radius.
 
 ## Fish types
 
@@ -317,7 +376,10 @@ player's current upgrades and the same simulation as a round.
 - Day and night: the sea's light turns every 4 minutes of trip time, from golden hour through dusk
   (1 min), night (2 min) and dawn (3 min). The tint covers only the water. At night the caustics
   give way to a few moonlight glints, the net's lens is lit a little brighter so fish inside stay
-  readable, and a lantern glows around the boat. It has no effect on play.
+  readable. An upgraded lantern also slows fish in its radius and pulls them closer at night.
+  The simulation supplies the day phase (`world.timeOfDay`), one cycle per 240 s
+  (`ENDLESS.dayLength`); timed rounds leave it undefined. The dev-only `?time=` override holds
+  the drawn light at a phase without changing the simulation's lure timing.
 - Pausing works as in a round. The pause panel adds End trip, the only way to end a trip.
 - The logbook that follows shows the trip's earnings, fish, time at sea and best combo, notes that
   Endless catches don't go to the bank, and marks each new personal record (best session earnings,
@@ -427,7 +489,11 @@ changes the simulation, the net's hit area or its timing.
 - Each fish's unlock gates the rest of its nodes. Fish unlock in order: Uncommon → Rare →
   Electric → Epic → Goober → Monster → Star.
 - Pacing target: finishing the tree takes roughly 1–1.5 hours. `src/game/tech/pacing.test.ts`
-  checks it by playing a whole game with a bot, which finishes in about 70 minutes. Golden fish,
+  checks it by playing a whole game with a bot, which finishes in about 74.6 minutes / 89 rounds,
+  including 10 s per round in the hub. The pre-tools baseline was 69.9 minutes / 84 rounds:
+  the new campaign is 6.7% longer. Trap Net arrives at round 41, about 22.2 minutes. The bot benefits from traps
+  and throws chum whenever ready; the check caps campaign time at 115% of baseline and keeps
+  Trap Net between 15 and 35 minutes. Golden fish,
   chests and Feeding Frenzy waves are part of that; to make room for them, upgrades over $2,000
   cost more the pricier they are (×1.2 at $10k, ×1.6 at $100k, ×1.9 at $500k).
 
@@ -446,6 +512,14 @@ changes the simulation, the net's hit area or its timing.
 - Amount of time added (bonus time is capped at one extra round length per round, so chains
   can't stretch a round forever)
 - Feeding Frenzy wave length
+
+**Rigging**
+- Trap Net unlock, more nets, reset speed, radius, damage and haul
+- Seine Line, Bait, Snag and Frenzy Rigging
+
+**Boat**
+- Chum unlock, cooldown and reach/duration
+- Lantern Lure radius
 
 **Economy**
 - Fish value (all fish)

@@ -233,7 +233,7 @@ export const TECH_NODES: readonly TechNode[] = [
     name: "Big Haul",
     description: "Level 1: hit 2 more fish per snap. Level 2: hit every fish inside the trap net",
     maxLevel: 2,
-    cost: { base: 38000, growth: 3 },
+    cost: { base: 34000, growth: 3 },
     requires: ["rigging.strength"],
     apply(stats, level) {
       stats.rigging.haul += level >= 2 ? Infinity : 2;
@@ -245,7 +245,7 @@ export const TECH_NODES: readonly TechNode[] = [
     name: "Seine Line",
     description: "Join trap nets in pairs with a rope that damages fish crossing it",
     maxLevel: 1,
-    cost: { base: 110000, growth: 1 },
+    cost: { base: 95000, growth: 1 },
     requires: ["rigging.count", "rigging.strength"],
     apply(stats) {
       stats.rigging.seine = true;
@@ -257,7 +257,7 @@ export const TECH_NODES: readonly TechNode[] = [
     name: "Bait",
     description: "+15 px/s pull towards armed trap nets per level, for fish within bait range",
     maxLevel: 3,
-    cost: { base: 26000, growth: 2 },
+    cost: { base: 24000, growth: 2 },
     requires: ["rigging.mesh"],
     apply(stats, level) {
       stats.rigging.baitPull += 15 * level;
@@ -269,7 +269,7 @@ export const TECH_NODES: readonly TechNode[] = [
     name: "Snag",
     description: "Trap nets hold a passing treasure chest still for 4 s, once per chest",
     maxLevel: 1,
-    cost: { base: 68000, growth: 1 },
+    cost: { base: 60000, growth: 1 },
     requires: ["rigging.bait"],
     apply(stats) {
       stats.rigging.snagSeconds += 4;
@@ -281,7 +281,7 @@ export const TECH_NODES: readonly TechNode[] = [
     name: "Frenzy Rigging",
     description: "Trap nets reset twice as fast during a Feeding Frenzy",
     maxLevel: 1,
-    cost: { base: 160000, growth: 1 },
+    cost: { base: 140000, growth: 1 },
     requires: ["rigging.reset", "rigging.seine"],
     apply(stats) {
       stats.rigging.frenzyResetMult *= 0.5;
@@ -319,7 +319,7 @@ export const TECH_NODES: readonly TechNode[] = [
     name: "Long Reach",
     description: "+60 px chum reach and +1 s chum duration per level",
     maxLevel: 2,
-    cost: { base: 19000, growth: 2 },
+    cost: { base: 17000, growth: 2 },
     requires: ["boat.chumCooldown"],
     apply(stats, level) {
       stats.boat.chumRadius += 60 * level;

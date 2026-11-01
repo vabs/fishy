@@ -33,6 +33,7 @@ try {
   assert.ok(await page.locator("#hub").isHidden(), "hub shown with nothing to buy");
   await page.waitForSelector("#round-hint:not([hidden])");
   assert.ok(await page.locator("#hud-bounties").isHidden());
+  assert.ok(await page.locator("#chum-button").isHidden(), "chum is shown before its unlock");
 
   step("rounds bank money until the first upgrade is affordable, then the hub opens");
   let round = 1;
@@ -172,6 +173,8 @@ try {
   step("a maxed tree offers the Final Round");
   const { TECH_NODES } = await dev.load("/src/game/tech/index.ts");
   const maxed = Object.fromEntries(TECH_NODES.map((node) => [node.id, node.maxLevel]));
+  await checkBoatTools(browser, dev, maxed);
+  await page.bringToFront();
   await page.evaluate((upgrades) => {
     const save = JSON.parse(localStorage.getItem("fishy.save"));
     localStorage.setItem("fishy.save", JSON.stringify({ ...save, upgrades }));
@@ -249,4 +252,68 @@ async function continueVisible(page) {
     assert.ok(button && button.y >= 0 && button.y + button.height <= viewport.height,
       "Continue is outside the summary viewport");
   }
+}
+
+/** Tool assertions read the simulation, so they also work before trap artwork lands. */
+async function checkBoatTools(browser, dev, maxed) {
+  step("trap nets start in the sea; Space and the bucket throw chum in rounds and Endless");
+  const { createSave } = await dev.load("/src/save/index.ts");
+  const tools = await newPage(browser);
+  const seed = { ...createSave("Captain Rigging"), round: 40,
+    upgrades: { ...maxed, "econ.value2": 0 } };
+  await tools.addInitScript((save) => localStorage.setItem("fishy.save", JSON.stringify(save)), seed);
+  await tools.goto(dev.url);
+  await tools.click("#title-play"); await tools.click("#start-button");
+  await tools.waitForFunction(() => window.__fishy?.world?.traps.length > 0);
+  assert.equal(await tools.evaluate(() => window.__fishy.world.stats.boat.lanternRadius), 210);
+  assert.equal(await tools.evaluate(() => window.__fishy.world.traps.every(({ x, y }) => {
+    const { width, height } = window.__fishy.world;
+    return !((x < width * .22 || x > width * .78) && (y < height * .22 || y > height * .78));
+  })), true, "a trap was cast in a corner");
+  const bucket = tools.locator("#chum-button");
+  await bucket.waitFor({ state: "visible" });
+  assert.match(await text(tools, "#round-hint"), /Trap nets snap shut/);
+  assert.equal(await text(tools, "#toast"), "Press Space or tap the bucket to throw chum");
+  assert.match(await bucket.getAttribute("aria-label"), /ready/);
+  await tools.emulateMedia({ reducedMotion: "reduce" });
+  assert.equal(await bucket.evaluate((el) => getComputedStyle(el).animationName), "none");
+  await tools.emulateMedia({ reducedMotion: "no-preference" });
+  assert.equal(await bucket.evaluate((el) => getComputedStyle(el).animationName), "chum-ready");
+  await tools.evaluate(() => {
+    const input = document.createElement("input"); input.id = "typing-guard";
+    input.style.cssText = "position:fixed;bottom:0;z-index:100";
+    document.body.append(input); input.focus();
+  });
+  await tools.keyboard.press("Space");
+  assert.equal(await tools.evaluate(() => window.__fishy.world.chumReady), true, "typing threw chum");
+  await tools.evaluate(() => {
+    document.querySelector("#typing-guard").remove();
+    const dialog = document.createElement("dialog"); dialog.id = "dialog-guard";
+    document.body.append(dialog); dialog.showModal();
+  });
+  await tools.keyboard.press("Space");
+  assert.equal(await tools.evaluate(() => window.__fishy.world.chumReady), true, "dialog Space threw chum");
+  await tools.evaluate(() => document.querySelector("#dialog-guard").remove());
+  await tools.keyboard.press("Space");
+  await tools.waitForFunction(() => window.__fishy.world.chumActive && Number(document.querySelector("#chum-button").dataset.cooldown) > 0);
+  assert.match(await bucket.getAttribute("aria-label"), /\d+ seconds left/);
+  assert.ok(await bucket.locator(".chum-progress").evaluate((el) => Number(el.style.strokeDashoffset) > 0));
+  assert.equal(await bucket.getAttribute("aria-disabled"), "true");
+  await tools.keyboard.press("Escape");
+  await tools.locator("#pause-panel").waitFor({ state: "visible" });
+  const cooldown = await tools.evaluate(() => window.__fishy.world.chumCooldownLeft);
+  // Space on the focused Resume button would activate that button through native keyboard input.
+  await tools.evaluate(() => document.activeElement?.blur());
+  await tools.keyboard.press("Space");
+  await tools.waitForTimeout(150);
+  assert.equal(await tools.evaluate(() => window.__fishy.world.chumCooldownLeft), cooldown, "paused cooldown advanced");
+  await tools.keyboard.press("Escape");
+  await tools.locator("#pause-panel").waitFor({ state: "hidden" });
+  await tools.reload();
+  await tools.click("#title-endless");
+  await tools.waitForFunction(() => window.__fishy?.world?.endless && window.__fishy.world.traps.length > 0);
+  await bucket.click();
+  await tools.waitForFunction(() => window.__fishy.world.chumActive);
+  assert.deepEqual(tools.errors, [], "tool page errors");
+  await tools.context().close();
 }

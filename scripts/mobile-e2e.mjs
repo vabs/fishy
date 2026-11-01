@@ -61,6 +61,7 @@ try {
   await fits(page, "#title");
   await tap("#title-play");
   await page.locator("#hud").waitFor({ state: "visible" });
+  assert.ok(await page.locator("#chum-button").isHidden(), "locked chum appears on touch");
 
   step("hold/drag places the net 56px above the finger; lift/cancel clear it; DPR is capped");
   assert.equal(await page.locator("#game").evaluate((canvas) => canvas.width), 780);
@@ -214,7 +215,36 @@ try {
     return { left: text.left, right: text.right, controlsLeft: controls.left };
   });
   assert.ok(hudLayout.left >= 0 && hudLayout.right <= hudLayout.controlsLeft, `large balance overlaps controls: ${JSON.stringify(hudLayout)}`);
-  await seed({ ...afterBuy, finalRoundDone: true, upgrades: Object.fromEntries(TECH_NODES.map((node) => [node.id, node.maxLevel])) });
+  step("the bucket fits beside pause and a real tap throws chum without placing or moving the net");
+  const maxed = Object.fromEntries(TECH_NODES.map((node) => [node.id, node.maxLevel]));
+  for (const viewport of [{ width: 390, height: 844 }, { width: 844, height: 390 }, { width: 320, height: 568 }]) {
+    await page.setViewportSize(viewport);
+    await seed({ ...afterBuy, upgrades: { ...maxed, "econ.value2": 0 } });
+    await tap("#start-button");
+    await page.waitForFunction(() => window.__fishy?.world?.traps.length > 0);
+    await fits(page, "#chum-button");
+    await fits(page, "#pause-button");
+    const bucket = await page.locator("#chum-button").boundingBox();
+    const pause = await page.locator("#pause-button").boundingBox();
+    assert.ok(Math.abs(bucket.y - pause.y) < 1 && bucket.x + bucket.width <= pause.x,
+      `bucket does not fit beside pause at ${viewport.width}px`);
+    assert.ok(bucket.width >= 44 && bucket.height >= 44, "bucket hit target is too small");
+    assert.equal(await page.evaluate(() => window.__fishy.pointer), null);
+    await tap("#chum-button");
+    await page.waitForFunction(() => window.__fishy.world.chumActive);
+    assert.equal(await page.evaluate(() => window.__fishy.pointer), null, "bucket tap placed the net");
+    assert.equal(await page.evaluate(() => window.__fishy.world.pointer), null, "bucket tap moved the simulation net");
+    // The HUD refreshes on the next frame after the throw.
+    await page.waitForFunction(() => /seconds left/.test(document.querySelector("#chum-button").getAttribute("aria-label")));
+    await page.waitForFunction(() => getComputedStyle(document.querySelector("#chum-button")).animationName === "none");
+    // A drag still works after the bucket tap, and lifting still deactivates it.
+    await touch("touchStart", [[viewport.width / 2, viewport.height * .7]]);
+    await page.waitForFunction(() => window.__fishy.pointer !== null);
+    await touch("touchEnd");
+    await page.waitForFunction(() => window.__fishy.pointer === null);
+    await shot(page, `mobile-tools-${viewport.width}`);
+  }
+  await seed({ ...afterBuy, finalRoundDone: true, upgrades: maxed });
   await page.locator("#end-panel").waitFor({ state: "visible" });
   await fits(page, "#end-panel");
   await page.setViewportSize({ width: 320, height: 568 });
