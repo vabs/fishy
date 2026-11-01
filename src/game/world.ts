@@ -1,7 +1,9 @@
+import { BOAT_CLEARANCE, lanternPull, lanternSpeed, pullTowards, relaxPull, resizePull } from "./boat";
 import { CHEST, chestInNet, chestTime, chestValue, launchChest, moveChest, type Chest, type ChestReward } from "./chest";
 import { FISH, FISH_KINDS, FISH_SPECS, type FishDef, type FishKind } from "./fish";
 import { GOLDEN, goldenSwim, newGoldenState, type GoldenState } from "./golden";
 import { createRng, pickWeighted, range, type Rng } from "./rng";
+import { castTraps, resizeTraps, RIGGING, segmentDistance, type Trap } from "./rigging";
 import { spawnRate, type Stats } from "./stats";
 
 const TAU = Math.PI * 2;
@@ -13,6 +15,8 @@ export const STEP = 1 / 60;
 export const ENDLESS: {
   /** Seconds between the starts of frenzy waves. */
   frenzyEvery: number;
+  /** Seconds in one golden-hour, dusk, night and dawn cycle. */
+  dayLength: number;
   /** Seconds until the first wave. */
   firstFrenzy: number;
   /** Seconds between chest arrivals, waiting if the previous chest is still present. */
@@ -24,12 +28,10 @@ export const ENDLESS: {
    * sea that has filled up to the cap still gets its surprises.
    */
   surgeRoom: number;
-} = { frenzyEvery: 90, firstFrenzy: 45, chestGap: [60, 100], maxFish: 80, surgeRoom: 40 };
+} = { dayLength: 240, frenzyEvery: 90, firstFrenzy: 45, chestGap: [60, 100], maxFish: 80, surgeRoom: 40 };
 
 /** Gap between the swimming area and the screen edge, px. */
 const EDGE_MARGIN = 30;
-/** Fish never orbit closer to the centre than this, so they stay clear of the boat, px. */
-const BOAT_CLEARANCE = 70;
 /** Captures handled per step. Any beyond this wait for the next step. */
 const MAX_CAPTURES_PER_STEP = 200;
 const HIT_FLASH_SECONDS = 0.12;
@@ -41,6 +43,8 @@ const FRENZY_START = 0.35;
 const FRENZY_BAND = 70;
 /** Fish pour in no closer to the swimming area's sides than this, as a fraction of its half-width. */
 const FRENZY_REACH = 0.96;
+
+export { RIGGING, type Trap } from "./rigging";
 
 export interface Point {
   x: number;
@@ -82,7 +86,7 @@ export interface Fish {
   state: Record<string, number>;
 }
 
-export type CaptureSource = "net" | "electric" | "epic" | "star" | "whirlpool";
+export type CaptureSource = "net" | "electric" | "epic" | "star" | "whirlpool" | "trap" | "seine";
 
 /** A projectile, e.g. a launched Star fish. Moved and drawn by the type that owns it. */
 export interface Shot {
@@ -124,6 +128,11 @@ export type WorldEvent =
   | { type: "golden-escape"; kind: FishKind; x: number; y: number; heading: number }
   /** The net opened the treasure chest. `value` is the money it paid. */
   | { type: "chest-open"; x: number; y: number; value: number; reward: ChestReward }
+  | { type: "trap-cast"; traps: readonly Trap[] }
+  | { type: "trap-snap"; trapId: number; x: number; y: number; hits: number }
+  | { type: "seine-hit"; x: number; y: number }
+  | { type: "snag"; x: number; y: number }
+  | { type: "chum"; x: number; y: number }
   | FxEvent;
 
 export interface SpawnOptions {
@@ -175,6 +184,9 @@ export interface FrenzyWave {
 export class World {
   fish: Fish[] = [];
   shots: Shot[] = [];
+  traps: Trap[] = [];
+  /** Fish caught directly by trap nets and seine ropes this round. */
+  trapCatches = 0;
   timeLeft: number;
   /** Seconds since the round started. */
   elapsed = 0;
@@ -231,6 +243,11 @@ export class World {
   private readonly firstWave: FrenzyWave | null;
   /** Compensated elapsed sum in endless, keeping wave boundaries on their fixed steps for hours. */
   private elapsedError = 0;
+  private riggingStream: Rng | null = null;
+  private seineCooldowns = new Map<number, number>();
+  private nextRecast = RIGGING.endlessRecast;
+  private chumLeft = 0;
+  private chumCooldown = 0;
 
   constructor(
     readonly stats: Stats,
@@ -255,6 +272,7 @@ export class World {
       (this.round.round >= CHEST.fromRound && (stats.chestChance > 0 || this.round.guarantee?.chest));
     if (this.endless) this.chestAt = range(this.eventRng, ...ENDLESS.chestGap);
     else if (chestRound) this.chestAt = chestTime(this.round, stats, this.eventRng);
+    this.castRigging();
   }
 
   get width(): number {
@@ -272,6 +290,35 @@ export class World {
   /** True in the endless sandbox. */
   get endless(): boolean {
     return this.round.endless === true;
+  }
+
+  /** Endless day phase: golden hour at 0, night at 0.5; absent in timed rounds. */
+  get timeOfDay(): number | undefined {
+    return this.endless ? (this.elapsed % ENDLESS.dayLength) / ENDLESS.dayLength : undefined;
+  }
+
+  /** True while thrown chum is still pulling fish. */
+  get chumActive(): boolean {
+    return this.stats.boat.chum && !this.over && this.chumLeft > 0;
+  }
+
+  /** Seconds until chum can be thrown again, or Infinity while locked. */
+  get chumCooldownLeft(): number {
+    return this.stats.boat.chum ? this.chumCooldown : Infinity;
+  }
+
+  /** True when chum is unlocked, ready and the sea is still in play. */
+  get chumReady(): boolean {
+    return this.stats.boat.chum && !this.over && this.chumLeft === 0 && this.chumCooldown === 0;
+  }
+
+  /** Throws chum when ready. Cooldown counts from the throw, in play time only. */
+  chum(): boolean {
+    if (!this.chumReady) return false;
+    this.chumLeft = this.stats.boat.chumSeconds;
+    this.chumCooldown = this.stats.boat.chumCooldown;
+    this.emit({ type: "chum", x: this.width / 2, y: this.height / 2 });
+    return true;
   }
 
   /** Ends an endless session. No-op in a timed round. */
@@ -343,8 +390,10 @@ export class World {
     for (const fish of this.fish) {
       fish.offsetX *= sx;
       fish.offsetY *= sy;
+      resizePull(fish, sx, sy);
       this.place(fish);
     }
+    this.traps = resizeTraps(this.traps, this.swimArea(), width, height, sx, sy);
     for (const shot of this.shots) {
       shot.x = Math.max(shot.radius, Math.min(width - shot.radius, shot.x * sx));
       shot.y = Math.max(shot.radius, Math.min(height - shot.radius, shot.y * sy));
@@ -385,13 +434,28 @@ export class World {
       this.elapsed += dt;
     }
     this.announceFrenzy();
+    if (this.endless && this.elapsed >= this.nextRecast) {
+      this.castRigging();
+      this.nextRecast = (Math.floor(this.elapsed / RIGGING.endlessRecast) + 1) * RIGGING.endlessRecast;
+    }
+    for (const trap of this.traps) {
+      trap.age += dt;
+      trap.cooldown = Math.max(0, trap.cooldown - dt);
+      if (trap.cooldown < 1e-9) trap.cooldown = 0;
+    }
     for (const kind of FISH_KINDS) FISH_SPECS[kind].update?.(this, dt);
     this.moveFish(dt);
+    this.pullToBoat(dt);
+    this.pullToBait(dt);
+    const boat = { x: this.width / 2, y: this.height / 2 };
+    for (const fish of this.fish) if (!fish.captured) relaxPull(fish, boat, dt);
     this.escapeGolden();
     this.spawnFish(dt);
     this.spawnGoldenFish(dt);
     this.floatChest(dt);
     this.tickNet(dt);
+    this.snapTraps();
+    this.hitSeines();
     this.processCaptures();
     if (!this.endless) this.timeLeft = Math.max(0, this.timeLeft - dt);
   }
@@ -522,6 +586,88 @@ export class World {
     return this.eventStream;
   }
 
+  private pullToBoat(dt: number): void {
+    const stats = this.stats.boat;
+    const active = Math.min(dt, this.chumLeft);
+    this.chumLeft = Math.max(0, this.chumLeft - dt);
+    this.chumCooldown = Math.max(0, this.chumCooldown - dt);
+    if (this.chumLeft < 1e-9) this.chumLeft = 0;
+    if (this.chumCooldown < 1e-9) this.chumCooldown = 0;
+    const night = lanternPull(stats, this.timeOfDay);
+    if (active <= 0 && night <= 0) return;
+    const boat = { x: this.width / 2, y: this.height / 2 };
+    for (const fish of this.fish) {
+      if (fish.captured) continue;
+      const distance = Math.hypot(fish.x - boat.x, fish.y - boat.y);
+      let pull = stats.chum && distance <= stats.chumRadius ? active * stats.chumPull : 0;
+      if (distance <= stats.lanternRadius) pull += night * dt;
+      if (pull > 0) pullTowards(fish, boat, pull, boat);
+    }
+  }
+
+  private pullToBait(dt: number): void {
+    const { baitPull, baitRange } = this.stats.rigging;
+    if (baitPull <= 0 || this.traps.length === 0) return;
+    const boat = { x: this.width / 2, y: this.height / 2 };
+    for (const fish of this.fish) {
+      if (fish.captured) continue;
+      let closest: Trap | undefined;
+      let distance = baitRange;
+      for (const trap of this.traps) {
+        if (trap.cooldown > 0) continue;
+        const d = Math.hypot(fish.x - trap.x, fish.y - trap.y);
+        if (d < distance) { distance = d; closest = trap; }
+      }
+      if (closest) pullTowards(fish, closest, baitPull * dt, boat);
+    }
+  }
+
+  private snapTraps(): void {
+    const stats = this.stats.rigging;
+    for (const trap of this.traps) {
+      if (trap.cooldown > 0) continue;
+      const nearby = this.fishNear(trap, trap.radius).slice(0, stats.haul);
+      if (nearby.length === 0) continue;
+      for (const fish of nearby) this.damage(fish, stats.damage, "trap");
+      trap.cooldown = stats.resetSeconds * (this.frenzyActive ? stats.frenzyResetMult : 1);
+      this.emit({ type: "trap-snap", trapId: trap.id, x: trap.x, y: trap.y, hits: nearby.length });
+    }
+  }
+
+  private hitSeines(): void {
+    if (this.seineCooldowns.size > 0) {
+      const live = new Set(this.fish.filter(fish => !fish.captured).map(fish => fish.id));
+      for (const [id, until] of this.seineCooldowns) {
+        if (!live.has(id) || until <= this.elapsed + 1e-9) this.seineCooldowns.delete(id);
+      }
+    }
+    if (!this.stats.rigging.seine || this.traps.length < 2) return;
+    let events = 0;
+    for (const [index, trap] of this.traps.entries()) {
+      if (trap.partner === null || trap.partner <= index) continue;
+      const partner = this.traps[trap.partner];
+      if (!partner) continue;
+      for (const fish of this.fish) {
+        if (fish.captured || this.seineCooldowns.has(fish.id) || segmentDistance(fish, trap, partner) > RIGGING.seineReach) continue;
+        this.damage(fish, this.stats.rigging.seineDamage, "seine");
+        if (!fish.captured) this.seineCooldowns.set(fish.id, this.elapsed + RIGGING.seineCooldown);
+        // Damage applies to every fish, but visual cues have a small budget per step.
+        if (events < 4) {
+          this.emit({ type: "seine-hit", x: fish.x, y: fish.y });
+          events++;
+        }
+      }
+    }
+  }
+
+  private castRigging(): void {
+    if (this.stats.rigging.count <= 0) return;
+    this.riggingStream ??= createRng(Math.floor(this.rng() * 0x1_0000_0000));
+    this.traps = castTraps(this.swimArea(), this.width, this.height, this.stats.rigging, this.riggingStream);
+    // Snapshot the cast: age and cooldown keep changing on the live traps.
+    this.emit({ type: "trap-cast", traps: this.traps.map(trap => ({ ...trap })) });
+  }
+
   private pickKind(rng: Rng = this.rng): FishKind | undefined {
     const weights: Partial<Record<FishKind, number>> = {};
     for (const kind of FISH_KINDS) {
@@ -559,15 +705,17 @@ export class World {
 
   private moveFish(dt: number): void {
     const { rx, ry } = this.swimArea();
+    const boat = { x: this.width / 2, y: this.height / 2 };
     for (const fish of this.fish) {
       const spec = FISH_SPECS[fish.kind];
       // Path length per radian at this point on the ellipse, so speed is px/s everywhere.
       const arc = fish.orbit * Math.hypot(rx * Math.sin(fish.angle), ry * Math.cos(fish.angle));
       // A golden fish's extra speed applies to this step only; speedMult belongs to the type.
       const boost = fish.golden ? goldenSwim(this, fish, fish.golden, dt) : 1;
-      fish.angle += (fish.dir * spec.def.speed * fish.speedMult * boost * dt) / Math.max(arc, 1);
-      fish.wobblePhase += spec.def.wobbleSpeed * dt;
-      spec.move?.(this, fish, dt);
+      const swimDt = dt * lanternSpeed(fish, boat, this.stats.boat);
+      fish.angle += (fish.dir * spec.def.speed * fish.speedMult * boost * swimDt) / Math.max(arc, 1);
+      fish.wobblePhase += spec.def.wobbleSpeed * swimDt;
+      spec.move?.(this, fish, swimDt);
       const prevX = fish.x;
       const prevY = fish.y;
       this.place(fish);
@@ -685,6 +833,13 @@ export class World {
       this.chestAt = this.endless ? this.elapsed + range(this.eventRng, ...ENDLESS.chestGap) : null;
       this.chest = launchChest(this._width, this._height, this.eventRng);
     }
+    const chest = this.chest;
+    if (chest && !chest.snagged && this.stats.rigging.snagSeconds > 0 &&
+      this.traps.some(trap => chestInNet(chest, trap, trap.radius))) {
+      chest.snagged = true;
+      chest.snagLeft = this.stats.rigging.snagSeconds;
+      this.emit({ type: "snag", x: chest.x, y: chest.y });
+    }
     if (this.chest && !moveChest(this.chest, dt, this._width, this._height)) this.chest = null;
   }
 
@@ -718,7 +873,9 @@ export class World {
     const frenzyMult = frenzy ? this.stats.frenzyValueMult : 1;
     for (const { fish, source } of this.captureQueue.splice(0, MAX_CAPTURES_PER_STEP)) {
       this.updateCombo();
-      const sourceMult = source === "net" ? 1 : this.stats.abilityValueMult;
+      const rigging = source === "trap" || source === "seine";
+      if (rigging) this.trapCatches++;
+      const sourceMult = source === "net" || rigging ? 1 : this.stats.abilityValueMult;
       const goldenMult = fish.golden ? this.stats.goldenValueMult : 1;
       const value =
         FISH[fish.kind].value * this.stats.fish[fish.kind].valueMult * this.stats.valueMult * sourceMult * frenzyMult *

@@ -484,7 +484,8 @@ describe("Timed seed compatibility", () => {
       next: 0.5533206530380994 },
   ])("preserves main's round $round with seed $seed", fixture => {
     for (const guarantee of [undefined, {}, { chest: false, golden: false }]) {
-      const stats = fixture.full ? fullStats() : BASE_STATS;
+      // These replay fixtures predate both lanes, even after the tree gains their upgrades.
+      const stats = fixture.full ? { ...fullStats(), rigging: { ...BASE_STATS.rigging }, boat: { ...BASE_STATS.boat } } : BASE_STATS;
       const world = new World(stats, createRng(fixture.seed), 1280, 800,
         { round: fixture.round, final: fixture.final, ...(guarantee ? { guarantee } : {}) });
       while (!world.over && world.elapsed < 240) {
@@ -724,5 +725,342 @@ describe("Endless population and stability", () => {
       expect(progress).toBeLessThan(1);
     }
     expect(world.drainEvents()).toEqual([]);
+  });
+});
+
+describe("World trap casting", () => {
+  it("casts on round start and each endless minute, without drawing again from the world stream", () => {
+    const stats = { ...BASE_STATS, startFish: 0, spawnRateMult: 0, goldenRate: 0,
+      rigging: { ...BASE_STATS.rigging, count: 4, seine: true } };
+    const world = new World(stats, createRng(51), 1280, 800, { round: 1, final: false, endless: true });
+    const first = world.traps.map(t => [t.x, t.y]);
+    expect(world.drainEvents().filter(e => e.type === "trap-cast")).toHaveLength(1);
+    run(world, 60 - STEP);
+    expect(world.traps.map(t => [t.x, t.y])).toEqual(first);
+    world.update(STEP);
+    expect(world.traps.map(t => [t.x, t.y])).not.toEqual(first);
+    expect(world.drainEvents().filter(e => e.type === "trap-cast")).toHaveLength(1);
+    run(world, 60);
+    expect(world.drainEvents().filter(e => e.type === "trap-cast")).toHaveLength(1);
+  });
+
+  it("keeps timed nets in place, ages them and scales them on resize", () => {
+    const world = makeWorld({ startFish: 0, roundSeconds: 200, rigging: { ...BASE_STATS.rigging, count: 1 } });
+    const first = { ...world.traps[0]! };
+    run(world, 70);
+    expect(world.traps[0]).toMatchObject({ x: first.x, y: first.y });
+    expect(world.traps[0]!.age).toBeCloseTo(70);
+    world.resize(880, 660);
+    expect(world.traps[0]!.x).toBeCloseTo(first.x * 1.1);
+    expect(world.traps[0]!.y).toBeCloseTo(first.y * 1.1);
+  });
+});
+
+/** A quiet sea with a known net position, independent of the placement random stream. */
+function trapWorld(tweak?: (stats: Stats) => void, round?: RoundOptions): World {
+  const stats = structuredClone(BASE_STATS);
+  Object.assign(stats, { startFish: 0, spawnRateMult: 0, goldenRate: 0, roundSeconds: 100 });
+  Object.assign(stats.rigging, { count: 1, radius: 40, damage: 2, resetSeconds: 1, haul: 1 });
+  tweak?.(stats);
+  const world = new World(stats, createRng(42), 800, 600, round);
+  world.traps = [{ id: 1, x: 600, y: 300, radius: 40, cooldown: 0, partner: null, age: 0 }];
+  world.drainEvents();
+  return world;
+}
+
+function stillFish(world: World, x = 600, y = 300, kind: Fish["kind"] = "normal"): Fish {
+  const fish = world.spawn(kind, { at: { x, y } })!;
+  fish.speedMult = 0;
+  return fish;
+}
+
+describe("Trap snaps", () => {
+  it("hits the nearest haul, waits to re-arm, and counts only trap captures", () => {
+    const world = trapWorld();
+    const far = stillFish(world, 620);
+    const near = stillFish(world, 603);
+    world.update(STEP);
+    expect(near.captured).toBe(true);
+    expect(far.hp).toBe(far.maxHp);
+    expect(world.trapCatches).toBe(1);
+    expect(world.traps[0]!.cooldown).toBe(1);
+    expect(world.drainEvents()).toContainEqual({ type: "trap-snap", trapId: 1, x: 600, y: 300, hits: 1 });
+    run(world, 1 - STEP);
+    expect(far.captured).toBe(false);
+    world.update(STEP);
+    expect(far.captured).toBe(true);
+    expect(world.trapCatches).toBe(2);
+    const other = stillFish(world, 700);
+    world.capture(other, "net");
+    world.update(STEP);
+    expect(world.trapCatches).toBe(2);
+  });
+
+  it("supports an unlimited haul and applies armour through normal damage", () => {
+    const world = trapWorld(s => { s.rigging.haul = Infinity; s.ability.rare.armor = 1; });
+    for (let i = 0; i < 5; i++) stillFish(world, 600 + i);
+    const rare = stillFish(world, 610, 300, "rare");
+    world.update(STEP);
+    expect(world.trapCatches).toBe(5);
+    expect(rare.hp).toBe(rare.maxHp - 1);
+    expect(rare.hits).toBe(1);
+    expect(world.drainEvents()).toContainEqual({ type: "trap-snap", trapId: 1, x: 600, y: 300, hits: 6 });
+  });
+
+  it("halves the reset only for snaps during frenzy", () => {
+    const world = trapWorld(s => { s.rigging.frenzyResetMult = 0.5; s.roundSeconds = 20; }, { round: 5, final: false });
+    world.elapsed = 7;
+    stillFish(world);
+    world.update(STEP);
+    expect(world.frenzyActive).toBe(true);
+    expect(world.traps[0]!.cooldown).toBe(0.5);
+    const next = stillFish(world);
+    run(world, 0.5 - STEP);
+    expect(next.captured).toBe(false);
+    world.update(STEP);
+    expect(next.captured).toBe(true);
+    world.elapsed = 14;
+    run(world, 0.5);
+    stillFish(world);
+    world.update(STEP);
+    expect(world.traps[0]!.cooldown).toBe(1);
+  });
+
+  it("pays trap captures without the ability bonus, including golden fish", () => {
+    const world = trapWorld(s => { s.abilityValueMult = 9; s.rigging.haul = Infinity; s.valueMult = 3; });
+    stillFish(world);
+    const golden = world.spawn("normal", { at: { x: 600, y: 300 }, golden: true })!;
+    golden.speedMult = 0;
+    world.update(STEP);
+    expect(world.earned).toBe(33);
+    expect(world.bonusCount.golden).toBe(1);
+    expect(world.trapCatches).toBe(2);
+    expect(world.drainEvents().filter(e => e.type === "capture").every(e => e.source === "trap")).toBe(true);
+  });
+
+  it.each(["electric", "epic", "monster", "star", "goober"] as const)("fires a trapped %s's own capture ability", kind => {
+    const world = trapWorld(s => { s.rigging.damage = 100; s.ability.epic.chance = 1; });
+    const fish = stillFish(world, 600, 300, kind);
+    world.traps[0]!.x = fish.x;
+    world.traps[0]!.y = fish.y;
+    const nearby = stillFish(world, fish.x + 60, fish.y);
+    world.update(STEP);
+    expect(fish.captured).toBe(true);
+    expect(world.trapCatches).toBe(1);
+    if (kind === "star") expect(world.shots.length).toBeGreaterThan(0);
+    else if (kind === "goober") expect(world.fish.some(f => f.credit === "goober")).toBe(true);
+    else {
+      if (kind === "electric") expect(nearby.hits).toBeGreaterThan(0);
+      else { world.update(STEP); expect(nearby.captured).toBe(true); }
+    }
+  });
+});
+
+function seineWorld(): World {
+  const world = trapWorld(s => { s.rigging.seine = true; });
+  world.traps = [
+    { id: 1, x: 600, y: 210, radius: 40, cooldown: 99, partner: 1, age: 0 },
+    { id: 2, x: 600, y: 390, radius: 40, cooldown: 99, partner: 0, age: 0 },
+  ];
+  return world;
+}
+
+describe("Seine ropes", () => {
+  it("hits only the segment, once per fish per second even with overlapping ropes", () => {
+    const world = seineWorld();
+    world.traps.push(...world.traps.map((trap, index) => ({ ...trap, id: index + 3, partner: index === 0 ? 3 : 2 })));
+    const fish = stillFish(world);
+    fish.hp = 100;
+    const beyond = stillFish(world, 600, 450);
+    const away = stillFish(world, 630);
+    world.update(STEP);
+    expect(fish.hits).toBe(1);
+    expect(fish.hp).toBe(100 - world.stats.rigging.seineDamage);
+    expect(beyond.hits).toBe(0);
+    expect(away.hits).toBe(0);
+    run(world, 1 - STEP);
+    expect(fish.hits).toBe(1);
+    world.update(STEP);
+    expect(fish.hits).toBe(2);
+  });
+
+  it("uses normal damage, credits catches and pays without the ability multiplier", () => {
+    const world = seineWorld();
+    world.stats.rigging.seineDamage = 3;
+    world.stats.abilityValueMult = 10;
+    stillFish(world);
+    const rare = stillFish(world, 600, 310, "rare");
+    world.stats.ability.rare.armor = 1;
+    world.update(STEP);
+    expect(world.trapCatches).toBe(1);
+    expect(world.earned).toBe(1);
+    expect(rare.hp).toBe(rare.maxHp - 2);
+    expect(world.drainEvents()).toContainEqual(expect.objectContaining({ type: "capture", source: "seine", value: 1 }));
+  });
+
+  it("bounds hit events and removes cooldowns for fish that leave", () => {
+    const world = seineWorld();
+    for (let i = 0; i < 500; i++) { const fish = stillFish(world); fish.hp = 100; }
+    world.update(STEP);
+    expect(world.fish.every(fish => fish.hits === 1)).toBe(true);
+    const events = world.drainEvents().filter(e => e.type === "seine-hit");
+    expect(events.length).toBeGreaterThan(0);
+    expect(events.length).toBeLessThanOrEqual(4);
+    world.resize(200, 200);
+    expect(world.traps).toHaveLength(0);
+    world.fish.length = 0;
+    world.update(STEP);
+    const state = world as unknown as { seineCooldowns: Map<number, number> };
+    expect(state.seineCooldowns.size).toBe(0);
+  });
+});
+
+describe("Bait and snag", () => {
+  it("pulls towards the nearest armed net within range using fish offsets", () => {
+    const world = trapWorld(s => { s.rigging.baitPull = 60; s.rigging.baitRange = 180; });
+    world.traps.push({ id: 2, x: 550, y: 300, radius: 40, cooldown: 0, partner: null, age: 0 });
+    const fish = stillFish(world, 680);
+    const outside = stillFish(world, 200);
+    world.update(STEP);
+    expect(fish.offsetX).toBeCloseTo(-1);
+    expect(fish.offsetY).toBeCloseTo(0);
+    expect(outside.offsetX).toBe(0);
+    for (const trap of world.traps) trap.cooldown = 10;
+    world.update(STEP);
+    expect(fish.offsetX).toBeGreaterThan(-1);
+    expect(fish.offsetX).toBeLessThan(0);
+  });
+
+  it("never pulls a fish through the boat towards a far-side net", () => {
+    const world = trapWorld(s => { s.rigging.baitPull = 10000; s.rigging.baitRange = 1000; });
+    const fish = stillFish(world, 200);
+    run(world, 1);
+    expect(fish.x).toBeCloseTo(330);
+    expect(Math.hypot(fish.x - 400, fish.y - 300)).toBeGreaterThanOrEqual(70 - 1e-8);
+  });
+
+  it("snags a chest just once and lets it drift after the hold expires", () => {
+    const world = trapWorld(s => { s.rigging.snagSeconds = 1; });
+    world.chest = { x: 600, y: 300, vx: 45, vy: 0, hp: 10, maxHp: 10, age: 0, hitFlash: 0 };
+    world.update(STEP);
+    const x = world.chest.x;
+    run(world, 1 - STEP);
+    expect(world.chest.x).toBeCloseTo(x, 10);
+    expect(world.chest.age).toBeCloseTo(1);
+    run(world, 0.2);
+    expect(world.chest.x).toBeGreaterThan(x);
+    expect(world.drainEvents().filter(e => e.type === "snag")).toHaveLength(1);
+    const next = { ...world.chest, x: 600, age: 0, snagged: false, snagLeft: 0 };
+    world.chest = next;
+    world.update(STEP);
+    expect(world.drainEvents().filter(e => e.type === "snag")).toHaveLength(1);
+  });
+});
+
+/** The new lanes at their contract maxima, independent of when their tree nodes land. */
+function toolsStats(): Stats {
+  const stats = fullStats();
+  Object.assign(stats.rigging, { count: 4, resetSeconds: 5 * 0.85 ** 4, radius: 52, damage: 4,
+    haul: Infinity, seine: true, seineDamage: 1, baitPull: 45, baitRange: 110, snagSeconds: 4, frenzyResetMult: 0.5 });
+  Object.assign(stats.boat, { chum: true, chumCooldown: 20 * 0.85 ** 3, chumSeconds: 6,
+    chumRadius: 340, chumPull: 60, lanternRadius: 210, lanternSlow: 0.7 });
+  return stats;
+}
+
+describe("Fully upgraded tools", () => {
+  it("runs a day with recasts, chum, fish abilities and orientation changes using bounded live state", () => {
+    const world = new World(toolsStats(), createRng(19), 1280, 800, { round: 1, final: false, endless: true });
+    let casts = 0;
+    let snaps = 0;
+    let ropeHits = 0;
+    let peakEvents = 0;
+    let finite = true;
+    for (let step = 0; step < 240 / STEP; step++) {
+      if (step === 80 / STEP) world.resize(390, 844);
+      if (step === 160 / STEP) world.resize(1280, 800);
+      if (world.chumReady) world.chum();
+      world.pointer = { x: world.width / 2 + Math.sin(world.elapsed) * world.width * 0.3,
+        y: world.height / 2 + Math.cos(world.elapsed * 0.7) * world.height * 0.3 };
+      world.update(STEP);
+      const events = world.drainEvents();
+      casts += events.filter(e => e.type === "trap-cast").length;
+      snaps += events.filter(e => e.type === "trap-snap").length;
+      const seine = events.filter(e => e.type === "seine-hit").length;
+      ropeHits += seine;
+      expect(seine).toBeLessThanOrEqual(4);
+      peakEvents = Math.max(peakEvents, events.length);
+      for (const trap of world.traps) {
+        const cornerX = trap.x < world.width * 0.22 || trap.x > world.width * 0.78;
+        const cornerY = trap.y < world.height * 0.22 || trap.y > world.height * 0.78;
+        expect(cornerX && cornerY).toBe(false);
+      }
+      for (const fish of world.fish) finite &&= Number.isFinite(fish.x) && Number.isFinite(fish.y);
+      const state = world as unknown as { seineCooldowns: Map<number, number> };
+      expect(state.seineCooldowns.size).toBeLessThanOrEqual(120);
+    }
+    expect(casts).toBe(5);
+    expect(snaps).toBeGreaterThan(20);
+    expect(ropeHits).toBeGreaterThan(0);
+    expect(world.trapCatches).toBeGreaterThan(20);
+    expect(world.bestStarHits).toBeGreaterThan(0);
+    expect(world.bonusCount.golden).toBeGreaterThan(0);
+    expect(peakEvents).toBeLessThan(2000);
+    expect(finite).toBe(true);
+  });
+
+  it("reports the cost per step of fully upgraded timed rounds", () => {
+    const samples: number[] = [];
+    for (const tools of [false, true]) {
+      const stats = tools ? toolsStats() : fullStats();
+      if (!tools) { stats.rigging = { ...BASE_STATS.rigging }; stats.boat = { ...BASE_STATS.boat }; }
+      const world = new World(stats, createRng(19), 1280, 800, { round: 5, final: false });
+      let steps = 0;
+      const start = performance.now();
+      while (!world.over) {
+        if (world.chumReady) world.chum();
+        world.pointer = { x: 640 + Math.sin(world.elapsed) * 400, y: 400 + Math.cos(world.elapsed * 0.7) * 250 };
+        world.update(STEP);
+        world.drainEvents();
+        steps++;
+      }
+      samples.push((performance.now() - start) / steps);
+      expect(world.totalCaught).toBeGreaterThan(1000);
+    }
+    console.log(`Full-upgrade step: tools off ${samples[0]!.toFixed(3)} ms, tools on ${samples[1]!.toFixed(3)} ms`);
+  });
+});
+
+describe("Seine recast immunity", () => {
+  it("keeps a fish's one-second immunity when old and new ropes overlap", () => {
+    const stats = structuredClone(BASE_STATS);
+    Object.assign(stats, { startFish: 0, spawnRateMult: 0, goldenRate: 0 });
+    Object.assign(stats.rigging, { count: 2, seine: true });
+    const make = () => new World(stats, createRng(42), 800, 600, { round: 1, final: false, endless: true });
+    const preview = make();
+    run(preview, 60);
+    const [a, b] = preview.traps;
+    expect(preview.traps).toHaveLength(2);
+    const x = (a!.x + b!.x) / 2;
+    const y = (a!.y + b!.y) / 2;
+    const world = make();
+    world.elapsed = 60 - 2 * STEP;
+    world.traps = [
+      { id: 1, x: x - 90, y, radius: 34, cooldown: 5, partner: 1, age: 0 },
+      { id: 2, x: x + 90, y, radius: 34, cooldown: 5, partner: 0, age: 0 },
+    ];
+    const fish = stillFish(world, x, y);
+    // Midpoints of valid ropes can lie inside the minimum orbit, so position this test fish exactly.
+    fish.offsetX += x - fish.x;
+    fish.offsetY += y - fish.y;
+    fish.x = x;
+    fish.y = y;
+    fish.hp = 100;
+    world.update(STEP);
+    expect(fish.hits).toBe(1);
+    world.update(STEP);
+    expect(world.elapsed).toBe(60);
+    expect(fish.hits).toBe(1);
+    run(world, 1 - STEP);
+    expect(fish.hits).toBe(2);
   });
 });
