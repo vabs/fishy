@@ -2044,7 +2044,6 @@ body:has(#end-panel:not([hidden]))::before {
   color-scheme: light;
 }
 .achievements-header {
-  position: sticky;
   top: 0;
   z-index: 2;
   padding-block: 8px 12px;
