@@ -20,6 +20,21 @@ describe("describeChanges", () => {
 });
 
 describe("nodeChanges", () => {
+  it("shows trap count, reset seconds and an unlimited haul in player terms", () => {
+    expect(nodeChanges(BASE_STATS, getNode("rigging.count")!, { "rigging.unlock": 1 })).toEqual([
+      { label: "Trap nets", before: "1", after: "2" },
+    ]);
+    expect(nodeChanges(BASE_STATS, getNode("rigging.reset")!, {})).toEqual([
+      { label: "Reset", before: "5.0 s", after: "4.3 s" },
+    ]);
+    expect(nodeChanges(BASE_STATS, getNode("rigging.haul")!, { "rigging.haul": 1 })).toEqual([
+      { label: "Haul", before: "3", after: "all" },
+    ]);
+    expect(nodeChanges(BASE_STATS, getNode("rigging.haul")!, { "rigging.haul": 2 })).toEqual([
+      { label: "Haul", before: "1", after: "all" },
+    ]);
+  });
+
   it("shows the next level, or the whole effect once maxed", () => {
     const radius = getNode("net.radius")!;
     expect(nodeChanges(BASE_STATS, radius, { "net.radius": 2 })).toEqual([{ label: "Net radius", before: "56 px", after: "64 px" }]);

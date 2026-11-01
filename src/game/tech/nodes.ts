@@ -166,6 +166,128 @@ export const TECH_NODES: readonly TechNode[] = [
     },
   },
 
+  // Rigging. Mid-game entry beside Huge Net, then specialised trap tools further out.
+  {
+    id: "rigging.unlock",
+    branch: "rigging",
+    name: "Trap Net",
+    description: "Cast a trap net at a random fishing spot each round. It snaps on nearby fish, then resets",
+    maxLevel: 1,
+    cost: { base: 5600, growth: 1 },
+    requires: ["net.radius2"],
+    apply(stats) {
+      stats.rigging.count += 1;
+    },
+  },
+  {
+    id: "rigging.count",
+    branch: "rigging",
+    name: "More Nets",
+    description: "+1 trap net per level, up to 4 nets cast each round",
+    maxLevel: 3,
+    cost: { base: 9400, growth: 2 },
+    requires: ["rigging.unlock"],
+    apply(stats, level) {
+      stats.rigging.count += level;
+    },
+  },
+  {
+    id: "rigging.reset",
+    branch: "rigging",
+    name: "Quick Reset",
+    description: "Trap nets reset 15% sooner per level",
+    maxLevel: 4,
+    cost: { base: 6300, growth: 1.8 },
+    requires: ["rigging.unlock"],
+    apply(stats, level) {
+      stats.rigging.resetSeconds *= 0.85 ** level;
+    },
+  },
+  {
+    id: "rigging.mesh",
+    branch: "rigging",
+    name: "Wide Mesh",
+    description: "+6 px trap net radius per level",
+    maxLevel: 3,
+    cost: { base: 9400, growth: 1.8 },
+    requires: ["rigging.reset"],
+    apply(stats, level) {
+      stats.rigging.radius += 6 * level;
+    },
+  },
+  {
+    id: "rigging.strength",
+    branch: "rigging",
+    name: "Strong Mesh",
+    description: "+1 damage per trap net snap per level",
+    maxLevel: 3,
+    cost: { base: 9400, growth: 2 },
+    requires: ["rigging.count"],
+    apply(stats, level) {
+      stats.rigging.damage += level;
+    },
+  },
+  {
+    id: "rigging.haul",
+    branch: "rigging",
+    name: "Big Haul",
+    description: "Level 1: hit 2 more fish per snap. Level 2: hit every fish inside the trap net",
+    maxLevel: 2,
+    cost: { base: 38000, growth: 3 },
+    requires: ["rigging.strength"],
+    apply(stats, level) {
+      stats.rigging.haul += level >= 2 ? Infinity : 2;
+    },
+  },
+  {
+    id: "rigging.seine",
+    branch: "rigging",
+    name: "Seine Line",
+    description: "Join trap nets in pairs with a rope that damages fish crossing it",
+    maxLevel: 1,
+    cost: { base: 110000, growth: 1 },
+    requires: ["rigging.count", "rigging.strength"],
+    apply(stats) {
+      stats.rigging.seine = true;
+    },
+  },
+  {
+    id: "rigging.bait",
+    branch: "rigging",
+    name: "Bait",
+    description: "+15 px/s pull towards armed trap nets per level, for fish within bait range",
+    maxLevel: 3,
+    cost: { base: 26000, growth: 2 },
+    requires: ["rigging.mesh"],
+    apply(stats, level) {
+      stats.rigging.baitPull += 15 * level;
+    },
+  },
+  {
+    id: "rigging.snag",
+    branch: "rigging",
+    name: "Snag",
+    description: "Trap nets hold a passing treasure chest still for 4 s, once per chest",
+    maxLevel: 1,
+    cost: { base: 68000, growth: 1 },
+    requires: ["rigging.bait"],
+    apply(stats) {
+      stats.rigging.snagSeconds += 4;
+    },
+  },
+  {
+    id: "rigging.frenzy",
+    branch: "rigging",
+    name: "Frenzy Rigging",
+    description: "Trap nets reset twice as fast during a Feeding Frenzy",
+    maxLevel: 1,
+    cost: { base: 160000, growth: 1 },
+    requires: ["rigging.reset", "rigging.seine"],
+    apply(stats) {
+      stats.rigging.frenzyResetMult *= 0.5;
+    },
+  },
+
   // Time
   {
     id: "time.round",
