@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FISH } from "./fish";
+import { FISH, FISH_KINDS } from "./fish";
 import { createRng } from "./rng";
 import { SEA } from "./sea";
 import { BASE_STATS, type Stats } from "./stats";
@@ -617,8 +617,9 @@ describe("Endless frenzy waves", () => {
     run(world, 1);
     const before = world.fish.length;
     run(world, 6);
-    expect(world.fish.length - before).toBeGreaterThanOrEqual(23);
-    expect(world.fish.length - before).toBeLessThanOrEqual(25);
+    // The Reef boost stacks with the frenzy: 1 × 1.2 × 4 × 6 seconds.
+    expect(world.fish.length - before).toBeGreaterThanOrEqual(28);
+    expect(world.fish.length - before).toBeLessThanOrEqual(30);
   });
 });
 
@@ -1411,4 +1412,251 @@ it("releases the wind's offset state completely after an endless storm", () => {
     checked = true;
   }
   expect(checked).toBe(true);
+});
+
+
+describe("Endless biomes", () => {
+  const options: RoundOptions = { round: 1, final: false, endless: true };
+
+  function biomeWorld(): World {
+    const stats = structuredClone(BASE_STATS);
+    Object.assign(stats, { startFish: 0, spawnRateMult: 0, goldenRate: 0, frenzySpawnMult: 1 });
+    Object.assign(stats.ability.uncommon, { schoolMin: 1, schoolMax: 1 });
+    return new World(stats, createRng(314), 800, 600, options);
+  }
+
+  it("announces each boundary once, remembers visits and keeps swimming fish", () => {
+    const world = biomeWorld();
+    expect(world.biome).toEqual({ biome: "reef", next: "trench", progress: 0, blend: 0 });
+    expect([...world.biomesReached]).toEqual(["reef"]);
+    expect(world.graveyardChests).toBe(0);
+    expect(world.drainEvents().filter(e => e.type === "biome")).toEqual([]);
+    const fish = world.spawn("normal")!;
+    run(world, 300 - STEP, () => { world.drainEvents(); });
+    const hp = fish.hp;
+    const maxHp = fish.maxHp;
+    expect(world.biome?.biome).toBe("reef");
+    world.update(STEP);
+    expect(world.elapsed).toBe(300);
+    expect(world.biome?.biome).toBe("trench");
+    expect(world.fish).toContain(fish);
+    expect(fish.hp).toBe(hp);
+    expect(fish.maxHp).toBe(maxHp);
+    expect([...world.biomesReached]).toEqual(["reef", "trench"]);
+    expect(world.drainEvents().filter(e => e.type === "biome")).toEqual([{ type: "biome", biome: "trench" }]);
+    const boundaries: { at: number; biome: string }[] = [];
+    for (let step = 0; step < 600 / STEP; step++) {
+      world.update(STEP);
+      for (const event of world.drainEvents()) {
+        if (event.type === "biome") boundaries.push({ at: world.elapsed, biome: event.biome });
+      }
+    }
+    expect(boundaries).toEqual([{ at: 600, biome: "graveyard" }, { at: 900, biome: "reef" }]);
+    expect([...world.biomesReached]).toEqual(["reef", "trench", "graveyard"]);
+    world.finish();
+    world.drainEvents();
+    run(world, 301);
+    expect(world.elapsed).toBe(900);
+    expect(world.drainEvents()).toEqual([]);
+  });
+
+  it("keeps timed rounds outside the biome clock", () => {
+    const world = makeWorld({ startFish: 0, goldenRate: 0, chestChance: 0, roundSeconds: 1000 });
+    run(world, 901);
+    expect(world.biome).toBeUndefined();
+    expect(world.biomesReached.size).toBe(0);
+    expect(world.graveyardChests).toBe(0);
+    expect(world.drainEvents().filter(e => e.type === "biome")).toEqual([]);
+  });
+
+  it("does not draw world randomness for biome clocks or boundary events", () => {
+    const world = biomeWorld();
+    const reference = biomeWorld();
+    run(world, 1200, () => { world.drainEvents(); });
+    for (let i = 0; i < 10; i++) expect(world.biome?.biome).toBe("trench");
+    expect(world.rng()).toBe(reference.rng());
+  });
+
+  it.each([
+    [0, [1.2, 1.2, 1, 1, 1, 1, 1, 1]],
+    [300, [1, 1, 2, 1.5, 1, 1, 1, 1]],
+    [600, [1, 1, 1, 1, 1, 1.5, 1.5, 1]],
+  ] as const)("applies only the unlocked kinds' biome spawn multipliers at %i", (elapsed, multipliers) => {
+    for (const [index, kind] of FISH_KINDS.entries()) {
+      const world = biomeWorld();
+      run(world, elapsed, () => { world.drainEvents(); });
+      expect(world.sea).toBe("clear");
+      const before = structuredClone(world.stats);
+      world.stats.spawnRateMult = 1;
+      // Every other kind is locked, including the kinds this biome would favour.
+      for (const k of FISH_KINDS) world.stats.fish[k].rate = k === kind ? 5 : 0;
+      let spawned = 0;
+      run(world, 2, () => {
+        spawned += world.fish.length;
+        expect(world.fish.every(fish => fish.kind === kind)).toBe(true);
+        world.fish.length = 0;
+      });
+      spawned += world.fish.length;
+      expect(Math.abs(spawned - 10 * multipliers[index]!)).toBeLessThanOrEqual(1);
+      expect(world.fish.every(fish => fish.kind === kind)).toBe(true);
+      expect(world.stats.fish[kind].rateMult).toBe(before.fish[kind].rateMult);
+    }
+  });
+
+  it("switches spawn clocks at the boundary", () => {
+    const world = biomeWorld();
+    run(world, 300 - STEP, () => { world.drainEvents(); });
+    world.stats.spawnRateMult = 1;
+    world.stats.fish.rare = { rate: 60, rateMult: 1, valueMult: 1 };
+    world.stats.fish.normal.rate = 0;
+    world.update(STEP);
+    expect(world.countOf("rare")).toBe(2);
+    world.update(STEP);
+    expect(world.countOf("rare")).toBe(4);
+  });
+
+  it("keeps partial spawn progress when the biome changes", () => {
+    const stats = structuredClone(BASE_STATS);
+    Object.assign(stats, { startFish: 0, spawnRateMult: 0, goldenRate: 0 });
+    const world = new World(stats, () => 0, 800, 600, options);
+    run(world, 300 - 3 * STEP, () => { world.drainEvents(); });
+    stats.spawnRateMult = 1;
+    stats.fish.normal.rate = 0;
+    stats.fish.rare.rate = 20;
+    // Two Reef steps build 2/3 of a spawn; the first Trench step adds another 2/3.
+    run(world, 2 * STEP);
+    expect(world.countOf("rare")).toBe(0);
+    world.update(STEP);
+    expect(world.elapsed).toBe(300);
+    expect(world.countOf("rare")).toBe(1);
+  });
+
+  it("stacks Reef spawn rates with Bloom and upgrade multipliers without changing stats", () => {
+    let checked = false;
+    for (let seed = 0; seed < 12 && !checked; seed++) {
+      const stats = structuredClone(BASE_STATS);
+      Object.assign(stats, { startFish: 0, spawnRateMult: 0, goldenRate: 0 });
+      const world = new World(stats, createRng(seed), 800, 600, options);
+      run(world, 150, () => { world.drainEvents(); });
+      if (world.sea !== "bloom") continue;
+      stats.spawnRateMult = 2;
+      stats.fish.normal = { rate: 5, rateMult: 2, valueMult: 1 };
+      const snapshot = structuredClone(stats);
+      run(world, 2);
+      expect(Math.abs(world.fish.length - 60)).toBeLessThanOrEqual(1);
+      expect(world.fish.every(f => f.maxHp === FISH.normal.hp * 1.5)).toBe(true);
+      expect(world.countOf("rare")).toBe(0);
+      expect(stats).toEqual(snapshot);
+      checked = true;
+    }
+    expect(checked).toBe(true);
+  });
+
+  it.each([[0, 20], [300, 30], [600, 20]] as const)("uses the golden arrival multiplier at %i", (elapsed, expected) => {
+    const world = biomeWorld();
+    run(world, elapsed, () => { world.drainEvents(); });
+    world.stats.goldenRate = 10;
+    run(world, 2 + STEP);
+    expect(world.drainEvents().filter(e => e.type === "golden")).toHaveLength(expected);
+    expect(world.fish.every(f => f.kind === "normal")).toBe(true);
+  });
+
+  it("keeps goldens disabled at zero rate and never picks locked kinds", () => {
+    const world = biomeWorld();
+    run(world, 310, () => { world.drainEvents(); });
+    expect(world.fish).toEqual([]);
+    expect(world.drainEvents().filter(e => e.type === "golden")).toEqual([]);
+    for (const kind of FISH_KINDS) world.stats.fish[kind].rate = 0;
+    world.stats.goldenRate = 10;
+    run(world, 2);
+    expect(world.fish).toEqual([]);
+    expect(world.drainEvents().filter(e => e.type === "golden")).toEqual([]);
+  });
+
+  it("weights golden kinds by the biome's unlocked spawn rates", () => {
+    const world = biomeWorld();
+    run(world, 300, () => { world.drainEvents(); });
+    world.stats.fish.normal.rate = 1;
+    world.stats.fish.rare = { rate: 1, rateMult: 1, valueMult: 1 };
+    let rare = 0;
+    for (let i = 0; i < 1000; i++) {
+      const fish = world.spawnGolden()!;
+      if (fish.kind === "rare") rare++;
+      expect(["normal", "rare"]).toContain(fish.kind);
+      world.fish.length = 0;
+    }
+    expect(rare).toBeGreaterThan(620);
+    expect(rare).toBeLessThan(710);
+  });
+
+  it("shortens the outstanding chest wait immediately on entering the Graveyard", () => {
+    const world = biomeWorld();
+    run(world, 600 - STEP, () => { world.drainEvents(); });
+    const state = world as unknown as { chestAt: number };
+    state.chestAt = 690;
+    world.chest = null;
+    world.update(STEP);
+    expect(state.chestAt).toBe(630);
+    run(world, 30 - STEP);
+    expect(world.chest).toBeNull();
+    world.update(STEP);
+    expect(world.chest).not.toBeNull();
+    expect(state.chestAt - world.elapsed).toBeGreaterThanOrEqual(20);
+    expect(state.chestAt - world.elapsed).toBeLessThanOrEqual(100 / 3);
+  });
+
+  it("restores the outstanding chest wait when leaving the Graveyard", () => {
+    const world = biomeWorld();
+    run(world, 900 - STEP, () => { world.drainEvents(); });
+    const state = world as unknown as { chestAt: number };
+    state.chestAt = 920;
+    world.chest = null;
+    world.update(STEP);
+    expect(state.chestAt).toBe(960);
+    run(world, 60 - STEP);
+    expect(world.chest).toBeNull();
+    world.update(STEP);
+    expect(world.chest).not.toBeNull();
+    expect(state.chestAt - world.elapsed).toBeGreaterThanOrEqual(60);
+    expect(state.chestAt - world.elapsed).toBeLessThanOrEqual(100);
+  });
+
+  it("never replaces a floating chest when the shortened wait is due", () => {
+    const world = biomeWorld();
+    run(world, 600, () => { world.drainEvents(); });
+    const state = world as unknown as { chestAt: number };
+    state.chestAt = 601;
+    const chest = { x: 200, y: 200, vx: 0, vy: 0, hp: 10, maxHp: 10, age: 0, hitFlash: 0 };
+    world.chest = chest;
+    run(world, 35);
+    expect(world.chest).toBe(chest);
+    world.chest = null;
+    world.update(STEP);
+    expect(world.chest).not.toBeNull();
+    expect(state.chestAt - world.elapsed).toBeGreaterThanOrEqual(20);
+    expect(state.chestAt - world.elapsed).toBeLessThanOrEqual(100 / 3);
+  });
+
+  it("counts chests by the biome where they open, including both sides of a boundary", () => {
+    const world = biomeWorld();
+    run(world, 600 - 2 * STEP, () => { world.drainEvents(); });
+    world.stats.netDamage = 100;
+    world.stats.tickSeconds = STEP;
+    const open = () => {
+      world.chest = { x: 200, y: 200, vx: 0, vy: 0, hp: 1, maxHp: 1, age: 0, hitFlash: 0 };
+      world.pointer = { x: 200, y: 200 };
+      world.update(STEP);
+    };
+    open();
+    expect(world.graveyardChests).toBe(0);
+    open();
+    expect(world.elapsed).toBe(600);
+    expect(world.graveyardChests).toBe(1);
+    world.pointer = null;
+    run(world, 300 - STEP, () => { world.drainEvents(); });
+    open();
+    expect(world.elapsed).toBe(900);
+    expect(world.graveyardChests).toBe(1);
+    expect(world.bonusCount.treasure).toBe(3);
+  });
 });

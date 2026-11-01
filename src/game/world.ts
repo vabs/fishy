@@ -1,4 +1,5 @@
 import { BOAT_CLEARANCE, lanternPull, lanternSpeed, pullTowards, relaxPull, resizePull } from "./boat";
+import { BIOME, biomeAt, biomeChestGapMult, biomeGoldenMult, biomeSpawnMult, type Biome } from "./biome";
 import { CHEST, chestInNet, chestTime, chestValue, launchChest, moveChest, type Chest, type ChestReward } from "./chest";
 import { FISH, FISH_KINDS, FISH_SPECS, type FishDef, type FishKind } from "./fish";
 import { GOLDEN, goldenSwim, newGoldenState, type GoldenState } from "./golden";
@@ -124,6 +125,7 @@ export type WorldEvent =
   | { type: "time-bonus"; x: number; y: number; seconds: number }
   | { type: "frenzy"; phase: "start" | "end" }
   | { type: "sea"; phase: "start" | "end"; state: SeaState }
+  | { type: "biome"; biome: Biome }
   /** A golden fish appeared. */
   | { type: "golden"; kind: FishKind; x: number; y: number }
   /** A golden fish wasn't caught in time and dived away. It's already gone from `fish`. */
@@ -225,7 +227,12 @@ export class World {
   frenzyEarned = 0;
   /** Extra money from storm and fog, already included in the catch totals. */
   seaEarned = 0;
+  /** Chests opened in the Sunken Graveyard during this Endless trip. */
+  graveyardChests = 0;
+  /** Biomes visited this trip, in first-visit order; empty in timed rounds. */
+  biomesReached = new Set<Biome>();
 
+  private biomeIndex = 0;
   private currentSea: SeaState;
   private windAngle = 0;
   private seaStarted = 0;
@@ -273,6 +280,7 @@ export class World {
     readonly round: RoundOptions = { round: 1, final: false },
   ) {
     this.currentSea = this.endless ? "clear" : round.sea ?? "clear";
+    if (this.endless) this.biomesReached.add("reef");
     this.timeLeft = this.endless ? Infinity : stats.roundSeconds;
     // Only frenzy rounds and endless draw for a wave, so other timed rounds replay as before.
     if (this.endless || isFrenzyRound(round)) {
@@ -335,6 +343,11 @@ export class World {
   /** Endless day phase: golden hour at 0, night at 0.5; absent in timed rounds. */
   get timeOfDay(): number | undefined {
     return this.endless ? (this.elapsed % ENDLESS.dayLength) / ENDLESS.dayLength : undefined;
+  }
+
+  /** Endless biome clock and visual transition; absent in timed rounds. */
+  get biome(): ReturnType<typeof biomeAt> | undefined {
+    return this.endless ? biomeAt(this.elapsed) : undefined;
   }
 
   /** True while thrown chum is still pulling fish. */
@@ -480,6 +493,7 @@ export class World {
       this.elapsed += dt;
     }
     this.announceFrenzy();
+    this.announceBiome();
     this.rotateSea();
     if (this.endless && this.elapsed >= this.nextRecast) {
       this.castRigging();
@@ -649,6 +663,23 @@ export class World {
     this.currentSea = state;
   }
 
+  /** Announces boundaries without randomness and carries the pending chest's progress across them. */
+  private announceBiome(): void {
+    if (!this.endless) return;
+    const index = Math.floor(this.elapsed / BIOME.length);
+    while (this.biomeIndex < index) {
+      const previous = biomeAt(this.biomeIndex * BIOME.length).biome;
+      const boundary = ++this.biomeIndex * BIOME.length;
+      const biome = biomeAt(boundary).biome;
+      if (this.chestAt !== null && this.chestAt > boundary) {
+        const ratio = biomeChestGapMult(biome) / biomeChestGapMult(previous);
+        this.chestAt = boundary + (this.chestAt - boundary) * ratio;
+      }
+      this.biomesReached.add(biome);
+      this.emit({ type: "biome", biome });
+    }
+  }
+
   /** Rolls on fixed endless-only boundaries; a selected state waits for a whole wave-free window. */
   private rotateSea(): void {
     const rng = this.weatherStream;
@@ -762,11 +793,13 @@ export class World {
 
   private pickKind(rng: Rng = this.rng): FishKind | undefined {
     const weights: Partial<Record<FishKind, number>> = {};
+    const biome = this.biome?.biome;
     for (const kind of FISH_KINDS) {
       const max = FISH[kind].maxOnScreen;
       if (max !== undefined && this.countOf(kind) >= max) continue;
       // Proportions only: the global spawn multiplier is the same for every type.
-      weights[kind] = this.stats.fish[kind].rate * this.stats.fish[kind].rateMult;
+      weights[kind] = this.stats.fish[kind].rate * this.stats.fish[kind].rateMult *
+        (biome === undefined ? 1 : biomeSpawnMult(biome, kind));
     }
     return pickWeighted(rng, weights);
   }
@@ -886,7 +919,8 @@ export class World {
 
   /** Golden fish arrive on their own clock, not as a share of spawns. */
   private spawnGoldenFish(dt: number): void {
-    const rate = this.stats.goldenRate;
+    const biome = this.biome?.biome;
+    const rate = this.stats.goldenRate * (biome === undefined ? 1 : biomeGoldenMult(biome));
     if (!this.hasGolden || rate <= 0) return;
     this.goldenProgress += rate * dt;
     while (this.goldenProgress >= 1) {
@@ -904,8 +938,10 @@ export class World {
     const wave = this.frenzy;
     const front = this.frenzyFront;
     const mult = front === null ? 1 : this.stats.frenzySpawnMult;
+    const biome = this.biome?.biome;
     for (const kind of FISH_KINDS) {
-      const rate = spawnRate(this.stats, kind) * mult * (this.sea === "bloom" ? SEA.bloomSpawn : 1);
+      const rate = spawnRate(this.stats, kind) * mult * (this.sea === "bloom" ? SEA.bloomSpawn : 1) *
+        (biome === undefined ? 1 : biomeSpawnMult(biome, kind));
       if (rate <= 0) continue;
       // Each type starts part-way to its first spawn, so types don't all arrive in step.
       let progress = (this.spawnTimers.get(kind) ?? this.rng()) + rate * dt;
@@ -979,7 +1015,8 @@ export class World {
   /** The chest appears on time, drifts across, and is gone if it reaches the far edge unopened. */
   private floatChest(dt: number): void {
     if (this.chestAt !== null && this.elapsed >= this.chestAt && (!this.endless || !this.chest)) {
-      this.chestAt = this.endless ? this.elapsed + range(this.eventRng, ...ENDLESS.chestGap) : null;
+      this.chestAt = this.endless ? this.elapsed + range(this.eventRng, ...ENDLESS.chestGap) *
+        biomeChestGapMult(this.biome!.biome) : null;
       this.chest = launchChest(this._width, this._height, this.eventRng);
     }
     const chest = this.chest;
@@ -1001,6 +1038,7 @@ export class World {
     const value = chestValue(this.stats);
     this.earned += value;
     this.bonusCount.treasure++;
+    if (this.biome?.biome === "graveyard") this.graveyardChests++;
     this.bonusEarned.treasure += value;
     const reward: ChestReward = this.eventRng() < 0.5 && !this.endless ? "time" : "golden";
     this.emit({ type: "chest-open", x: chest.x, y: chest.y, value, reward });
