@@ -39,8 +39,6 @@ const LIMITS: Record<SfxKind, VoiceLimit> = {
   achievement: { gap: 1.2, voices: 1 },
 };
 const MAX_VOICES = 8;
-/** Catches still waiting for a voice after this long are dropped: they'd sound late. */
-const CATCH_PATIENCE = 0.15;
 /** How long a catch counts as sounding, s: the audible part of its tail. */
 const CATCH_LENGTH = 0.16;
 /** Gap between the notes of an Electric current, s: one note per jump. */
@@ -63,7 +61,6 @@ function pickOne(items: readonly number[]): number {
 
 export class Sfx {
   private gate = new SfxGate(MAX_VOICES, LIMITS);
-  private pending = { count: 0, combo: 0, since: 0 };
   /** Start times of recent catch notes, to tell a steady stream from the odd catch. */
   private recentCatches: number[] = [];
 
@@ -89,39 +86,23 @@ export class Sfx {
   }
 
   /** `count` fish caught this frame; `combo` is the highest combo count among them. */
-  catches(count: number, combo: number): void {
+  catches(count: number, combo: number): number | null {
     const ctx = this.ctx;
-    if (!ctx || count <= 0) return;
-    if (this.pending.count === 0) this.pending.since = ctx.currentTime;
-    this.pending.count += count;
-    this.pending.combo = Math.max(this.pending.combo, combo);
-    this.flush();
-  }
-
-  /** Plays waiting catches once a catch voice is free. Call every frame. */
-  flush(): void {
-    const pending = this.pending;
-    if (pending.count === 0) return;
-    const ctx = this.ctx;
-    if (!ctx || ctx.currentTime - pending.since > CATCH_PATIENCE) {
-      pending.count = 0;
-      pending.combo = 0;
-      return;
-    }
+    if (!ctx || count <= 0) return null;
+    // Batch only this frame. A blocked catch is dropped, never replayed after its fish is gone.
     const voice = this.start("catch", CATCH_LENGTH);
-    if (!voice) return;
+    if (!voice) return null;
     this.recentCatches = this.recentCatches.filter((time) => voice.time - time < 0.5);
     this.recentCatches.push(voice.time);
-    const level = batchLevel(pending.count);
+    const level = batchLevel(count);
     const gain = LEVEL.catch * level * catchStreamLevel(this.recentCatches.length);
-    const freq = this.hz(catchDegree(pending.combo));
+    const freq = this.hz(catchDegree(combo));
     pluck(ctx, voice.out, { time: voice.time, freq, gain, decay: 0.3, bright: 0.25 + 0.2 * (level - 1) });
     // Several at once: add the octave above, for a fuller note rather than a louder one.
-    if (pending.count >= 3) {
+    if (count >= 3) {
       pluck(ctx, voice.out, { time: voice.time, freq: freq * 2, gain: (gain * (level - 1)) / 1.2, decay: 0.22, bright: 0.1 });
     }
-    pending.count = 0;
-    pending.combo = 0;
+    return voice.time;
   }
 
   /** An Electric current: one rising note per jump. */

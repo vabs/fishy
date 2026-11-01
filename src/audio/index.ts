@@ -10,6 +10,22 @@ export type { AudioSettings } from "./settings";
 
 export type Screen = "title" | "hub" | "round" | "summary" | "end";
 
+interface CatchTiming {
+  /** AudioContext time when this capture frame reaches audio.frame. */
+  frameTime: number;
+  /** Shared onset of this batch's fundamental and optional octave; null when dropped. */
+  noteTime: number | null;
+  count: number;
+  combo: number;
+}
+
+declare global {
+  interface Window {
+    /** Opt-in diagnostics: Vite DEV with ?audioLatency only. Times are in seconds, before device latency. */
+    __fishyAudio?: { readonly context: AudioContext | null; catches: CatchTiming[] };
+  }
+}
+
 /**
  * The game's sound, as main.ts sees it: tell it what's on screen, what was bought, and each frame's
  * world events. It decides what to play. The simulation itself knows nothing about audio.
@@ -45,6 +61,12 @@ export function createGameAudio(): GameAudio {
   const engine = new AudioEngine(loadAudioSettings());
   const music = new Music();
   const sfx = new Sfx(engine, () => music.key);
+  const timings: CatchTiming[] | null = import.meta.env.DEV &&
+    new URLSearchParams(window.location?.search ?? "").has("audioLatency") ? [] : null;
+  if (timings) Object.defineProperty(window, "__fishyAudio", {
+    configurable: true,
+    value: { get context() { return engine.ctx; }, catches: timings },
+  });
   engine.whenReady((ctx) => music.start(ctx, engine.music));
   engine.listen();
 
@@ -125,6 +147,7 @@ export function createGameAudio(): GameAudio {
 
     frame(events, world) {
       if (!engine.running) return;
+      const frameTime = timings ? engine.ctx!.currentTime : 0;
       let catches = 0;
       let combo = 0;
       let snaps = 0;
@@ -152,8 +175,11 @@ export function createGameAudio(): GameAudio {
       if (seine) sfx.seineHit();
       if (snag) sfx.snag();
       if (chum) sfx.chum();
-      sfx.catches(catches, combo);
-      sfx.flush();
+      const noteTime = sfx.catches(catches, combo);
+      if (timings && catches > 0) {
+        if (timings.length >= 10_000) timings.shift();
+        timings.push({ frameTime, noteTime, count: catches, combo });
+      }
       if (world) {
         if (catches > 0) lastCaptureAt = world.elapsed;
         const { comboMax, comboWindow } = world.stats;

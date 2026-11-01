@@ -3,7 +3,7 @@ import type { WorldEvent } from "../game/world";
 import { createGameAudio } from "./index";
 
 const sounds = vi.hoisted(() => ({
-  trapSnaps: vi.fn(), seineHit: vi.fn(), snag: vi.fn(), chum: vi.fn(), trapCast: vi.fn(), catches: vi.fn(), flush: vi.fn(),
+  trapSnaps: vi.fn(), seineHit: vi.fn(), snag: vi.fn(), chum: vi.fn(), trapCast: vi.fn(), catches: vi.fn(),
 }));
 const state = vi.hoisted(() => ({ running: true }));
 vi.mock("./engine", () => ({ AudioEngine: class {
