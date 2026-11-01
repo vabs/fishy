@@ -16,6 +16,7 @@
       #counter { text-align: right; }
       footer { position: fixed; inset: auto 12px 10px; display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 11px; }
       button { background: #f3e3c3; border: 1px solid #d9a441; border-radius: 8px; color: #3b2414; padding: 8px 12px; font: inherit; cursor: pointer; }
+      button:disabled { opacity: 0.45; cursor: default; }
       #metrics { background: #0d3b4fcc; padding: 6px 8px; border-radius: 6px; }
       @media (max-width: 500px) { header { padding: 12px; font-size: 12px; } header strong { font-size: 22px; } footer { flex-wrap: wrap; } }
     </style>
@@ -23,7 +24,7 @@
   <body>
     <canvas id="game" aria-label="Renderer review: move to inspect fish through the net"></canvas>
     <header><div><small id="mode">Late round</small><strong id="clock">24.0s</strong></div><div id="counter"><small>Earnings · combo ×1.6</small><strong>+$12,480</strong></div></header>
-    <footer><span id="metrics">Preparing deterministic sea…</span><span><button id="burst">Catch burst</button> <button id="bench">Benchmark 300 fish</button></span></footer>
+    <footer><span id="metrics">Preparing deterministic sea…</span><span><button id="freeze">Freeze</button> <button id="snap">Snap all</button> <button id="chum">Throw chum</button> <button id="burst">Catch burst</button> <button id="bench">Benchmark 300 fish</button></span></footer>
     <script type="module" src="/dev/render.ts"></script>
   </body>
 </html>
