@@ -1,4 +1,4 @@
-import { BOAT_CLEARANCE, lanternPull, lanternSpeed, pullTowards } from "./boat";
+import { BOAT_CLEARANCE, lanternPull, lanternSpeed, pullTowards, relaxPull, resizePull } from "./boat";
 import { CHEST, chestInNet, chestTime, chestValue, launchChest, moveChest, type Chest, type ChestReward } from "./chest";
 import { FISH, FISH_KINDS, FISH_SPECS, type FishDef, type FishKind } from "./fish";
 import { GOLDEN, goldenSwim, newGoldenState, type GoldenState } from "./golden";
@@ -390,6 +390,7 @@ export class World {
     for (const fish of this.fish) {
       fish.offsetX *= sx;
       fish.offsetY *= sy;
+      resizePull(fish, sx, sy);
       this.place(fish);
     }
     this.traps = resizeTraps(this.traps, this.swimArea(), width, height, sx, sy);
@@ -446,6 +447,8 @@ export class World {
     this.moveFish(dt);
     this.pullToBoat(dt);
     this.pullToBait(dt);
+    const boat = { x: this.width / 2, y: this.height / 2 };
+    for (const fish of this.fish) if (!fish.captured) relaxPull(fish, boat, dt);
     this.escapeGolden();
     this.spawnFish(dt);
     this.spawnGoldenFish(dt);
@@ -632,11 +635,13 @@ export class World {
   }
 
   private hitSeines(): void {
-    if (!this.stats.rigging.seine || this.traps.length < 2) return;
-    const live = new Set(this.fish.filter(fish => !fish.captured).map(fish => fish.id));
-    for (const [id, until] of this.seineCooldowns) {
-      if (!live.has(id) || until <= this.elapsed + 1e-9) this.seineCooldowns.delete(id);
+    if (this.seineCooldowns.size > 0) {
+      const live = new Set(this.fish.filter(fish => !fish.captured).map(fish => fish.id));
+      for (const [id, until] of this.seineCooldowns) {
+        if (!live.has(id) || until <= this.elapsed + 1e-9) this.seineCooldowns.delete(id);
+      }
     }
+    if (!this.stats.rigging.seine || this.traps.length < 2) return;
     let events = 0;
     for (const [index, trap] of this.traps.entries()) {
       if (trap.partner === null || trap.partner <= index) continue;
@@ -658,7 +663,6 @@ export class World {
   private castRigging(): void {
     if (this.stats.rigging.count <= 0) return;
     this.riggingStream ??= createRng(Math.floor(this.rng() * 0x1_0000_0000));
-    this.seineCooldowns.clear();
     this.traps = castTraps(this.swimArea(), this.width, this.height, this.stats.rigging, this.riggingStream);
     // Snapshot the cast: age and cooldown keep changing on the live traps.
     this.emit({ type: "trap-cast", traps: this.traps.map(trap => ({ ...trap })) });

@@ -10,6 +10,47 @@ export const BOAT_CLEARANCE = 70;
  */
 export function pullTowards(fish: Fish, target: Point, distance: number, boat: Point): void {
   if (distance <= 0) return;
+  const x = fish.x;
+  const y = fish.y;
+  moveTowards(fish, target, distance, boat);
+  fish.state.lureOx = (fish.state.lureOx ?? 0) + (fish.x - x);
+  fish.state.lureOy = (fish.state.lureOy ?? 0) + (fish.y - y);
+  fish.state.lureHeld = 1;
+}
+
+/** Releases only the lure's share of displacement when no lure pulled this step. */
+export function relaxPull(fish: Fish, boat: Point, dt: number): void {
+  if (fish.state.lureHeld === 1) {
+    delete fish.state.lureHeld;
+    return;
+  }
+  const ox = fish.state.lureOx;
+  const oy = fish.state.lureOy;
+  if (ox === undefined || oy === undefined) return;
+  const length = Math.hypot(ox, oy);
+  const step = length < 0.001 ? length : Math.min(length * 2.5, 70) * dt;
+  const x = fish.x;
+  const y = fish.y;
+  moveTowards(fish, { x: x - ox, y: y - oy }, step, boat);
+  const nx = ox + fish.x - x;
+  const ny = oy + fish.y - y;
+  if (Math.hypot(nx, ny) < 1e-8) {
+    delete fish.state.lureOx;
+    delete fish.state.lureOy;
+  } else {
+    fish.state.lureOx = nx;
+    fish.state.lureOy = ny;
+  }
+}
+
+/** Scales the lure's share alongside the fish's total displacement on arena resize. */
+export function resizePull(fish: Fish, sx: number, sy: number): void {
+  if (fish.state.lureOx !== undefined) fish.state.lureOx *= sx;
+  if (fish.state.lureOy !== undefined) fish.state.lureOy *= sy;
+}
+
+function moveTowards(fish: Fish, target: Point, distance: number, boat: Point): void {
+  if (distance <= 0) return;
   const oldX = fish.x;
   const oldY = fish.y;
   let x = oldX;
@@ -37,6 +78,9 @@ export function pullTowards(fish: Fish, target: Point, distance: number, boat: P
     x += ux * step;
     y += uy * step;
   }
+  // The boat sits at the arena centre. Lures also keep displaced fish on screen.
+  x = Math.max(16, Math.min(boat.x * 2 - 16, x));
+  y = Math.max(16, Math.min(boat.y * 2 - 16, y));
   fish.offsetX += x - oldX;
   fish.offsetY += y - oldY;
   fish.x = x;

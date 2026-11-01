@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pullTowards } from "./boat";
+import { pullTowards, relaxPull, resizePull } from "./boat";
 import { createRng } from "./rng";
 import { BASE_STATS } from "./stats";
 import { World } from "./world";
@@ -87,7 +87,7 @@ describe("Chum", () => {
     expect(fish.x).toBeCloseTo(470);
     const offset = fish.offsetX;
     run(world, 1);
-    expect(fish.offsetX).toBe(offset);
+    expect(Math.abs(fish.offsetX)).toBeLessThan(Math.abs(offset));
     expect(world.chumCooldownLeft).toBeCloseTo(15);
     run(world, 15);
     expect(world.chumCooldownLeft).toBe(0);
@@ -151,5 +151,60 @@ describe("Lantern and day cycle", () => {
     expect(night.timeOfDay).toBe(0);
     night.elapsed = 360;
     expect(night.timeOfDay).toBe(0.5);
+  });
+});
+
+
+describe("Lantern with golden fish", () => {
+  it("slows swimming without extending the golden fish's escape clock", () => {
+    const world = boatWorld(s => { s.boat.lanternRadius = 500; s.goldenSeconds = 0.1; });
+    const fish = world.spawn("normal", { at: { x: 500, y: 300 }, golden: true })!;
+    run(world, 0.2);
+    expect(world.fish).not.toContain(fish);
+    expect(world.totalCaught).toBe(0);
+    expect(world.drainEvents().filter(e => e.type === "golden-escape")).toHaveLength(1);
+  });
+});
+
+describe("Released lure movement", () => {
+  it.each([600, 700])("lets a swimming fish return to its path safely after chum from x=%i", x => {
+    const world = boatWorld(s => { s.boat.chum = true; s.boat.chumRadius = 340; s.boat.chumSeconds = 6; });
+    const fish = world.spawn("normal", { at: { x, y: 300 } })!;
+    world.chum();
+    let closest = Infinity;
+    let left = Infinity;
+    let right = -Infinity;
+    for (let i = 0; i < 40 * 60; i++) {
+      world.update(1 / 60);
+      closest = Math.min(closest, Math.hypot(fish.x - 400, fish.y - 300));
+      left = Math.min(left, fish.x);
+      right = Math.max(right, fish.x);
+    }
+    expect(closest).toBeGreaterThanOrEqual(60);
+    expect(left).toBeGreaterThanOrEqual(0);
+    expect(right).toBeLessThanOrEqual(800);
+    expect(Math.hypot(fish.offsetX, fish.offsetY)).toBeLessThan(0.01);
+  });
+});
+
+
+describe("Lure displacement ownership", () => {
+  it("releases its share while preserving other offsets, including after resize", () => {
+    const world = boatWorld();
+    const fish = world.spawn("normal", { at: { x: 600, y: 300 } })!;
+    fish.offsetX = 10;
+    fish.offsetY = 5;
+    pullTowards(fish, { x: 660, y: 300 }, 60, { x: 400, y: 300 });
+    relaxPull(fish, { x: 400, y: 300 }, 1 / 60);
+    fish.offsetX *= 1.5;
+    fish.offsetY *= 2;
+    fish.x *= 1.5;
+    fish.y *= 2;
+    resizePull(fish, 1.5, 2);
+    for (let i = 0; i < 600; i++) relaxPull(fish, { x: 600, y: 600 }, 1 / 60);
+    expect(fish.offsetX).toBeCloseTo(15);
+    expect(fish.offsetY).toBeCloseTo(10);
+    expect(fish.x).toBeCloseTo(900);
+    expect(fish.y).toBeCloseTo(600);
   });
 });

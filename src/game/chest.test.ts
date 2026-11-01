@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CHEST, chestTime, chestValue, launchChest, type Chest } from "./chest";
+import { CHEST, chestTime, chestValue, launchChest, moveChest, type Chest } from "./chest";
 import { FISH } from "./fish";
 import { createRng } from "./rng";
 import { BASE_STATS, cloneStats, type Stats } from "./stats";
@@ -321,5 +321,24 @@ describe("Endless chest arrivals", () => {
     world.update(STEP);
     expect(world.chest).not.toBeNull();
     expect(world.chest).not.toBe(parked);
+  });
+});
+
+
+describe("Snag hold", () => {
+  it("holds only the remaining time and keeps age and hit feedback ticking", () => {
+    const chest = launchChest(800, 600, createRng(42));
+    Object.assign(chest, { x: 300, y: 200, vx: 40, vy: 20, snagged: true, snagLeft: 0.25, hitFlash: 0.12 });
+    const age = chest.age;
+    expect(moveChest(chest, 0.5, 800, 600)).toBe(true);
+    expect(chest.x).toBe(310);
+    expect(chest.y).toBe(205);
+    expect(chest.snagLeft).toBe(0);
+    expect(chest.snagged).toBe(true);
+    expect(chest.age).toBe(age + 0.5);
+    expect(chest.hitFlash).toBe(0);
+    moveChest(chest, 0.5, 800, 600);
+    expect(chest.x).toBe(330);
+    expect(chest.y).toBe(215);
   });
 });

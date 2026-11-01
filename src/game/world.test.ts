@@ -484,7 +484,8 @@ describe("Timed seed compatibility", () => {
       next: 0.5533206530380994 },
   ])("preserves main's round $round with seed $seed", fixture => {
     for (const guarantee of [undefined, {}, { chest: false, golden: false }]) {
-      const stats = fixture.full ? fullStats() : BASE_STATS;
+      // These replay fixtures predate both lanes, even after the tree gains their upgrades.
+      const stats = fixture.full ? { ...fullStats(), rigging: { ...BASE_STATS.rigging }, boat: { ...BASE_STATS.boat } } : BASE_STATS;
       const world = new World(stats, createRng(fixture.seed), 1280, 800,
         { round: fixture.round, final: fixture.final, ...(guarantee ? { guarantee } : {}) });
       while (!world.over && world.elapsed < 240) {
@@ -905,6 +906,8 @@ describe("Seine ropes", () => {
     const events = world.drainEvents().filter(e => e.type === "seine-hit");
     expect(events.length).toBeGreaterThan(0);
     expect(events.length).toBeLessThanOrEqual(4);
+    world.resize(200, 200);
+    expect(world.traps).toHaveLength(0);
     world.fish.length = 0;
     world.update(STEP);
     const state = world as unknown as { seineCooldowns: Map<number, number> };
@@ -924,7 +927,8 @@ describe("Bait and snag", () => {
     expect(outside.offsetX).toBe(0);
     for (const trap of world.traps) trap.cooldown = 10;
     world.update(STEP);
-    expect(fish.offsetX).toBeCloseTo(-1);
+    expect(fish.offsetX).toBeGreaterThan(-1);
+    expect(fish.offsetX).toBeLessThan(0);
   });
 
   it("never pulls a fish through the boat towards a far-side net", () => {
@@ -950,5 +954,113 @@ describe("Bait and snag", () => {
     world.chest = next;
     world.update(STEP);
     expect(world.drainEvents().filter(e => e.type === "snag")).toHaveLength(1);
+  });
+});
+
+/** The new lanes at their contract maxima, independent of when their tree nodes land. */
+function toolsStats(): Stats {
+  const stats = fullStats();
+  Object.assign(stats.rigging, { count: 4, resetSeconds: 5 * 0.85 ** 4, radius: 52, damage: 4,
+    haul: Infinity, seine: true, seineDamage: 1, baitPull: 45, baitRange: 110, snagSeconds: 4, frenzyResetMult: 0.5 });
+  Object.assign(stats.boat, { chum: true, chumCooldown: 20 * 0.85 ** 3, chumSeconds: 6,
+    chumRadius: 340, chumPull: 60, lanternRadius: 210, lanternSlow: 0.7 });
+  return stats;
+}
+
+describe("Fully upgraded tools", () => {
+  it("runs a day with recasts, chum, fish abilities and orientation changes using bounded live state", () => {
+    const world = new World(toolsStats(), createRng(19), 1280, 800, { round: 1, final: false, endless: true });
+    let casts = 0;
+    let snaps = 0;
+    let ropeHits = 0;
+    let peakEvents = 0;
+    let finite = true;
+    for (let step = 0; step < 240 / STEP; step++) {
+      if (step === 80 / STEP) world.resize(390, 844);
+      if (step === 160 / STEP) world.resize(1280, 800);
+      if (world.chumReady) world.chum();
+      world.pointer = { x: world.width / 2 + Math.sin(world.elapsed) * world.width * 0.3,
+        y: world.height / 2 + Math.cos(world.elapsed * 0.7) * world.height * 0.3 };
+      world.update(STEP);
+      const events = world.drainEvents();
+      casts += events.filter(e => e.type === "trap-cast").length;
+      snaps += events.filter(e => e.type === "trap-snap").length;
+      const seine = events.filter(e => e.type === "seine-hit").length;
+      ropeHits += seine;
+      expect(seine).toBeLessThanOrEqual(4);
+      peakEvents = Math.max(peakEvents, events.length);
+      for (const trap of world.traps) {
+        const cornerX = trap.x < world.width * 0.22 || trap.x > world.width * 0.78;
+        const cornerY = trap.y < world.height * 0.22 || trap.y > world.height * 0.78;
+        expect(cornerX && cornerY).toBe(false);
+      }
+      for (const fish of world.fish) finite &&= Number.isFinite(fish.x) && Number.isFinite(fish.y);
+      const state = world as unknown as { seineCooldowns: Map<number, number> };
+      expect(state.seineCooldowns.size).toBeLessThanOrEqual(120);
+    }
+    expect(casts).toBe(5);
+    expect(snaps).toBeGreaterThan(20);
+    expect(ropeHits).toBeGreaterThan(0);
+    expect(world.trapCatches).toBeGreaterThan(20);
+    expect(world.bestStarHits).toBeGreaterThan(0);
+    expect(world.bonusCount.golden).toBeGreaterThan(0);
+    expect(peakEvents).toBeLessThan(2000);
+    expect(finite).toBe(true);
+  });
+
+  it("reports the cost per step of fully upgraded timed rounds", () => {
+    const samples: number[] = [];
+    for (const tools of [false, true]) {
+      const stats = tools ? toolsStats() : fullStats();
+      if (!tools) { stats.rigging = { ...BASE_STATS.rigging }; stats.boat = { ...BASE_STATS.boat }; }
+      const world = new World(stats, createRng(19), 1280, 800, { round: 5, final: false });
+      let steps = 0;
+      const start = performance.now();
+      while (!world.over) {
+        if (world.chumReady) world.chum();
+        world.pointer = { x: 640 + Math.sin(world.elapsed) * 400, y: 400 + Math.cos(world.elapsed * 0.7) * 250 };
+        world.update(STEP);
+        world.drainEvents();
+        steps++;
+      }
+      samples.push((performance.now() - start) / steps);
+      expect(world.totalCaught).toBeGreaterThan(1000);
+    }
+    console.log(`Full-upgrade step: tools off ${samples[0]!.toFixed(3)} ms, tools on ${samples[1]!.toFixed(3)} ms`);
+  });
+});
+
+describe("Seine recast immunity", () => {
+  it("keeps a fish's one-second immunity when old and new ropes overlap", () => {
+    const stats = structuredClone(BASE_STATS);
+    Object.assign(stats, { startFish: 0, spawnRateMult: 0, goldenRate: 0 });
+    Object.assign(stats.rigging, { count: 2, seine: true });
+    const make = () => new World(stats, createRng(42), 800, 600, { round: 1, final: false, endless: true });
+    const preview = make();
+    run(preview, 60);
+    const [a, b] = preview.traps;
+    expect(preview.traps).toHaveLength(2);
+    const x = (a!.x + b!.x) / 2;
+    const y = (a!.y + b!.y) / 2;
+    const world = make();
+    world.elapsed = 60 - 2 * STEP;
+    world.traps = [
+      { id: 1, x: x - 90, y, radius: 34, cooldown: 5, partner: 1, age: 0 },
+      { id: 2, x: x + 90, y, radius: 34, cooldown: 5, partner: 0, age: 0 },
+    ];
+    const fish = stillFish(world, x, y);
+    // Midpoints of valid ropes can lie inside the minimum orbit, so position this test fish exactly.
+    fish.offsetX += x - fish.x;
+    fish.offsetY += y - fish.y;
+    fish.x = x;
+    fish.y = y;
+    fish.hp = 100;
+    world.update(STEP);
+    expect(fish.hits).toBe(1);
+    world.update(STEP);
+    expect(world.elapsed).toBe(60);
+    expect(fish.hits).toBe(1);
+    run(world, 1 - STEP);
+    expect(fish.hits).toBe(2);
   });
 });

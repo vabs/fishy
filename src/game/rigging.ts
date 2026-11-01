@@ -1,3 +1,4 @@
+import { BOAT_CLEARANCE } from "./boat";
 import { range, type Rng } from "./rng";
 import type { RiggingStats } from "./stats";
 import type { Point } from "./world";
@@ -25,7 +26,7 @@ function fits(point: Point, radius: number, area: Area, width: number, height: n
   const cornerX = point.x < width * 0.22 || point.x > width * 0.78;
   const cornerY = point.y < height * 0.22 || point.y > height * 0.78;
   return orbit >= Math.max(0.3, area.minOrbit) && orbit <= 0.85 && !(cornerX && cornerY) &&
-    Math.hypot(point.x - area.cx, point.y - area.cy) >= 70 + radius &&
+    Math.hypot(point.x - area.cx, point.y - area.cy) >= BOAT_CLEARANCE + radius &&
     point.x >= radius && point.x <= width - radius && point.y >= radius && point.y <= height - radius;
 }
 
