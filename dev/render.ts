@@ -1,4 +1,6 @@
 import { loadArt, onArtReady } from "../src/game/art";
+import { BIOME, biomeLabel, type Biome } from "../src/game/biome";
+import { seaLabel, type SeaState } from "../src/game/sea";
 import { FISH_KINDS } from "../src/game/fish";
 import { setPalette } from "../src/game/palette";
 import { Renderer, type Scene } from "../src/game/render";
@@ -10,10 +12,19 @@ import { STEP, World, type Point } from "../src/game/world";
 
 // Seeded scene, no save/audio/main wiring. ?still=1 is stable for visual comparisons.
 // ?time=0.5&endless=1, ?palette=colorBlind, ?fish=300, ?title=1, ?live=1.
+// Weather: ?sea=storm|fog|bloom&biome=reef|trench|graveyard&blend=0..1.
 // Tools: ?traps=4&seine=1&bait=1&chum=1&lantern=1; add &still=1 for a frozen pose.
 // Additional still poses: &snap=1, &cast=1, &snag=1. Tool scenes animate the simulation.
 const query = new URLSearchParams(location.search);
 const still = query.has("still");
+const seaOrder: readonly SeaState[] = ["clear", "storm", "fog", "bloom"];
+const requestedSea = query.get("sea") as SeaState;
+const sea = seaOrder.includes(requestedSea) ? requestedSea : undefined;
+const requestedBiome = query.get("biome") as Biome;
+const biome = BIOME.order.includes(requestedBiome) ? requestedBiome : "reef";
+const requestedBlend = Number(query.get("blend") ?? 0);
+const blend = Number.isFinite(requestedBlend) ? Math.min(1, Math.max(0, requestedBlend)) : 0;
+const biomeReview = query.has("biome") || query.has("blend") ? { biome, next: BIOME.order[(BIOME.order.indexOf(biome) + 1) % 3]!, blend } : undefined;
 const enabled = (name: string): boolean => query.get(name) === "1";
 const requestedTraps = Number(query.get("traps") ?? (enabled("seine") ? 2 : enabled("bait") || enabled("snag") ? 1 : 0));
 const traps = Number.isFinite(requestedTraps) ? Math.min(4, Math.max(0, Math.floor(requestedTraps))) : 0;
@@ -78,9 +89,9 @@ if (stats.boat.chum) {
 }
 const scene = (): Scene => {
   const rect = document.querySelector("#counter")!.getBoundingClientRect();
-  return { world: query.has("title") ? null : world, pointer, stats, timeOfDay: phase, coinTarget: { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 } };
+  return { world: query.has("title") ? null : world, pointer, stats, sea, biome: biomeReview, timeOfDay: phase, coinTarget: { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 } };
 };
-document.querySelector("#mode")!.textContent = endless ? "Endless · renderer review" : "Late round · renderer review";
+document.querySelector("#mode")!.textContent = `${endless ? "Endless" : "Late round"} · ${seaLabel(sea ?? "clear")} · ${biomeLabel(biome)}${blend ? ` → ${Math.round(blend * 100)}%` : ""}`;
 const phaseName = phase === undefined ? "Endless sea" : ["Golden hour", "Dusk", "Night watch", "Dawn"][Math.floor(((phase % 1 + 1) % 1) * 4)]!;
 document.querySelector("#clock")!.textContent = endless ? phaseName : "24.0s";
 document.querySelector("#counter small")!.textContent = `Earnings · combo ×${world.comboMult.toFixed(1)}`;
@@ -90,6 +101,7 @@ let arrivals = 0;
 let previous = performance.now();
 let active = !still;
 let benchmarking = false;
+let autoBenchStarted = false;
 let accumulator = 0;
 const snapButton = document.querySelector<HTMLButtonElement>("#snap")!;
 const chumButton = document.querySelector<HTMLButtonElement>("#chum")!;
@@ -113,6 +125,19 @@ document.querySelector("#burst")!.addEventListener("click", () => {
   setActive(true);
 });
 document.querySelector("#bench")!.addEventListener("click", benchmark);
+for (const [id, text, key, values, current] of [
+  ["sea", `Sea: ${seaLabel(sea ?? "clear")}`, "sea", seaOrder, sea ?? "clear"],
+  ["biome", `Biome: ${biome}`, "biome", BIOME.order, biome],
+  ["blend", `Blend: ${blend.toFixed(2)}`, "blend", ["0", "0.25", "0.5", "0.75", "1"], String(blend)],
+] as const) {
+  const button = document.querySelector<HTMLButtonElement>(`#${id}`)!;
+  button.textContent = text;
+  button.addEventListener("click", () => {
+    const options: readonly string[] = values;
+    query.set(key, options[(options.indexOf(current) + 1) % options.length]!);
+    location.search = query.toString();
+  });
+}
 window.addEventListener("resize", () => location.reload());
 onArtReady(() => { renderer.draw(scene(), 0); updateReady(); });
 // Warm the deterministic chum pose before adding a short snap, so both can be inspected still.
@@ -167,7 +192,7 @@ function snapAll(): void {
 }
 
 function makeWorld(population: number, sandbox: boolean): World {
-  const w = new World(stats, createRng(230410), view.worldWidth, view.worldHeight, { round: 24, final: false, endless: sandbox });
+  const w = new World(stats, createRng(230410), view.worldWidth, view.worldHeight, { round: 24, final: false, endless: sandbox, sea });
   for (let i = 0; w.fish.length < population - 1 && i < population * 3; i++) w.spawn(FISH_KINDS[i % 8]);
   for (const fish of w.fish) fish.age = 2;
   w.spawnGolden({ x: view.worldWidth * 0.76, y: view.worldHeight * 0.3 });
@@ -183,7 +208,11 @@ function makeWorld(population: number, sandbox: boolean): World {
 
 function updateReady(): void {
   const art = loadArt();
-  document.body.dataset.ready = String(!!art.sea && !!art.boat);
+  document.body.dataset.ready = String(!!art.sea && !!art.boat && !!art.trench && !!art.graveyard);
+  if (query.has("bench") && document.body.dataset.ready === "true" && !autoBenchStarted) {
+    autoBenchStarted = true;
+    void benchmark();
+  }
   metrics.textContent = `${world.fish.length} fish · ${document.body.dataset.ready === "true" ? "Art ready" : "Loading art"} · seed 230410`;
 }
 
@@ -191,7 +220,7 @@ function updateReady(): void {
 async function benchmark(): Promise<void> {
   if (benchmarking) return;
   benchmarking = true;
-  const bench = new World({ ...cloneStats(stats), startFish: 0 }, createRng(90210), view.worldWidth, view.worldHeight);
+  const bench = new World({ ...cloneStats(stats), startFish: 0 }, createRng(90210), view.worldWidth, view.worldHeight, { round: 24, final: false, sea: sea ?? world.sea });
   for (let i = 0; bench.fish.length < 300; i++) bench.spawn(FISH_KINDS[i % 8]);
   for (const fish of bench.fish) fish.age = 2;
   for (const trap of bench.traps) trap.age = 2;
@@ -199,12 +228,13 @@ async function benchmark(): Promise<void> {
   for (let i = 0; i < 360; i++) {
     await new Promise(requestAnimationFrame);
     const start = performance.now();
+    bench.elapsed += STEP; // Advance presentation clocks without moving or catching the 300 fixtures.
     renderer.draw({ ...scene(), world: bench }, STEP);
     const ms = performance.now() - start;
     if (i >= 60) samples.push(ms);
   }
   const sorted = [...samples].sort((a, b) => a - b);
-  const result = { fish: bench.fish.length, averageMs: samples.reduce((a, b) => a + b, 0) / samples.length, p95Ms: sorted[Math.floor(sorted.length * 0.95)], width: innerWidth, height: innerHeight, dpr: Math.min(devicePixelRatio || 1, 2) };
+  const result = { sea: sea ?? world.sea, biome, blend, reducedMotion: matchMedia("(prefers-reduced-motion: reduce)").matches, fish: bench.fish.length, averageMs: samples.reduce((a, b) => a + b, 0) / samples.length, p95Ms: sorted[Math.floor(sorted.length * 0.95)], width: innerWidth, height: innerHeight, dpr: Math.min(devicePixelRatio || 1, 2) };
   console.info("Fishy renderer benchmark", result);
   metrics.textContent = `300 fish · avg ${result.averageMs.toFixed(2)} ms · p95 ${result.p95Ms!.toFixed(2)} ms`;
   document.body.dataset.benchmark = JSON.stringify(result);
