@@ -12,10 +12,13 @@ function canvasRecorder() {
   const fills: { color: string; blend: string; alpha: number }[] = [];
   let currentArc: number[] | undefined;
   const arcs: number[] = [];
+  const circles: number[][] = [];
   const ellipses: number[][] = [];
   const transforms: number[][] = [];
   const translations: number[][] = [];
   const images: number[][] = [];
+  const curves: number[][] = [];
+  const scales: number[][] = [];
   const noop = () => {};
   const target = {
     shadowBlur: 0,
@@ -30,17 +33,19 @@ function canvasRecorder() {
     fillRect() { fills.push({ color: this.fillStyle, blend: this.globalCompositeOperation, alpha: this.globalAlpha }); },
     fill() { paints.push({ blur: this.shadowBlur }); },
     fillText(text: string) { paints.push({ blur: this.shadowBlur, text, font: this.font, style: this.fillStyle, alpha: this.globalAlpha, width: this.lineWidth }); },
-    arc(...values: number[]) { arcs.push(values[2]!); currentArc = values; },
+    arc(...values: number[]) { arcs.push(values[2]!); circles.push(values); currentArc = values; },
     ellipse(...values: number[]) { ellipses.push(values); },
     setTransform(...values: number[]) { transforms.push(values); },
     translate(...values: number[]) { translations.push(values); },
+    quadraticCurveTo(...values: number[]) { curves.push(values); },
+    scale(...values: number[]) { scales.push(values); },
     drawImage(_image: CanvasImageSource, ...values: number[]) { images.push(values); },
     createRadialGradient: () => ({ addColorStop: noop }),
     createLinearGradient: () => ({ addColorStop: noop }),
   };
   const ctx = new Proxy(target, { get: (object, key) => Reflect.get(object, key) ?? noop }) as unknown as CanvasRenderingContext2D;
   const canvas = { getContext: () => ctx, style: {} } as unknown as HTMLCanvasElement;
-  return { canvas, ctx, paints, fills, arcs, ellipses, transforms, translations, images, renderer: new Renderer(canvas) };
+  return { canvas, ctx, paints, fills, arcs, circles, ellipses, transforms, translations, images, curves, scales, renderer: new Renderer(canvas) };
 }
 
 const scene = { world: null, pointer: null, stats: BASE_STATS };
@@ -485,4 +490,259 @@ describe("trap presentation", () => {
     renderer.draw({ ...scene, world, stats }, 0.4);
     expect(images.length).toBe(2);
   });
+});
+
+describe("seine, bait and snag presentation", () => {
+  it("sags along a quadratic with exact endpoints, including a zero-length rope", async () => {
+    const { ropeSagPoint } = await import("./fx");
+    const a = { x: 20, y: 30 }, b = { x: 220, y: 70 };
+    expect(ropeSagPoint(a, b, 0)).toEqual(a);
+    expect(ropeSagPoint(a, b, 1)).toEqual(b);
+    expect(ropeSagPoint(a, b, 0.5).y).toBeGreaterThan(50);
+    expect(ropeSagPoint(a, b, 0.5).y - 50).toBeLessThanOrEqual(9);
+    expect(ropeSagPoint(a, a, 0.5)).toEqual(a);
+  });
+
+  it("draws each partner rope once and bait only around armed nets", async () => {
+    vi.stubGlobal("document", { createElement: () => canvasRecorder().canvas });
+    const { World } = await import("./world");
+    const { cloneStats } = await import("./stats");
+    const { createRng } = await import("./rng");
+    const stats = cloneStats(BASE_STATS);
+    stats.startFish = 0;
+    stats.rigging.baitPull = 15;
+    stats.rigging.seine = true;
+    const world = new World(stats, createRng(1), 1280, 800);
+    world.traps = [
+      { id: 1, x: 300, y: 250, radius: 42, cooldown: 0, partner: 1, age: 2 },
+      { id: 2, x: 500, y: 250, radius: 42, cooldown: 3, partner: 0, age: 2 },
+    ];
+    const { renderer, curves, paints } = canvasRecorder();
+    renderer.draw({ ...scene, world, stats }, 0);
+    expect(curves.filter(curve => curve[2] === 500 && curve[3] === 250)).toHaveLength(1);
+    expect(paints.filter(p => p.style?.startsWith("rgba(230, 226, 191,") && p.arc)).toHaveLength(2);
+  });
+
+  it("wraps and tugs a held chest, then removes the wrap on release", async () => {
+    vi.stubGlobal("document", { createElement: () => canvasRecorder().canvas });
+    const { World } = await import("./world");
+    const { createRng } = await import("./rng");
+    const world = new World({ ...BASE_STATS, startFish: 0 }, createRng(1), 1280, 800);
+    world.chest = { x: 300, y: 250, vx: 0, vy: 0, hp: 10, maxHp: 10, age: 2, hitFlash: 0, snagged: true, snagLeft: 4 };
+    const { renderer, paints, translations } = canvasRecorder();
+    renderer.onEvent({ type: "snag", x: 300, y: 250 });
+    renderer.draw({ ...scene, world }, 0.04);
+    expect(paints.some(p => p.style === "#c1aa7d")).toBe(true);
+    expect(translations.some(p => p[0] !== 300 && Math.abs(p[0]! - 300) < 3)).toBe(true);
+    world.chest.snagLeft = 0;
+    paints.length = 0;
+    renderer.draw({ ...scene, world }, 0.01);
+    expect(paints.some(p => p.style === "#c1aa7d")).toBe(false);
+  });
+});
+
+describe("boat tool presentation", () => {
+  it("fades chum over its configured lifetime and handles locked or expired clouds", async () => {
+    const { chumCloudAlpha } = await import("./fx");
+    expect(chumCloudAlpha(0, 6)).toBe(1);
+    expect(chumCloudAlpha(-1, 6)).toBe(1);
+    expect(chumCloudAlpha(3, 6)).toBeGreaterThan(0);
+    expect(chumCloudAlpha(3, 6)).toBeLessThan(1);
+    expect(chumCloudAlpha(6, 6)).toBe(0);
+    expect(chumCloudAlpha(8, 6)).toBe(0);
+    expect(chumCloudAlpha(0, 0)).toBe(0);
+  });
+
+  it("maps unlocked lantern light to its exact lure radius, retaining the ordinary night lamp", async () => {
+    const { lanternLightRadius } = await import("./fx");
+    expect(lanternLightRadius(0, 0)).toBe(0);
+    expect(lanternLightRadius(0, 1)).toBe(125);
+    expect(lanternLightRadius(70, 0)).toBe(70);
+    expect(lanternLightRadius(210, 1)).toBe(210);
+    expect(lanternLightRadius(-1, 0)).toBe(0);
+  });
+
+  it("draws and expires a bounded chum cloud without adding capture particles", async () => {
+    vi.stubGlobal("document", { createElement: () => canvasRecorder().canvas });
+    const { World } = await import("./world");
+    const { cloneStats } = await import("./stats");
+    const { createRng } = await import("./rng");
+    const stats = cloneStats(BASE_STATS);
+    stats.startFish = 0;
+    stats.boat.chum = true;
+    stats.boat.chumSeconds = 2;
+    const world = new World(stats, createRng(1), 1280, 800);
+    const { renderer, images, arcs } = canvasRecorder();
+    expect(world.chum()).toBe(true);
+    for (const event of world.drainEvents()) renderer.onEvent(event);
+    renderer.draw({ ...scene, world, stats }, 1);
+    expect(images).toHaveLength(4);
+    expect(images.every(i => i[2]! > stats.boat.chumRadius * 0.8)).toBe(true);
+    expect(arcs.filter(r => r === 2.5)).toHaveLength(0);
+    images.length = 0;
+    renderer.draw({ ...scene, world, stats }, 2);
+    expect(images).toHaveLength(0);
+  });
+
+  it("scales the cached lantern light and uses the world's endless phase by default", async () => {
+    vi.stubGlobal("document", { createElement: () => canvasRecorder().canvas });
+    const { World } = await import("./world");
+    const { cloneStats } = await import("./stats");
+    const { createRng } = await import("./rng");
+    const stats = cloneStats(BASE_STATS);
+    stats.startFish = 0;
+    stats.boat.lanternRadius = 210;
+    const world = new World(stats, createRng(1), 1280, 800, { round: 1, final: false, endless: true });
+    world.elapsed = 120;
+    const { renderer, images, fills } = canvasRecorder();
+    renderer.resize(1280, 800, 1);
+    renderer.draw({ ...scene, world, stats }, 0);
+    expect(images.some(i => i[0] === -210 && i[2] === 420)).toBe(true);
+    expect(fills.some(f => f.blend === "multiply" && f.alpha > 0.4)).toBe(true);
+  });
+});
+
+it("does not revive a trap reveal after a delayed first frame", async () => {
+  vi.stubGlobal("document", { createElement: () => canvasRecorder().canvas });
+  const { World } = await import("./world");
+  const { createRng } = await import("./rng");
+  const world = new World({ ...BASE_STATS, startFish: 0 }, createRng(1), 1280, 800);
+  world.traps = [{ id: 1, x: 300, y: 250, radius: 42, cooldown: 3, partner: null, age: 2 }];
+  world.spawn("normal", { at: { x: 300, y: 250 } });
+  world.fish[0]!.age = 2;
+  const { renderer, images } = canvasRecorder();
+  renderer.onEvent({ type: "trap-snap", trapId: 1, x: 300, y: 250, hits: 1 });
+  renderer.draw({ ...scene, world }, 0.4);
+  expect(images).toHaveLength(2); // Only the silhouette and trap remain.
+});
+
+it("keeps left-swimming trap reveals belly-down over their silhouette", async () => {
+  vi.stubGlobal("document", { createElement: () => canvasRecorder().canvas });
+  const { World } = await import("./world");
+  const { createRng } = await import("./rng");
+  const world = new World({ ...BASE_STATS, startFish: 0 }, createRng(1), 1280, 800);
+  world.traps = [{ id: 1, x: 300, y: 250, radius: 42, cooldown: 3, partner: null, age: 2 }];
+  world.spawn("normal", { at: { x: 300, y: 250 } });
+  world.fish[0]!.heading = Math.PI;
+  const { renderer, scales } = canvasRecorder();
+  renderer.onEvent({ type: "trap-snap", trapId: 1, x: 300, y: 250, hits: 1 });
+  renderer.draw({ ...scene, world }, 0.01);
+  expect(scales).toContainEqual([1, -1]);
+});
+
+it("keeps an active chum cloud through resize and recentres it on the boat", async () => {
+  vi.stubGlobal("document", { createElement: () => canvasRecorder().canvas });
+  const { World } = await import("./world");
+  const { cloneStats } = await import("./stats");
+  const { createRng } = await import("./rng");
+  const stats = cloneStats(BASE_STATS);
+  stats.startFish = 0;
+  stats.boat.chum = true;
+  const world = new World(stats, createRng(1), 1280, 800);
+  const { renderer, images } = canvasRecorder();
+  renderer.resize(1280, 800, 1);
+  world.chum();
+  for (const event of world.drainEvents()) renderer.onEvent(event);
+  renderer.draw({ ...scene, world, stats }, 0.8);
+  renderer.resize(640, 400, 1);
+  world.resize(640, 400);
+  images.length = 0;
+  renderer.draw({ ...scene, world, stats }, 0);
+  const cloud = images.filter(i => i.length === 4);
+  expect(cloud).toHaveLength(4);
+  const centers = cloud.map(i => i[0]! + i[2]! / 2);
+  expect(Math.min(...centers)).toBeLessThan(320);
+  expect(Math.max(...centers)).toBeGreaterThan(320);
+  expect(Math.max(...centers)).toBeLessThan(640);
+});
+
+it("caches a readable trap rope with a brown outline and larger striped buoys", async () => {
+  const cached: ReturnType<typeof canvasRecorder>[] = [];
+  vi.stubGlobal("document", { createElement: () => {
+    const recorder = canvasRecorder(); cached.push(recorder); return recorder.canvas;
+  } });
+  const { World } = await import("./world");
+  const { createRng } = await import("./rng");
+  const world = new World({ ...BASE_STATS, startFish: 0 }, createRng(1), 1280, 800);
+  world.traps = [{ id: 1, x: 300, y: 250, radius: 42, cooldown: 3, partner: null, age: 2 }];
+  const { renderer } = canvasRecorder();
+  renderer.draw({ ...scene, world }, 0);
+  const sprite = cached.find(r => r.ellipses.length === 4)!;
+  expect(sprite).toBeDefined();
+  const rope = sprite.paints.find(p => p.style === "#ac956c")!;
+  const outline = sprite.paints.find(p => p.style === "#514031")!;
+  expect(rope.width).toBeCloseTo(3);
+  expect(outline.width! - rope.width!).toBeCloseTo(1.6);
+  expect(sprite.paints.some(p => p.style === "rgba(223, 231, 205, 0.18)")).toBe(true);
+  expect(sprite.ellipses.every(e => e[2]! >= 4.8 && e[3]! >= 3.2)).toBe(true);
+  const count = cached.length;
+  renderer.draw({ ...scene, world }, 0);
+  expect(cached).toHaveLength(count);
+});
+
+it("uses one static fading chum ring and no moving bits with reduced motion", async () => {
+  vi.stubGlobal("matchMedia", () => ({ matches: true }));
+  vi.stubGlobal("document", { createElement: () => canvasRecorder().canvas });
+  const { World } = await import("./world");
+  const { cloneStats } = await import("./stats");
+  const { createRng } = await import("./rng");
+  const stats = cloneStats(BASE_STATS);
+  stats.startFish = 0;
+  stats.boat.chum = true;
+  const world = new World(stats, createRng(1), 1280, 800);
+  const { renderer, ctx, images, arcs, paints } = canvasRecorder();
+  const opacity: number[] = [];
+  const drawImage = vi.spyOn(ctx, "drawImage").mockImplementation((_image, ..._args) => {
+    opacity.push(ctx.globalAlpha);
+  });
+  world.chum();
+  for (const event of world.drainEvents()) renderer.onEvent(event);
+  renderer.draw({ ...scene, world, stats }, 0.2);
+  expect(drawImage).toHaveBeenCalledTimes(1);
+  const bounds = drawImage.mock.calls[0]!.slice(1);
+  expect(bounds).toEqual([640 - stats.boat.chumRadius, 400 - stats.boat.chumRadius, stats.boat.chumRadius * 2, stats.boat.chumRadius * 2]);
+  renderer.draw({ ...scene, world, stats }, 0.6);
+  expect(drawImage).toHaveBeenCalledTimes(2);
+  expect(drawImage.mock.calls[1]!.slice(1)).toEqual(bounds);
+  expect(opacity[1]).toBeLessThan(opacity[0]!);
+  expect(arcs).toHaveLength(0);
+  expect(paints.some(p => p.style?.startsWith("rgba(237, 226, 190,"))).toBe(false);
+  expect(images).toHaveLength(0); // The image spy records the single submission instead.
+});
+
+it("keeps chum plumes cached and drifts only a few bits inward while the current is active", async () => {
+  const createElement = vi.fn(() => canvasRecorder().canvas);
+  vi.stubGlobal("document", { createElement });
+  const { World } = await import("./world");
+  const { cloneStats } = await import("./stats");
+  const { createRng } = await import("./rng");
+  const stats = cloneStats(BASE_STATS);
+  stats.startFish = 0;
+  stats.boat.chum = true;
+  const world = new World(stats, createRng(1), 1280, 800);
+  const { renderer, images, circles } = canvasRecorder();
+  world.chum();
+  for (const event of world.drainEvents()) renderer.onEvent(event);
+  renderer.draw({ ...scene, world, stats }, 0.8);
+  const created = createElement.mock.calls.length;
+  const bits = circles.filter(c => c[2] === 1.2);
+  expect(bits).toHaveLength(5);
+  expect(images).toHaveLength(4);
+  for (const plume of images) {
+    const radius = plume[2]! / 2;
+    const distance = Math.hypot(plume[0]! + radius - 640, plume[1]! + radius - 400);
+    expect(distance + radius).toBeLessThanOrEqual(stats.boat.chumRadius + 1e-8);
+  }
+  images.length = circles.length = 0;
+  renderer.draw({ ...scene, world, stats }, 0.1);
+  expect(createElement).toHaveBeenCalledTimes(created);
+  const moved = circles.filter(c => c[2] === 1.2);
+  expect(moved).toHaveLength(5);
+  for (const [i, bit] of moved.entries()) {
+    expect(Math.hypot(bit[0]! - 640, bit[1]! - 400)).toBeLessThan(Math.hypot(bits[i]![0]! - 640, bits[i]![1]! - 400));
+  }
+  vi.spyOn(world, "chumActive", "get").mockReturnValue(false);
+  circles.length = 0;
+  renderer.draw({ ...scene, world, stats }, 0.1);
+  expect(circles.filter(c => c[2] === 1.2)).toHaveLength(0);
 });

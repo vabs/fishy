@@ -1,7 +1,7 @@
 import { formatMoney } from "../format";
 import { CHEST, chestInNet, coinBurst, type Chest } from "./chest";
 import { FISH, FISH_KINDS, FISH_SPECS, MAX_FISH_SIZE, type FishKind } from "./fish";
-import { causticCells, coinFlight, cooldownArcFraction, drawGlow, shakeOffset, waterSplash, type Effect } from "./fx";
+import { causticCells, chumCloudAlpha, coinFlight, cooldownArcFraction, drawChumShape, drawGlow, lanternLightRadius, ropeSagPoint, shakeOffset, waterSplash, type Effect } from "./fx";
 import { loadArt, onArtReady } from "./art";
 import { diveEffect, sparklePath, glintBurst } from "./golden";
 import { fishColors, getPalette, type PaletteName } from "./palette";
@@ -186,6 +186,9 @@ export class Renderer {
   private trapSprites = new Map<number, HTMLCanvasElement>();
   private trapVisuals = new Map<number, TrapVisual>();
   private trapReveals: TrapReveal[] = [];
+  private chumCloud: (Point & { age: number }) | null = null;
+  private snagAge = 1;
+  private lastSeineSpark = -1;
   private readonly reducedMotion = typeof matchMedia === "function" ? matchMedia("(prefers-reduced-motion: reduce)") : null;
   private effects: { effect: Effect; age: number; event: FxEvent }[] = [];
   private bonusEffects: { effect: Effect; age: number }[] = [];
@@ -240,6 +243,10 @@ export class Renderer {
     // Sprites are rendered at device resolution, which may have changed.
     this.sprites.clear();
     this.chestSprites = null;
+    if (this.chumCloud) {
+      this.chumCloud.x = this.width / 2;
+      this.chumCloud.y = this.height / 2;
+    }
     this.trapSprites.clear();
     this.trapVisuals.clear();
     this.trapReveals.length = 0;
@@ -269,6 +276,22 @@ export class Renderer {
 
   onEvent(event: WorldEvent): void {
     switch (event.type) {
+      case "chum":
+        this.chumCloud = { x: event.x, y: event.y, age: 0 };
+        this.addBonusEffect(waterSplash(event.x, event.y, 48));
+        break;
+      case "seine-hit":
+        if (this.time - this.lastSeineSpark >= 0.08) {
+          this.lastSeineSpark = this.time;
+          this.addBonusEffect({ life: 0.3, draw(ctx, t) {
+            ctx.fillStyle = "#fff1cd"; ctx.globalAlpha *= 1 - t;
+            ctx.beginPath(); sparklePath(ctx, event.x, event.y, 4 * Math.sin(Math.PI * t), 0); ctx.fill();
+          } });
+        }
+        break;
+      case "snag":
+        this.snagAge = 0;
+        break;
       case "trap-cast":
         this.trapVisuals.clear();
         this.trapReveals.length = 0;
@@ -450,7 +473,11 @@ export class Renderer {
     }
     this.resetTransform();
     if (world && frenzy > 0) this.drawFrenzyFront(world, frenzy);
-    this.drawBoat();
+    if (world) {
+      this.drawChum(world);
+      this.drawRiggingWater(world);
+    }
+    this.drawBoat(stats.boat.lanternRadius);
     if (world) {
       for (const fish of world.fish) this.drawFish(fish, "silhouette");
       this.resetTransform();
@@ -503,6 +530,87 @@ export class Renderer {
     ctx.globalAlpha = 1;
   }
 
+  private drawChum(world: World): void {
+    const ctx = this.ctx;
+    const stats = world.stats.boat;
+    const cloud = this.chumCloud;
+    if (cloud) {
+      const alpha = chumCloudAlpha(cloud.age, stats.chumSeconds);
+      if (alpha === 0 || !stats.chum) this.chumCloud = null;
+      else {
+        if (this.reducedMotion?.matches) {
+          drawChumShape(ctx, cloud.x, cloud.y, stats.chumRadius, alpha * 0.4, true);
+        } else {
+          const spread = 1 - (1 - Math.min(1, cloud.age / 1.2)) ** 2;
+          const radius = stats.chumRadius * (0.12 + spread * 0.88);
+          // Four broad overlapping plumes share cached pigment; their outer edges reach the lure radius.
+          for (let i = 0; i < 4; i++) {
+            const angle = i * TAU / 4 + 0.4 + Math.sin(i * 2.1) * 0.17;
+            const distance = radius * (i % 2 ? 0.32 : 0.3);
+            const size = radius - distance;
+            drawChumShape(ctx, cloud.x + Math.cos(angle) * distance, cloud.y + Math.sin(angle) * distance, size, alpha * 0.28);
+          }
+        }
+      }
+    }
+    if (!world.chumActive || this.reducedMotion?.matches) return;
+    ctx.strokeStyle = "rgba(237, 226, 190, 0.13)"; ctx.lineWidth = 0.9;
+    ctx.beginPath();
+    for (let i = 0; i < 12; i++) {
+      const angle = i * TAU / 12 + 0.2;
+      const t = (this.time * 0.28 + i * 0.618034) % 1;
+      const radius = 70 + (stats.chumRadius - 70) * (1 - t);
+      const length = Math.min(12, Math.max(0, radius - 65));
+      ctx.moveTo(world.width / 2 + Math.cos(angle) * radius, world.height / 2 + Math.sin(angle) * radius);
+      ctx.lineTo(world.width / 2 + Math.cos(angle) * (radius - length), world.height / 2 + Math.sin(angle) * (radius - length));
+    }
+    ctx.stroke();
+    // A few pale morsels follow the inward current, rather than outlining the cloud with dots.
+    ctx.fillStyle = "#e6c69c";
+    for (let i = 0; i < 5; i++) {
+      const angle = i * 2.399963 + 0.6;
+      const t = (this.time * 0.2 + i * 0.173) % 1;
+      const radius = 70 + Math.max(0, stats.chumRadius - 70) * (1 - t);
+      ctx.globalAlpha = Math.sin(t * Math.PI) * 0.38;
+      ctx.beginPath();
+      ctx.arc(world.width / 2 + Math.cos(angle) * radius, world.height / 2 + Math.sin(angle) * radius, 1.2, 0, TAU);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  private drawRiggingWater(world: World): void {
+    const ctx = this.ctx;
+    const reduced = this.reducedMotion?.matches;
+    for (const [index, trap] of world.traps.entries()) {
+      if (!reduced && trap.age < 0.65) continue;
+      if (world.stats.rigging.baitPull > 0 && trap.cooldown === 0) {
+        for (let i = 0; i < 2; i++) {
+          const t = (this.time * 0.22 + i / 2 + trap.id * 0.13) % 1;
+          const radius = trap.radius + 6 + t * Math.min(30, world.stats.rigging.baitRange * 0.15);
+          ctx.strokeStyle = `rgba(230, 226, 191, ${0.12 * (1 - t)})`;
+          ctx.lineWidth = 0.8 / this.viewScale;
+          ctx.beginPath(); ctx.arc(trap.x, trap.y, radius, 0, TAU); ctx.stroke();
+        }
+      }
+      if (!world.stats.rigging.seine || trap.partner === null || trap.partner <= index) continue;
+      const partner = world.traps[trap.partner];
+      if (!partner || (!reduced && partner.age < 0.65)) continue;
+      const mid = ropeSagPoint(trap, partner, 0.5);
+      const controlY = mid.y * 2 - (trap.y + partner.y) / 2;
+      ctx.strokeStyle = "#9b8965"; ctx.lineWidth = 1.4 / this.viewScale;
+      ctx.beginPath(); ctx.moveTo(trap.x, trap.y);
+      ctx.quadraticCurveTo(mid.x, controlY, partner.x, partner.y); ctx.stroke();
+      const floats = Math.min(9, Math.max(3, Math.floor(Math.hypot(partner.x - trap.x, partner.y - trap.y) / 32)));
+      for (let i = 1; i <= floats; i++) {
+        const point = ropeSagPoint(trap, partner, i / (floats + 1));
+        ctx.fillStyle = i % 2 ? "#e4d8bb" : "#aa6750";
+        ctx.strokeStyle = "#4d5143"; ctx.lineWidth = 0.7 / this.viewScale;
+        ctx.beginPath(); ctx.ellipse(point.x, point.y, 2.5 / this.viewScale, 1.8 / this.viewScale, 0, 0, TAU); ctx.fill(); ctx.stroke();
+      }
+    }
+  }
+
   /** Cached secondary rope, faint mesh and four striped buoys, in device resolution. */
   private trapSprite(radius: number): HTMLCanvasElement {
     const cached = this.trapSprites.get(radius);
@@ -517,8 +625,8 @@ export class Renderer {
     ctx.save();
     ctx.beginPath(); ctx.arc(0, 0, radius, 0, TAU); ctx.clip();
     ctx.rotate(Math.PI / 4);
-    ctx.strokeStyle = "rgba(223, 231, 205, 0.12)";
-    ctx.lineWidth = 0.7;
+    ctx.strokeStyle = "rgba(223, 231, 205, 0.18)";
+    ctx.lineWidth = 0.8;
     ctx.beginPath();
     const spacing = Math.max(12, radius / 4);
     for (let d = -radius * 2; d <= radius * 2; d += spacing) {
@@ -527,8 +635,8 @@ export class Renderer {
     }
     ctx.stroke(); ctx.restore();
     ctx.beginPath(); ctx.arc(0, 0, radius, 0, TAU);
-    ctx.strokeStyle = "rgba(15, 40, 43, 0.65)"; ctx.lineWidth = 3.8; ctx.stroke();
-    ctx.strokeStyle = "#ac956c"; ctx.lineWidth = 2; ctx.stroke();
+    ctx.strokeStyle = "#514031"; ctx.lineWidth = 4.6; ctx.stroke();
+    ctx.strokeStyle = "#ac956c"; ctx.lineWidth = 3; ctx.stroke();
     ctx.setLineDash([1.5, 3]); ctx.strokeStyle = "#675c43"; ctx.lineWidth = 0.7; ctx.stroke();
     ctx.setLineDash([]);
     for (let i = 0; i < 4; i++) {
@@ -537,8 +645,8 @@ export class Renderer {
       ctx.translate(Math.cos(a) * radius, Math.sin(a) * radius);
       ctx.rotate(a);
       ctx.fillStyle = "#f2e4c5"; ctx.strokeStyle = "#514635"; ctx.lineWidth = 0.8;
-      ctx.beginPath(); ctx.ellipse(0, 0, 4, 2.7, 0, 0, TAU); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = "#a9503d"; ctx.fillRect(-1.2, -2.2, 2.4, 4.4);
+      ctx.beginPath(); ctx.ellipse(0, 0, 4.8, 3.2, 0, 0, TAU); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = "#a9503d"; ctx.fillRect(-1.4, -2.7, 2.8, 5.4);
       ctx.restore();
     }
     if (this.trapSprites.size >= 16) this.trapSprites.clear();
@@ -605,6 +713,7 @@ export class Renderer {
       const visual = this.trapVisuals.get(trap.id);
       if (!visual?.reveal) continue;
       visual.reveal = false;
+      if (visual.snapAge >= 0.3) continue;
       for (const fish of world.fish) {
         if (fish.captured || Math.hypot(fish.x - trap.x, fish.y - trap.y) > trap.radius || this.trapReveals.length >= 96) continue;
         this.trapReveals.push({ x: fish.x, y: fish.y, kind: fish.kind, heading: fish.heading, golden: !!fish.golden, age: visual.snapAge });
@@ -614,6 +723,7 @@ export class Renderer {
     for (const fish of this.trapReveals) {
       const sprite = this.sprite(fish.kind);
       ctx.save(); ctx.translate(fish.x, fish.y); ctx.rotate(fish.heading);
+      ctx.scale(1, Math.cos(fish.heading) < 0 ? -1 : 1);
       ctx.globalAlpha = Math.min(1, (0.3 - fish.age) / 0.12);
       ctx.drawImage(fish.golden ? sprite.golden : sprite.full, -sprite.width / 2, -sprite.height / 2, sprite.width, sprite.height);
       ctx.restore();
@@ -660,9 +770,19 @@ export class Renderer {
       ctx.ellipse(chest.x, chest.y + size * 0.3, size * (0.55 + 0.4 * ripple), size * (0.14 + 0.1 * ripple), 0, 0, TAU);
       ctx.stroke();
     }
-    ctx.translate(chest.x, chest.y + Math.sin(this.time * 1.8) * 2.5);
+    const held = (chest.snagLeft ?? 0) > 0;
+    const tug = held && !this.reducedMotion?.matches ? Math.sin(this.snagAge * 62) * 2.5 * Math.max(0, 1 - this.snagAge / 0.4) : 0;
+    ctx.translate(chest.x + tug, chest.y + Math.sin(this.time * 1.8) * 2.5);
     ctx.rotate(Math.sin(this.time * 1.3 + 0.6) * 0.06);
     ctx.drawImage(chest.hitFlash > 0 ? sprites.flash : sprites.full, -sprites.width / 2, -sprites.height / 2, sprites.width, sprites.height);
+    if (held) {
+      ctx.strokeStyle = "#c1aa7d"; ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      for (const x of [-12, 9]) ctx.ellipse(x, 0, 4, size * 0.3, -0.3, 0, TAU);
+      ctx.moveTo(-size * 0.5, 5); ctx.quadraticCurveTo(0, -4, size * 0.5, 3);
+      ctx.stroke();
+      ctx.fillStyle = "#e0cf9d"; ctx.beginPath(); ctx.arc(-10, 5, 2.4, 0, TAU); ctx.fill();
+    }
     ctx.restore();
 
     if (!pointer || !chestInNet(chest, pointer, netRadius)) return;
@@ -867,13 +987,14 @@ export class Renderer {
     ctx.restore();
   }
 
-  private drawBoat(): void {
+  private drawBoat(lureRadius = 0): void {
     const ctx = this.ctx;
     ctx.save();
     ctx.translate(this.width / 2, this.height / 2);
-    if (this.lantern && this.night > 0) {
-      ctx.globalAlpha = this.night * 0.75;
-      ctx.drawImage(this.lantern, -125, -125, 250, 250);
+    const radius = lanternLightRadius(lureRadius, this.night);
+    if (this.lantern && radius > 0) {
+      ctx.globalAlpha = lureRadius > 0 ? 0.35 + this.night * 0.5 : this.night * 0.75;
+      ctx.drawImage(this.lantern, -radius, -radius, radius * 2, radius * 2);
       ctx.globalAlpha = 1;
     }
     for (const phase of [0, 0.5]) {
@@ -927,6 +1048,8 @@ export class Renderer {
 
   private advanceEffects(dt: number): void {
     this.shakeAge += dt;
+    this.snagAge += dt;
+    if (this.chumCloud) this.chumCloud.age += dt;
     for (const visual of this.trapVisuals.values()) { visual.snapAge += dt; visual.readyAge += dt; }
     for (const fish of this.trapReveals) fish.age += dt;
     this.trapReveals = this.reducedMotion?.matches ? [] : this.trapReveals.filter(fish => fish.age < 0.3);
