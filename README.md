@@ -104,6 +104,31 @@ and the Endless Sea.
 
 Upgrades in the tree make each of them come more often, last longer or pay more.
 
+## Sea States
+
+From round 6, the sea can change for a whole round. The hub names the weather on Start Round and
+explains it in the hint; a banner announces it when you start. Icons and text distinguish the
+states in both palettes. The summary's bonus ledger shows the weather and any extra earnings,
+already included in the fish table and total.
+
+| State | What changes | Counter | Catch value |
+| --- | --- | --- | --- |
+| Clear | The usual sea | — | ×1 |
+| Storm | Wind pushes fish downwind in gusts | Chum, Bait and trap nets downwind | ×1.2 |
+| Fog | Far silhouettes fade; the boat and net keep clear pools | Lantern Lure pushes fog back | ×1.15 |
+| Algal Bloom | Fish spawn ×1.25, swim ×0.75 speed and have ×1.5 HP | Net damage, Strong Mesh and Electric chains | ×1 |
+
+- Eligible rounds have a 35% chance of weather, with equal weights among the three states. The
+  same non-clear state never follows itself. Rounds before 6, every fifth round's Feeding Frenzy
+  and the Final Round stay clear.
+- Weather comes from the save's creation time and round number. Reloading or buying upgrades
+  keeps the forecast. Bloom rounds never offer an earnings bounty.
+- Storm and Fog bonuses apply to catches from every source, including golden fish and abilities.
+  Golden glints and treasure stay visible in fog; fish inside the net keep their full colour.
+- In Endless, every 150 seconds there is a 50% chance of a 60-second state. Weather waits until it
+  can fit without overlapping a Frenzy wave and never repeats the previous state. The HUD shows
+  its name and seconds left, and each start gets the same banner as a timed round.
+
 ## Bounties
 
 From round 2 the hub shows a bounty board for the next round: two bounties, and three from round 8.
@@ -154,11 +179,27 @@ current upgrades and no clock:
   caught, longest trip, best combo. **Keep fishing** starts another trip; **Head home**
   returns to the title screen.
 
+## Biomes
+
+Every Endless trip sails through three biomes, five minutes each, then loops back to the Reef.
+Only fish you have unlocked get the biome's extra spawns; fish already swimming stay put.
+
+| Biome | Trip time | Fish and events | Music |
+| --- | --- | --- | --- |
+| Shallow Reef | 0–5 min | Normal and Uncommon spawn ×1.2 | Shallows |
+| Abyssal Trench | 5–10 min | Rare spawn ×2, Electric ×1.5, golden fish ×1.5 | Deep |
+| Sunken Graveyard | 10–15 min | Goober and Monster spawn ×1.5; chest gaps ÷3 (about 20–33 s) | Currents |
+
+The HUD names the current biome and counts down to the next one. An entry banner announces the
+boundary, the sea blends over eight seconds, and the music follows the biome. Biome, weather and
+the four-minute day/night cycle share the lighting model so silhouettes stay readable. At the end
+of a trip, the logbook lists every biome visited.
+
 ## Achievements
 
 ![The achievements logbook: a grid of brass medallions on parchment, earned ones in gold with the date, locked ones grey with what to do, and a 7 / 22 count](docs/screenshots/achievements.png)
 
-There are 22, shown from the title screen or the hub's Achievements count under your name. Earned
+There are 24, shown from the title screen or the hub's Achievements count under your name. Earned
 badges show the date; locked ones say what to do. New ones pop up with a short brass fanfare when a
 round or Endless trip ends.
 
@@ -186,8 +227,11 @@ round or Endless trip ends.
 | Master of the Sea | Finish the Final Round |
 | Lost at Sea | Spend 10 minutes in one Endless trip |
 | Sea Legs | Spend 30 minutes in one Endless trip |
+| Into the Deep | Reach the Abyssal Trench in one trip |
+| Grave Robber | Open 5 chests in the Sunken Graveyard in one trip |
 
-All but the bounty and Final Round badges can be earned in the Endless Sea too. Achievements are
+The two biome badges are checked when a trip ends. All but the bounty and Final Round badges can
+be earned in the Endless Sea too. Achievements are
 worked out from your saved stats, so a save from before they existed gets the ones it already
 qualifies for (first catches, fish totals, Master of the Sea) when it loads or is imported. Play
 Again keeps every badge you've earned; the counts towards the rest start again with the new game.
@@ -249,15 +293,22 @@ npm run screenshots   # regenerate docs/screenshots (needs Google Chrome)
 Tech tree pacing: `PACING=1 npx vitest run src/game/tech/pacing.test.ts --silent=false` plays a
 whole game with a bot and reports how long the tree takes to finish.
 The bot uses trap nets and throws chum whenever ready. With the current prices it takes about
-74.6 minutes over 89 rounds, compared with 69.9 minutes over 84 rounds before these tools;
-Trap Net arrives around 22 minutes. These estimates include ten seconds between rounds.
+73.1 minutes over 87 rounds with weather, compared with main’s pre-weather 74.6 minutes over
+89 rounds (about 2% faster, within the ±3% weather budget). Trap Net arrives at 21.6 minutes
+(round 40), compared with 22.2 minutes (round 41) on main. These estimates include ten seconds
+between rounds.
 
 The tree has Net, Rigging, Boat, Time, Spawning and Economy lanes, plus one for each fish type.
 Rigging and Boat are part of completing the tree for the Final Round.
 
 In dev, `?fish=electric,epic` makes only those types spawn, which is handy for trying one out:
 http://localhost:5173/?fish=electric,epic. `?time=0.5` holds the Endless Sea at one time of day
-(0 golden hour, 0.25 dusk, 0.5 night, 0.75 dawn).
+(0 golden hour, 0.25 dusk, 0.5 night, 0.75 dawn). `?sea=storm`, `?sea=fog` or `?sea=bloom` forces
+the next timed round's forecast and state while the option is in the URL, including its bounty
+rule. `?endlessTime=301` starts an Endless trip 301 seconds in, at the Abyssal Trench; use `601`
+for the Sunken Graveyard. This runs the actual simulation forward at 60 Hz without input and
+discards historical effects, keeping biome visits, weather and event timers consistent. The
+current state is announced on entry; simulated catches from unlocked traps count in that dev trip.
 In the dev server only, `window.__fishy.world` exposes the current simulation (or `null` between
 sessions), including `traps`, `trapCatches`, `chumReady` and `chumCooldownLeft`;
 `window.__fishy.pointer` shows the input position. Browser checks use these rather than searching
@@ -287,12 +338,13 @@ index.html          Page shell: canvas, title screen, HUD, hub, panels
 src/main.ts         Boot, game loop, input, screens (title, hub, round, summary, Endless logbook, end)
 src/app/            Helpers for main.ts, tested
   bounties.ts       Keeps the bounty board stable; works out progress and payouts
-  endless.ts        Endless unlock, time at sea, new personal records
+  endless.ts        Endless unlock, time at sea, new personal records and dev fast-forward
 src/game/
   world.ts          The simulation for one round or Endless trip. No DOM, fixed 60 Hz step, seeded RNG
   stats.ts          Everything upgrades can change (global, per fish, abilities) and base values
   bounties.ts       Bounty kinds, rolling a board, progress, labels and guarantees
   achievements.ts   The achievement list and which ones a save qualifies for
+  sea.ts, biome.ts  Deterministic weather, Endless biome clocks and their multipliers
   golden.ts, chest.ts  Golden fish and treasure chests
   rigging.ts, boat.ts  Trap placement, seine geometry and boat lure movement
   fish/             One file per fish type (FishSpec): stats, shape and behaviour hooks
