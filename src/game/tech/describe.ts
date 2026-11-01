@@ -16,6 +16,7 @@ const unit = (suffix: string, digits = 0): Format => (v) => `${num(digits)(v)} $
 const percent: Format = (v) => `${Number(((v as number) * 100).toFixed(1))}%`;
 const times: Format = (v) => `${Number((v as number).toFixed(2))}×`;
 const onOff: Format = (v) => (v ? "On" : "Off");
+const seconds: Format = (v) => `${(v as number).toFixed(1)} s`;
 const GOOBER_TIERS = ["Normal", "Uncommon", "Rare", "Electric", "Epic"];
 const tier: Format = (v) => GOOBER_TIERS[v as number] ?? String(v);
 
@@ -44,6 +45,24 @@ const STAT_FORMATS: Record<string, [string, Format]> = {
   goldenValueMult: ["Golden fish value", times],
   goldenSeconds: ["Time before a golden fish escapes", unit("s", 1)],
   chestChance: ["Treasure chest chance per round", percent],
+  "rigging.count": ["Trap nets", num()],
+  "rigging.resetSeconds": ["Reset", seconds],
+  "rigging.radius": ["Trap net radius", unit("px")],
+  "rigging.damage": ["Trap damage", num()],
+  "rigging.haul": ["Haul", (v) => v === Infinity ? "all" : num()(v)],
+  "rigging.seine": ["Seine line", onOff],
+  "rigging.seineDamage": ["Seine damage", num()],
+  "rigging.baitPull": ["Bait pull", unit("px/s")],
+  "rigging.baitRange": ["Bait range", unit("px")],
+  "rigging.snagSeconds": ["Chest held still", seconds],
+  "rigging.frenzyResetMult": ["Reset time in a Feeding Frenzy", times],
+  "boat.chum": ["Chum", onOff],
+  "boat.chumCooldown": ["Chum cooldown", seconds],
+  "boat.chumSeconds": ["Chum duration", seconds],
+  "boat.chumRadius": ["Chum reach", unit("px")],
+  "boat.chumPull": ["Chum pull", unit("px/s")],
+  "boat.lanternRadius": ["Lantern reach", unit("px")],
+  "boat.lanternSlow": ["Speed in lantern light", percent],
   "ability.uncommon.schoolMin": ["Smallest school", num()],
   "ability.uncommon.schoolMax": ["Largest school", num()],
   "ability.rare.armor": ["Rare armour", num(2)],

@@ -166,6 +166,179 @@ export const TECH_NODES: readonly TechNode[] = [
     },
   },
 
+  // Rigging. Mid-game entry beside Huge Net, then specialised trap tools further out.
+  {
+    id: "rigging.unlock",
+    branch: "rigging",
+    name: "Trap Net",
+    description: "Cast a trap net at a random fishing spot each round. It snaps on nearby fish, then resets",
+    maxLevel: 1,
+    cost: { base: 5600, growth: 1 },
+    requires: ["net.radius2"],
+    apply(stats) {
+      stats.rigging.count += 1;
+    },
+  },
+  {
+    id: "rigging.count",
+    branch: "rigging",
+    name: "More Nets",
+    description: "+1 trap net per level, up to 4 nets cast each round",
+    maxLevel: 3,
+    cost: { base: 9400, growth: 2 },
+    requires: ["rigging.unlock"],
+    apply(stats, level) {
+      stats.rigging.count += level;
+    },
+  },
+  {
+    id: "rigging.reset",
+    branch: "rigging",
+    name: "Quick Reset",
+    description: "Trap nets reset 15% sooner per level",
+    maxLevel: 4,
+    cost: { base: 6300, growth: 1.8 },
+    requires: ["rigging.unlock"],
+    apply(stats, level) {
+      stats.rigging.resetSeconds *= 0.85 ** level;
+    },
+  },
+  {
+    id: "rigging.mesh",
+    branch: "rigging",
+    name: "Wide Mesh",
+    description: "+6 px trap net radius per level",
+    maxLevel: 3,
+    cost: { base: 9400, growth: 1.8 },
+    requires: ["rigging.reset"],
+    apply(stats, level) {
+      stats.rigging.radius += 6 * level;
+    },
+  },
+  {
+    id: "rigging.strength",
+    branch: "rigging",
+    name: "Strong Mesh",
+    description: "+1 damage per trap net snap per level",
+    maxLevel: 3,
+    cost: { base: 9400, growth: 2 },
+    requires: ["rigging.count"],
+    apply(stats, level) {
+      stats.rigging.damage += level;
+    },
+  },
+  {
+    id: "rigging.haul",
+    branch: "rigging",
+    name: "Big Haul",
+    description: "Level 1: hit 2 more fish per snap. Level 2: hit every fish inside the trap net",
+    maxLevel: 2,
+    cost: { base: 38000, growth: 3 },
+    requires: ["rigging.strength"],
+    apply(stats, level) {
+      stats.rigging.haul += level >= 2 ? Infinity : 2;
+    },
+  },
+  {
+    id: "rigging.seine",
+    branch: "rigging",
+    name: "Seine Line",
+    description: "Join trap nets in pairs with a rope that damages fish crossing it",
+    maxLevel: 1,
+    cost: { base: 110000, growth: 1 },
+    requires: ["rigging.count", "rigging.strength"],
+    apply(stats) {
+      stats.rigging.seine = true;
+    },
+  },
+  {
+    id: "rigging.bait",
+    branch: "rigging",
+    name: "Bait",
+    description: "+15 px/s pull towards armed trap nets per level, for fish within bait range",
+    maxLevel: 3,
+    cost: { base: 26000, growth: 2 },
+    requires: ["rigging.mesh"],
+    apply(stats, level) {
+      stats.rigging.baitPull += 15 * level;
+    },
+  },
+  {
+    id: "rigging.snag",
+    branch: "rigging",
+    name: "Snag",
+    description: "Trap nets hold a passing treasure chest still for 4 s, once per chest",
+    maxLevel: 1,
+    cost: { base: 68000, growth: 1 },
+    requires: ["rigging.bait"],
+    apply(stats) {
+      stats.rigging.snagSeconds += 4;
+    },
+  },
+  {
+    id: "rigging.frenzy",
+    branch: "rigging",
+    name: "Frenzy Rigging",
+    description: "Trap nets reset twice as fast during a Feeding Frenzy",
+    maxLevel: 1,
+    cost: { base: 160000, growth: 1 },
+    requires: ["rigging.reset", "rigging.seine"],
+    apply(stats) {
+      stats.rigging.frenzyResetMult *= 0.5;
+    },
+  },
+
+  // Boat. Tools within reach in the middle of the campaign, beside the Rigging lane.
+  {
+    id: "boat.chum",
+    branch: "boat",
+    name: "Chum the Water",
+    description: "Throw chum with Space or the Chum button to pull nearby fish towards the boat",
+    maxLevel: 1,
+    cost: { base: 6300, growth: 1 },
+    requires: ["rigging.unlock"],
+    apply(stats) {
+      stats.boat.chum = true;
+    },
+  },
+  {
+    id: "boat.chumCooldown",
+    branch: "boat",
+    name: "Quick Chum",
+    description: "Chum is ready again 15% sooner per level",
+    maxLevel: 3,
+    cost: { base: 9400, growth: 1.8 },
+    requires: ["boat.chum"],
+    apply(stats, level) {
+      stats.boat.chumCooldown *= 0.85 ** level;
+    },
+  },
+  {
+    id: "boat.chumReach",
+    branch: "boat",
+    name: "Long Reach",
+    description: "+60 px chum reach and +1 s chum duration per level",
+    maxLevel: 2,
+    cost: { base: 19000, growth: 2 },
+    requires: ["boat.chumCooldown"],
+    apply(stats, level) {
+      stats.boat.chumRadius += 60 * level;
+      stats.boat.chumSeconds += level;
+    },
+  },
+  {
+    id: "boat.lantern",
+    branch: "boat",
+    name: "Lantern Lure",
+    description: "Light +70 px around the boat per level: fish swim 30% slower inside, and drift closer on Endless nights",
+    maxLevel: 3,
+    cost: { base: 9400, growth: 2 },
+    requires: ["boat.chum"],
+    apply(stats, level) {
+      stats.boat.lanternRadius += 70 * level;
+    },
+  },
+
   // Time
   {
     id: "time.round",
@@ -232,7 +405,7 @@ export const TECH_NODES: readonly TechNode[] = [
   {
     id: "spawn.rate",
     branch: "spawning",
-    name: "Chum the Water",
+    name: "Lively Waters",
     description: "Every fish type spawns 10% faster per level",
     maxLevel: 10,
     cost: { base: 17, growth: 1.55 },

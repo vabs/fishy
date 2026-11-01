@@ -8,8 +8,8 @@ import { TECH_NODES } from "./nodes";
  * wedge of the circle for its branch, or for its fish type. A node's ring is its depth within its
  * lane, so each lane's first nodes form an inner ring around the boat and the lane grows outwards.
  * Lanes get just enough angle for their busiest ring, and the rings are pushed out until all the
- * lanes fit around the circle. Nodes need more room stacked vertically than side by side, so a lane
- * pointing sideways needs more angle than one pointing up or down.
+ * lanes fit around the circle. Spacing uses the larger footprint dimension so nodes remain clear
+ * even at the ends of a wide lane, where the tangent differs from the lane's centre.
  */
 
 export type LaneKey = Exclude<Branch, "fish" | "star"> | FishKind;
@@ -17,6 +17,8 @@ export type LaneKey = Exclude<Branch, "fish" | "star"> | FishKind;
 /** Clockwise from the top. Neighbours share requirements, so cross-lane edges stay short. */
 export const LANE_ORDER: readonly LaneKey[] = [
   "net",
+  "rigging",
+  "boat",
   "time",
   "spawning",
   "economy",
@@ -32,6 +34,8 @@ export const LANE_ORDER: readonly LaneKey[] = [
 
 const LANE_LABELS: Record<LaneKey, string> = {
   net: "Net",
+  rigging: "Rigging",
+  boat: "Boat",
   time: "Time",
   spawning: "Spawning",
   economy: "Economy",
@@ -129,19 +133,17 @@ export function layoutTree(nodes: readonly TechNode[] = TECH_NODES, options: Lay
   const ringCount = Math.max(1, ...[...grid.values()].map((rings) => rings.length));
 
   const radiusAt = (inner: number, depth: number): number => inner + depth * options.ringGap;
-  /** Angle between neighbours on a ring of this radius, around the given angle. */
-  const gapAt = (radius: number, at: number): number => {
-    // Neighbours on a ring are apart along the tangent; that's how far it is to the ellipse's edge.
-    const distance = 1 / Math.hypot(Math.sin(at) / options.spacing.x, Math.cos(at) / options.spacing.y);
+  /** Angle between neighbours, allowing the full footprint at every point on the ring. */
+  const gapAt = (radius: number): number => {
+    const distance = Math.max(options.spacing.x, options.spacing.y);
     return 2 * Math.asin(Math.min(1, distance / (2 * radius)));
   };
   // Angle each lane needs: enough for its busiest ring, plus padding.
-  const needs = (inner: number, centres: number[]): number[] =>
-    lanes.map((key, i) => {
-      const at = centres[i] ?? 0;
+  const needs = (inner: number): number[] =>
+    lanes.map((key) => {
       const rings = grid.get(key) ?? [];
-      const widest = Math.max(...rings.map((ring, depth) => (ring?.length ?? 0) * gapAt(radiusAt(inner, depth), at)));
-      return widest + 2 * options.lanePadding * gapAt(inner, at);
+      const widest = Math.max(...rings.map((ring, depth) => (ring?.length ?? 0) * gapAt(radiusAt(inner, depth))));
+      return widest + 2 * options.lanePadding * gapAt(inner);
     });
   // Lay the lanes clockwise with the first one centred at the top, sharing out the spare angle evenly.
   const arrange = (laneNeeds: number[]): Lane[] => {
@@ -155,20 +157,9 @@ export function layoutTree(nodes: readonly TechNode[] = TECH_NODES, options: Lay
     });
   };
 
-  // What a lane needs depends on where it points, and where it points depends on what the lanes
-  // before it need, so settle both together. A few rounds is plenty.
-  let centres = lanes.map((_, i) => -Math.PI / 2 + (i * Math.PI * 2) / lanes.length);
   let inner = options.minInnerRadius;
-  let laneInfo: Lane[] = [];
-  for (let round = 0; round < 4; round++) {
-    inner = options.minInnerRadius;
-    while (sum(needs(inner, centres)) > Math.PI * 2) inner += 5;
-    laneInfo = arrange(needs(inner, centres));
-    centres = laneInfo.map((lane) => lane.center);
-  }
-  // The last round moved the lanes a little; make sure they still fit where they ended up.
-  while (sum(needs(inner, centres)) > Math.PI * 2) inner += 5;
-  laneInfo = arrange(needs(inner, centres));
+  while (sum(needs(inner)) > Math.PI * 2) inner += 5;
+  const laneInfo = arrange(needs(inner));
 
   const placed = new Map<string, PlacedNode>();
   const angles = new Map<string, number>();
@@ -195,7 +186,7 @@ export function layoutTree(nodes: readonly TechNode[] = TECH_NODES, options: Lay
     const rings = grid.get(lane.key) ?? [];
     rings.forEach((ring = [], depth) => {
       const radius = radiusAt(inner, depth);
-      const gap = gapAt(radius, lane.center);
+      const gap = gapAt(radius);
       // Each node wants to sit at the average angle of the nodes it needs in its own lane.
       const wanted = ring.map((node, order) => {
         const own = node.requires.flatMap((id) => {

@@ -3,6 +3,25 @@ import { refundRemovedLevels } from "./refund";
 import { getNode, nextCost } from "./tree";
 
 describe("refundRemovedLevels", () => {
+  it("preserves all Boat upgrades and refunds excess Lantern levels", () => {
+    const upgrades = { "boat.chum": 1, "boat.chumCooldown": 3, "boat.chumReach": 2, "boat.lantern": 3 };
+    expect(refundRemovedLevels(upgrades)).toEqual({ upgrades, refund: 0 });
+    const lantern = getNode("boat.lantern")!;
+    expect(refundRemovedLevels({ ...upgrades, "boat.lantern": 4 })).toEqual({
+      upgrades, refund: nextCost(lantern, 3),
+    });
+  });
+
+  it("keeps trap nets at their limit and refunds only excess levels", () => {
+    expect(refundRemovedLevels({ "rigging.unlock": 1, "rigging.count": 3, "rigging.haul": 2 })).toEqual({
+      upgrades: { "rigging.unlock": 1, "rigging.count": 3, "rigging.haul": 2 }, refund: 0,
+    });
+    const count = getNode("rigging.count")!;
+    expect(refundRemovedLevels({ "rigging.count": 4 })).toEqual({
+      upgrades: { "rigging.count": 3 }, refund: nextCost(count, 3),
+    });
+  });
+
   it("uses rounded current prices when refunding excess levels of an active node", () => {
     const { upgrades, refund } = refundRemovedLevels({ "net.radius": 12 });
     expect(upgrades).toEqual({ "net.radius": 10 });
