@@ -2434,3 +2434,12 @@ button:active:enabled {
 @media (prefers-reduced-motion: reduce) {
   .round-banners.is-live .frenzy-banner { animation: none; }
 }
+
+/* Weather icons are inline SVG so they never fall back to emoji or empty boxes. */
+.weather-badge-icon,
+.weather-banner-icon {
+  display: inline-flex;
+  vertical-align: -0.15em;
+}
+.weather-badge-icon svg,
+.weather-banner-icon svg { display: block; }

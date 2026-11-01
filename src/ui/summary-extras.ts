@@ -1,3 +1,4 @@
+import { WEATHER_PATHS } from "./icons";
 import { formatMoney } from "../format";
 
 /** One bonus in display order; amounts describe earnings already included in the headline. */
@@ -23,9 +24,9 @@ const hooks = ["frenzy", "traps", "bounties"] as const;
 const paths: Record<SummaryExtra["icon"], string> = {
   frenzy: '<path d="M2 14q4-8 8 0t8 0l4-6M2 19q4-6 8 0t8 0"/><path d="m10 3-3 6h5l-2 4"/>',
   traps: '<path d="M4 4h16v16H4zM4 9h16M4 15h16M9 4v16M15 4v16"/>',
-  storm: '<path d="M5 13a4 4 0 0 1 0-8 6 6 0 0 1 11-1 5 5 0 0 1 2 9M12 10l-4 7h5l-2 5M4 17l-1 3M20 17l-1 3"/>',
-  fog: '<path d="M5 10a4 4 0 0 1 0-8 6 6 0 0 1 11 0 4 4 0 0 1 3 8M3 14h18M6 18h12M3 22h18"/>',
-  bloom: '<path d="M12 21V9M12 15C3 15 2 8 3 5c7 0 9 4 9 10ZM12 19c9 0 10-7 9-10-7 0-9 4-9 10Z"/>',
+  storm: WEATHER_PATHS.storm,
+  fog: WEATHER_PATHS.fog,
+  bloom: WEATHER_PATHS.bloom,
   bounties: '<path d="M6 3h12v18l-3-2-3 2-3-2-3 2Z"/><path d="m9 11 2 2 4-5"/>',
 };
 

@@ -1,4 +1,5 @@
 import "./style.css";
+import { weatherIcon } from "./ui/icons";
 import "./app/feedback.css";
 import { bountyBoard, bountyFacts, bountyResult } from "./app/bounties";
 import { advanceEndless, endlessRecordsDiff, endlessUnlocked, formatSeaTime } from "./app/endless";
@@ -40,7 +41,6 @@ const TOAST_SECONDS = 6;
 /** The first-round tip disappears after the first catch, or after this long. */
 const HINT_SECONDS = 8;
 const BANNER_SECONDS = 3;
-const SEA_ICONS: Record<SeaState, string> = { clear: "☀", storm: "ϟ", fog: "≋", bloom: "❧" };
 
 function element<T extends HTMLElement>(selector: string): T {
   const el = document.querySelector<T>(selector);
@@ -367,7 +367,8 @@ function renderHub(): void {
     badge.className = "weather-badge";
     const icon = document.createElement("span");
     icon.setAttribute("aria-hidden", "true");
-    icon.textContent = SEA_ICONS[sea];
+    icon.className = "weather-badge-icon";
+    icon.innerHTML = weatherIcon(sea, 14);
     badge.append(icon, ` ${seaLabel(sea)}`);
     hub.start.append(badge);
   }
@@ -683,7 +684,7 @@ function updateHud(): void {
     const biome = world.biome!;
     setText(element("#hud-biome"), biomeLabel(biome.biome));
     setText(element("#hud-biome-next"), `${formatSeaTime(Math.ceil(BIOME.length * (1 - biome.progress)))} to next biome`);
-    setText(element("#hud-weather"), `${SEA_ICONS[world.sea]} ${seaLabel(world.sea)}${world.sea === "clear" ? " weather" : ` · ${Math.ceil(world.seaLeft)}s left`}`);
+    setText(element("#hud-weather"), `${seaLabel(world.sea)}${world.sea === "clear" ? " weather" : ` · ${Math.ceil(world.seaLeft)}s left`}`);
   }
   element("#hud-weather").hidden = !world.endless;
   hud.root.classList.toggle("is-urgent", !world.endless && playing && world.timeLeft <= 5);
@@ -737,7 +738,10 @@ function placeRoundBanners(): void {
 /** Announcements use simulation time, so pausing also pauses their three-second lifetime. */
 function announceSea(sea: SeaState): void {
   if (!world || sea === "clear") return;
-  seaBanner.textContent = `${SEA_ICONS[sea]} ${seaBlurb(sea)}`;
+  const icon = document.createElement("span");
+  icon.className = "weather-banner-icon";
+  icon.innerHTML = weatherIcon(sea, 18);
+  seaBanner.replaceChildren(icon, ` ${seaBlurb(sea)}`);
   seaBannerUntil = world.elapsed + BANNER_SECONDS;
   seaBanner.hidden = false;
   placeRoundBanners();
