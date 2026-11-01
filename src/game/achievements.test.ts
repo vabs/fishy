@@ -15,13 +15,16 @@ function withStats(stats: Partial<SaveData["stats"]>): SaveData {
 }
 
 describe("ACHIEVEMENTS", () => {
-  it("keeps all 22 stable ids and valid icons", () => {
+  it("keeps all shipped ids and appends the two biome badges with valid icons", () => {
     expect(ACHIEVEMENTS.map((a) => a.id)).toEqual([
       ...FISH_KINDS.map((kind) => `first-${kind}`), "fish-1k", "fish-10k", "fish-50k",
       "combo-2", "combo-3", "haul-10", "star-10", "golden-50", "chests-10",
       "bounty-perfect", "bounties-25", "final", "endless-10", "endless-30",
+      "biome-trench", "biome-graveyard",
     ]);
-    expect(new Set(ACHIEVEMENTS.map((a) => a.id)).size).toBe(22);
+    expect(new Set(ACHIEVEMENTS.map((a) => a.id)).size).toBe(24);
+    expect(ACHIEVEMENTS.find(a => a.id === "biome-trench")?.name).toBe("Into the Deep");
+    expect(ACHIEVEMENTS.find(a => a.id === "biome-graveyard")?.name).toBe("Grave Robber");
     const icons = new Set([...FISH_KINDS.map((kind) => `fish:${kind}`), "net", "star", "coin", "chest", "gold", "wave", "scroll", "anchor", "clock", "crown", "combo"]);
     for (const a of ACHIEVEMENTS) {
       expect(a.name).not.toBe("");
@@ -100,6 +103,36 @@ describe("newAchievements", () => {
     let save = recordRound(createSave("Ann", NOW), { earned: 10, caught: { normal: 1 }, durationMs: 1000, bestTickCatches: 10, bestStarHits: 10, bountiesCompleted: 25, allBounties: true });
     save = recordEndless(save, { earned: 200, caught: { golden: 0, uncommon: 1000 }, durationMs: 1800000, goldenCaught: 50, chestsOpened: 10, maxCombo: 2 });
     expect(ids(save)).toEqual(["first-normal", "first-uncommon", "fish-1k", "combo-2", "combo-3", "haul-10", "star-10", "golden-50", "chests-10", "bounty-perfect", "bounties-25", "endless-10", "endless-30"]);
+  });
+
+  it("grants Into the Deep only from the trip's reached biomes", () => {
+    const save = createSave("Ann", NOW);
+    save.endless.longestMs = 300000;
+    expect(ids(save)).not.toContain("biome-trench");
+    expect(ids(save, { biomesReached: [] })).not.toContain("biome-trench");
+    expect(ids(save, { biomesReached: ["reef", "graveyard"] })).not.toContain("biome-trench");
+    expect(ids(save, { biomesReached: ["reef", "trench"] })).toContain("biome-trench");
+  });
+
+  it("requires five chests opened in the Graveyard in this trip, not lifetime chests", () => {
+    const save = withStats({ chestsOpened: 100 });
+    expect(ids(save)).not.toContain("biome-graveyard");
+    expect(ids(save, { biomesReached: ["reef", "trench", "graveyard"], graveyardChests: 4 })).not.toContain("biome-graveyard");
+    expect(ids(save, { graveyardChests: 5 })).toContain("biome-graveyard");
+    expect(ids(save, { graveyardChests: 6 })).toContain("biome-graveyard");
+    expect(ids(save, { graveyardChests: 0 })).not.toContain("biome-graveyard");
+  });
+
+  it("grants biome badges once and retains their permanent ids and timestamps", () => {
+    const save = createSave("Ann", NOW);
+    const moment = { biomesReached: ["reef", "trench", "graveyard"], graveyardChests: 5 } as const;
+    const snapshot = structuredClone(save);
+    const reached = ids(save, moment);
+    expect(reached).toEqual(["biome-trench", "biome-graveyard"]);
+    const granted = grantAchievements(save, reached, NOW);
+    expect(ids(granted, moment)).toEqual([]);
+    expect(granted.achievements).toEqual({ "biome-trench": NOW.toISOString(), "biome-graveyard": NOW.toISOString() });
+    expect(save).toEqual(snapshot);
   });
 });
 
