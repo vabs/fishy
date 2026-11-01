@@ -2,7 +2,7 @@ import { sliderToGain, writeAudioSettings, type AudioSettings } from "./settings
 
 /** Seconds to fade the master volume when muting or unmuting, so it never clicks. */
 const MUTE_FADE = 0.05;
-/** Master level when unmuted: sets the overall loudness; the compressor keeps the busiest moments from clipping. */
+/** Master level when unmuted: sets the overall loudness; the soft clip protects the combined mix. */
 const OUTPUT_LEVEL = 1.3;
 /** The last stage passes everything below this level untouched and rounds off anything above it. */
 const SOFT_CLIP_FROM = 0.8;
@@ -10,7 +10,7 @@ const SOFT_CLIP_FROM = 0.8;
 const SOFT_CLIP_RANGE = 2;
 
 /**
- * A safety net after the compressor: a waveshaper curve that is a straight line up to
+ * A safety net for the combined mix: a waveshaper curve that is a straight line up to
  * SOFT_CLIP_FROM and bends smoothly towards full scale above it, so even a freak pile-up of sounds
  * at full volume never clips harshly. Normal levels never reach it.
  */
@@ -29,9 +29,9 @@ function softClipCurve(): Float32Array<ArrayBuffer> {
 /**
  * The AudioContext and the mixing graph every sound goes through:
  *
- *   music sources → music gain ┐
- *                              ├→ master gain (mute) → compressor → soft clip → speakers
- *   sound effects → sfx gain  ┘
+ *   music sources → music gain → compressor ┐
+ *                                            ├→ master gain (mute) → soft clip → speakers
+ *   sound effects → sfx gain ────────────────┘
  *
  * Browsers only let audio start after a click or key press, so the context is created on the
  * first one. It only runs while there is something to hear: it is suspended while muted or while
@@ -113,7 +113,7 @@ export class AudioEngine {
 
   private build(ctx: AudioContext): void {
     const compressor = ctx.createDynamicsCompressor();
-    // Gentle: catches the odd pile-up of peaks rather than squashing the mix.
+    // Music only: its fixed 6 ms lookahead must not delay interactive effects.
     compressor.threshold.value = -10;
     compressor.knee.value = 8;
     compressor.ratio.value = 4;
@@ -124,11 +124,12 @@ export class AudioEngine {
     range.gain.value = 1 / SOFT_CLIP_RANGE;
     const softClip = ctx.createWaveShaper();
     softClip.curve = softClipCurve();
-    compressor.connect(range).connect(softClip).connect(ctx.destination);
+    range.connect(softClip).connect(ctx.destination);
     this.master = ctx.createGain();
-    this.master.connect(compressor);
+    this.master.connect(range);
+    compressor.connect(this.master);
     this.music = ctx.createGain();
-    this.music.connect(this.master);
+    this.music.connect(compressor);
     this.sfx = ctx.createGain();
     this.sfx.connect(this.master);
     this.master.gain.value = this.current.muted ? 0 : OUTPUT_LEVEL;

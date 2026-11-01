@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { AudioEngine } from "./engine";
+import { AudioEngine } from "./engine";
+import { createGameAudio } from "./index";
+import type { WorldEvent } from "../game/world";
 import { Music } from "./music";
 import { Sfx } from "./sfx";
 import { bass, bell, brass, clap, kick, noise, pad, pluck, pop, risingNoise, run, steelDrum } from "./synth";
@@ -18,7 +20,13 @@ class Param {
   cancelScheduledValues(_time: number): this { return this; }
 }
 class Node {
+  kind = "gain";
   gain = new Param();
+  threshold = new Param();
+  knee = new Param();
+  ratio = new Param();
+  attack = new Param();
+  release = new Param();
   frequency = new Param();
   detune = new Param();
   Q = new Param();
@@ -49,7 +57,10 @@ class Context {
   nodes: Node[] = [];
   sources: Node[] = [];
   buffers = 0;
+  destination = new Node();
   createGain(): Node { const node = new Node(); this.nodes.push(node); return node; }
+  createDynamicsCompressor(): Node { const node = this.createGain(); node.kind = "compressor"; return node; }
+  createWaveShaper(): Node { const node = this.createGain(); node.kind = "shaper"; return node; }
   createBiquadFilter(): Node { return this.createGain(); }
   createOscillator(): Node { const node = this.createGain(); this.sources.push(node); return node; }
   createBufferSource(): Node { return this.createOscillator(); }
@@ -66,6 +77,34 @@ class Context {
     }
     expect(this.nodes.filter((node) => node.connections.size > 0), "finished nodes disconnected").toEqual([]);
   }
+}
+
+function audioPlatform(diagnostics = false): { ctx: Context; gesture: () => void } {
+  const ctx = new Context();
+  let unlock = () => {};
+  vi.stubGlobal("PeriodicWave", Wave);
+  vi.stubGlobal("AudioContext", class { constructor() { return ctx; } });
+  vi.stubGlobal("window", {
+    location: { search: diagnostics ? "?audioLatency" : "" },
+    addEventListener(type: string, listener: () => void) { if (type === "pointerdown") unlock = listener; },
+    setInterval: () => 1,
+    clearTimeout() {},
+  });
+  vi.stubGlobal("document", { baseURI: "http://localhost/", visibilityState: "visible", addEventListener() {} });
+  // Keep bed loading pending so only real catch instrument sources are observed.
+  vi.stubGlobal("fetch", () => new Promise(() => {}));
+  return { ctx, gesture: () => unlock() };
+}
+
+function gameAudio(diagnostics = false) {
+  const { ctx, gesture } = audioPlatform(diagnostics);
+  const audio = createGameAudio();
+  gesture();
+  return { ctx, audio };
+}
+
+function captures(count: number, combo: number): WorldEvent[] {
+  return Array.from({ length: count }, () => ({ type: "capture", kind: "normal", source: "net", x: 0, y: 0, value: 1, combo }));
 }
 
 afterEach(() => vi.unstubAllGlobals());
@@ -112,6 +151,112 @@ describe("instrument lifecycle", () => {
 });
 
 describe("sound effect routing and cleanup", () => {
+  it("records capture-frame time and actual catch onset, including dropped batches, only when opted in", () => {
+    const { ctx, audio } = gameAudio(true);
+    ctx.currentTime = 3;
+    audio.frame(captures(4, 8), null);
+    ctx.currentTime = 3.01;
+    audio.frame(captures(100, 9), null);
+    ctx.currentTime = 3.06;
+    audio.frame([], null);
+    expect(window.__fishyAudio?.context).toBe(ctx);
+    expect(window.__fishyAudio?.catches).toEqual([
+      { frameTime: 3, noteTime: ctx.sources[0]!.startAt, count: 4, combo: 8 },
+      { frameTime: 3.01, noteTime: null, count: 100, combo: 9 },
+    ]);
+    gameAudio();
+    expect(window.__fishyAudio).toBeUndefined();
+  });
+
+  it("starts admitted catches within 5 ms and never replays blocked catches on a later frame", () => {
+    const { ctx, audio } = gameAudio();
+    // One catch, then a burst inside its 40 ms rate limit.
+    ctx.currentTime = 1;
+    audio.frame(captures(1, 0), null);
+    expect(ctx.sources).toHaveLength(2);
+    expect(ctx.sources.every(source => source.startAt >= 1 && source.startAt <= 1.005)).toBe(true);
+    ctx.currentTime = 1.01;
+    audio.frame(captures(100, 8), null);
+    expect(ctx.sources).toHaveLength(2);
+    // No new fish: freeing a voice must not turn those old fish into a late note.
+    ctx.currentTime = 1.06;
+    audio.frame([], null);
+    expect(ctx.sources).toHaveLength(2);
+    // A fresh simultaneous batch still gets its octave, in the supplied key and combo.
+    audio.frame(captures(100, 8), null);
+    const batch = ctx.sources.slice(2);
+    expect(batch).toHaveLength(4);
+    expect(batch.every(source => source.startAt >= 1.06 && source.startAt <= 1.065)).toBe(true);
+    expect(batch[0]!.frequency.value).toBeCloseTo(880, 2); // A5: combo 8 -> degree 8 in D major pentatonic.
+    expect(batch[2]!.frequency.value).toBeCloseTo(1760, 2); // Batch octave.
+  });
+
+  it("keeps a sustained burst bounded and plays no catches on empty frames", () => {
+    const { ctx, audio } = gameAudio();
+    let notes = 0;
+    for (let frame = 0; frame < 360; frame++) {
+      ctx.currentTime = 2 + frame / 120;
+      const count = frame % 10 < 5 ? 50 : 0;
+      const before = ctx.sources.length;
+      audio.frame(captures(count, frame), null);
+      const started = ctx.sources.slice(before);
+      if (count === 0) expect(started).toHaveLength(0);
+      else if (started.length > 0) {
+        notes++;
+        expect(started).toHaveLength(4); // Fundamental + overtone, and batch octave + overtone.
+        for (const source of started) {
+          expect(source.startAt - ctx.currentTime).toBeGreaterThanOrEqual(0);
+          expect(source.startAt - ctx.currentTime).toBeLessThanOrEqual(0.005001);
+        }
+      }
+      // The four-catch voice cap and 40 ms rate limit still apply during the burst.
+      const active = ctx.sources.filter(source => source.startAt > ctx.currentTime - 0.16);
+      expect(active.length).toBeLessThanOrEqual(16);
+    }
+    expect(notes).toBeGreaterThan(20);
+    expect(notes).toBeLessThan(80);
+  });
+
+  it("drops catches when all eight effects voices are occupied, without replaying them as voices free", () => {
+    const { ctx, audio } = gameAudio(true);
+    ctx.currentTime = 4;
+    audio.frame([
+      { type: "golden", kind: "normal", x: 0, y: 0 },
+      { type: "time-bonus", x: 0, y: 0, seconds: 1 },
+      { type: "fx", kind: "goober", name: "burst", x: 0, y: 0 },
+      { type: "trap-cast", traps: [{ id: 1, x: 0, y: 0, radius: 42, partner: null, age: 0, cooldown: 0 }] },
+      { type: "trap-snap", trapId: 1, x: 0, y: 0, hits: 8 },
+      { type: "seine-hit", x: 0, y: 0 }, { type: "snag", x: 0, y: 0 }, { type: "chum", x: 0, y: 0 },
+      ...captures(100, 8),
+    ], null);
+    expect(window.__fishyAudio!.catches[0]!.noteTime).toBeNull();
+    const sources = ctx.sources.length;
+    expect(sources).toBeGreaterThan(0);
+    // Goober's voice frees after 120 ms, inside the old 150 ms catch patience.
+    ctx.currentTime = 4.13;
+    audio.frame([], null);
+    expect(ctx.sources).toHaveLength(sources);
+    audio.frame(captures(10, 9), null);
+    expect(ctx.sources).toHaveLength(sources + 4);
+    expect(ctx.sources.at(-1)!.startAt).toBeCloseTo(4.135);
+  });
+
+  it("keeps effects off compressor lookahead while retaining mute and clipping protection", () => {
+    const { ctx } = audioPlatform();
+    const engine = new AudioEngine({ muted: false, music: 0.7, sfx: 0.8 });
+    engine.unlock();
+    const route = (start: Node): Node[] => [start, ...[...start.connections].flatMap(dest => route(dest as Node))];
+    const effects = route(engine.sfx as unknown as Node);
+    const music = route(engine.music as unknown as Node);
+    expect(effects.some(node => node.kind === "compressor")).toBe(false);
+    expect(music.some(node => node.kind === "compressor")).toBe(true);
+    for (const path of [effects, music]) {
+      expect(path).toContain(engine.master);
+      expect(path.some(node => node.kind === "shaper")).toBe(true);
+      expect(path).toContain(ctx.destination);
+    }
+  });
+
   it("disconnects the whirlpool modulation source along with its noise", () => {
     vi.stubGlobal("PeriodicWave", Wave);
     const ctx = new Context();
