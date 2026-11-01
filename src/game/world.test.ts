@@ -650,6 +650,9 @@ describe("Endless population and stability", () => {
   it("pours fish in during an endless frenzy even when the sea is full", () => {
     const stats = fullStats();
     Object.assign(stats, { startFish: ENDLESS.maxFish, goldenRate: 0 });
+    // Population tests: no trap nets or lantern catching or holding fish.
+    stats.rigging.count = 0;
+    stats.boat.lanternRadius = 0;
     const world = new World(stats, createRng(42), 1280, 800, options);
     run(world, ENDLESS.firstFrenzy - 1, () => { world.drainEvents(); });
     const before = world.fish.filter((f) => !f.captured).length;
@@ -661,6 +664,9 @@ describe("Endless population and stability", () => {
   it("caps Goober bursts and twins, and discards skipped spawns without a backlog", () => {
     const stats = fullStats();
     Object.assign(stats, { startFish: 0, spawnRateMult: 0, goldenRate: 0, twinChance: 1 });
+    // Population tests: no trap nets or lantern catching or holding fish.
+    stats.rigging.count = 0;
+    stats.boat.lanternRadius = 0;
     const world = new World(stats, createRng(42), 1280, 800, options);
     const goober = world.spawn("goober")!;
     for (let i = 1; i < ENDLESS.maxFish; i++) world.spawn("normal");
