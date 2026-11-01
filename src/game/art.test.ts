@@ -5,7 +5,7 @@ afterEach(() => { vi.unstubAllGlobals(); vi.resetModules(); });
 
 describe("painted art", () => {
   it("is safe without browser Image and keeps fallback images null", () => {
-    expect(loadArt()).toEqual({ sea: null, boat: null });
+    expect(loadArt()).toEqual({ sea: null, trench: null, graveyard: null, boat: null });
     expect(onArtReady(() => {})()).toBeUndefined();
   });
 
@@ -22,7 +22,7 @@ describe("painted art", () => {
     const stop = onArtReady(ready);
     const art = loadArt();
     expect(art.sea).toBeNull();
-    expect(images.map((i) => i.src)).toEqual(["/art/sea-tile.webp", "/art/boat.png"]);
+    expect(images.map((i) => i.src)).toEqual(["/art/sea-tile.webp", "/art/boat.png", "/art/sea-trench.webp", "/art/sea-graveyard.webp"]);
     images[0]!.onload!();
     await vi.waitFor(() => expect(art.sea).toBe(images[0]));
     expect(ready).toHaveBeenCalledTimes(1);
@@ -30,6 +30,9 @@ describe("painted art", () => {
     images[1]!.onload!();
     await vi.waitFor(() => expect(art.boat).toBe(images[1]));
     expect(ready).toHaveBeenCalledTimes(1);
+    images[2]!.onload!();
+    images[3]!.onload!();
+    await vi.waitFor(() => { expect(art.trench).toBe(images[2]); expect(art.graveyard).toBe(images[3]); });
     expect(loadArt()).toBe(art);
   });
 

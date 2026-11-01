@@ -179,3 +179,60 @@ export function chumCloudAlpha(age: number, seconds: number): number {
 export function lanternLightRadius(upgradeRadius: number, night: number): number {
   return upgradeRadius > 0 ? upgradeRadius : night > 0 ? 125 : 0;
 }
+
+const seaLayers = new Map<"storm" | "fog" | "bloom", readonly HTMLCanvasElement[]>();
+
+/** Two deterministic 512 px weather tiles, painted once and shared across frames and viewports. */
+export function weatherLayers(state: "storm" | "fog" | "bloom"): readonly HTMLCanvasElement[] {
+  const cached = seaLayers.get(state);
+  if (cached) return cached;
+  const rng = createRng({ storm: 8261, fog: 7123, bloom: 9391 }[state]);
+  const layers = Array.from({ length: 2 }, (_, layer) => {
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 512;
+    const ctx = canvas.getContext("2d")!;
+    if (state === "storm") {
+      ctx.strokeStyle = "#b7dbe8"; ctx.lineWidth = layer ? 0.7 : 1;
+      ctx.beginPath();
+      for (let i = 0; i < 90; i++) {
+        const x = rng() * 512, y = rng() * 512, length = 9 + rng() * 15;
+        // Repeat edge strokes too, so the moving tiles have no seam.
+        for (const dy of [-512, 0, 512]) { ctx.moveTo(x, y + dy); ctx.lineTo(x, y + dy + length); }
+      }
+      ctx.stroke();
+    } else if (state === "fog") {
+      // Several scales of soft pigment make low-frequency cloud noise, without a runtime filter.
+      for (let i = 0; i < 32; i++) {
+        const x = rng() * 512, y = rng() * 512, radius = 45 + rng() * 120;
+        for (const dx of [-512, 0, 512]) for (const dy of [-512, 0, 512]) {
+          const gradient = ctx.createRadialGradient(x + dx, y + dy, 0, x + dx, y + dy, radius);
+          gradient.addColorStop(0, "rgba(202, 222, 215, 0.3)");
+          gradient.addColorStop(1, "rgba(202, 222, 215, 0)");
+          ctx.fillStyle = gradient; ctx.fillRect(x + dx - radius, y + dy - radius, radius * 2, radius * 2);
+        }
+      }
+    } else {
+      for (let i = 0; i < 24; i++) {
+        const x = rng() * 512, y = rng() * 512, radius = 7 + rng() * 23;
+        for (const dx of [-512, 0, 512]) for (const dy of [-512, 0, 512]) {
+          const gradient = ctx.createRadialGradient(x + dx, y + dy, 0, x + dx, y + dy, radius);
+          gradient.addColorStop(0, "rgba(136, 171, 78, 0.6)");
+          gradient.addColorStop(0.5, "rgba(93, 154, 84, 0.35)");
+          gradient.addColorStop(1, "rgba(93, 154, 84, 0)");
+          ctx.fillStyle = gradient;
+          ctx.beginPath(); ctx.ellipse(x + dx, y + dy, radius, radius * 0.55, i * 1.7, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+    }
+    return canvas;
+  });
+  seaLayers.set(state, layers);
+  return layers;
+}
+
+/** Shared visual/audio flash envelope: soft blue light, 0.65 s, fourteen seconds apart. */
+export function weatherLightning(elapsed: number, reducedMotion = false): number {
+  if (reducedMotion || !Number.isFinite(elapsed) || elapsed < 0) return 0;
+  const phase = elapsed % 14 - 11;
+  return phase > 0 && phase < 0.65 ? Math.sin(phase / 0.65 * Math.PI) * 0.075 : 0;
+}

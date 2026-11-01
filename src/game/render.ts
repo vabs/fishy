@@ -1,8 +1,10 @@
 import { formatMoney } from "../format";
 import { CHEST, chestInNet, coinBurst, type Chest } from "./chest";
 import { FISH, FISH_KINDS, FISH_SPECS, MAX_FISH_SIZE, type FishKind } from "./fish";
-import { causticCells, chumCloudAlpha, coinFlight, cooldownArcFraction, drawChumShape, drawGlow, lanternLightRadius, ropeSagPoint, shakeOffset, waterSplash, type Effect } from "./fx";
+import { causticCells, chumCloudAlpha, coinFlight, cooldownArcFraction, drawChumShape, drawGlow, lanternLightRadius, ropeSagPoint, shakeOffset, waterSplash, weatherLayers, weatherLightning, type Effect } from "./fx";
 import { loadArt, onArtReady } from "./art";
+import type { Biome } from "./biome";
+import { fogAlpha, fogClearRadius, type SeaState } from "./sea";
 import { diveEffect, sparklePath, glintBurst } from "./golden";
 import { fishColors, getPalette, type PaletteName } from "./palette";
 import { buildChestSprites, buildSprites, type ChestSprites, type FishSprites } from "./shapes";
@@ -62,25 +64,94 @@ const FOAM_BUBBLES = 64;
 const RIPPLE_SECONDS = 0.5;
 const CAUSTIC_MARGIN = 32;
 
-/** Smooth, cyclic sea-only multiply tint. Dusk and dawn retain the water's contrast. */
-export function seaTint(timeOfDay?: number): { color: string; alpha: number; night: number } {
-  if (timeOfDay === undefined || !Number.isFinite(timeOfDay)) return { color: "rgb(0, 0, 0)", alpha: 0, night: 0 };
+/** Unified sea-only multiply light. Lantern strength is independent of the darkness cap. */
+export interface SeaLight { tint: string; alpha: number; night: number; lantern: number }
+
+/** Measured RGB averages of the three low-contrast painted sea tiles. */
+const SEA_AVERAGE: Record<Biome, readonly number[]> = {
+  reef: [42, 127, 149], trench: [64, 102, 148], graveyard: [66, 131, 127],
+};
+const MAX_DARKNESS = 0.46;
+// Gives navy #101f2c silhouettes at least 2:1 average luminance contrast, in either palette.
+const MIN_SEA_LUMINANCE = 0.083;
+
+function luminance(rgb: readonly number[]): number {
+  return rgb.reduce((sum, channel, i) => {
+    const v = channel / 255;
+    return sum + (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4) * [0.2126, 0.7152, 0.0722][i]!;
+  }, 0);
+}
+
+/** Biome, day phase and weather combine once, then stop before silhouettes lose contrast. */
+export function seaLight({ biome, timeOfDay, sea }: { biome: Biome; timeOfDay?: number; sea: SeaState }): SeaLight {
   const stops = [
     { rgb: [255, 220, 180], alpha: 0.035, night: 0 },
     { rgb: [193, 115, 160], alpha: 0.32, night: 0.25 },
     { rgb: [65, 84, 157], alpha: 0.46, night: 1 },
     { rgb: [239, 182, 165], alpha: 0.15, night: 0.15 },
   ];
-  const phase = ((timeOfDay % 1 + 1) % 1) * 4;
-  const a = stops[Math.floor(phase)]!;
-  const b = stops[(Math.floor(phase) + 1) % 4]!;
-  const f = phase % 1;
-  const t = f * f * (3 - 2 * f);
-  return {
-    color: `rgb(${a.rgb.map((v, i) => Math.round(v + (b.rgb[i]! - v) * t)).join(", ")})`,
-    alpha: a.alpha + (b.alpha - a.alpha) * t,
-    night: a.night + (b.night - a.night) * t,
-  };
+  let rgb = [0, 0, 0], alpha = 0, night = 0;
+  if (timeOfDay !== undefined && Number.isFinite(timeOfDay)) {
+    const phase = ((timeOfDay % 1 + 1) % 1) * 4;
+    const a = stops[Math.floor(phase)]!, b = stops[(Math.floor(phase) + 1) % 4]!;
+    const f = phase % 1, t = f * f * (3 - 2 * f);
+    rgb = a.rgb.map((v, i) => Math.round(v + (b.rgb[i]! - v) * t));
+    alpha = a.alpha + (b.alpha - a.alpha) * t;
+    night = a.night + (b.night - a.night) * t;
+  }
+  // Multiplying transmissions preserves the existing clear Reef exactly.
+  const transmission = rgb.map(v => 1 - alpha + alpha * v / 255);
+  const overlays: { rgb: number[]; alpha: number }[] = [];
+  if (biome === "trench") overlays.push({ rgb: [172, 190, 255], alpha: 0.1 });
+  if (biome === "graveyard") overlays.push({ rgb: [157, 221, 190], alpha: 0.08 });
+  if (sea === "storm") overlays.push({ rgb: [142, 180, 208], alpha: 0.24 });
+  if (sea === "fog") overlays.push({ rgb: [197, 222, 219], alpha: 0.12 });
+  if (sea === "bloom") overlays.push({ rgb: [117, 198, 138], alpha: 0.22 });
+  if (overlays.length) {
+    for (const overlay of overlays) for (let i = 0; i < 3; i++) transmission[i]! *= 1 - overlay.alpha + overlay.alpha * overlay.rgb[i]! / 255;
+    alpha = 1 - Math.min(...transmission);
+    rgb = transmission.map(v => Math.round(255 * (v - 1 + alpha) / alpha));
+  }
+  alpha = Math.min(MAX_DARKNESS, alpha);
+  const seaLuminance = (opacity: number) => luminance(SEA_AVERAGE[biome].map((v, i) => v * (1 - opacity + opacity * rgb[i]! / 255)));
+  if (seaLuminance(alpha) < MIN_SEA_LUMINANCE) {
+    let lo = 0, hi = alpha;
+    for (let i = 0; i < 16; i++) {
+      const mid = (lo + hi) / 2;
+      if (seaLuminance(mid) < MIN_SEA_LUMINANCE) hi = mid; else lo = mid;
+    }
+    alpha = lo;
+  }
+  return { tint: `rgb(${rgb.join(", ")})`, alpha, night, lantern: Math.max(night, sea === "fog" ? 0.35 : 0) };
+}
+
+/** Crossfades premultiplied tint so different overlay opacities still meet without a seam. */
+export function blendSeaLight(a: SeaLight, b: SeaLight, blend: number): SeaLight {
+  const t = Math.min(1, Math.max(0, blend));
+  if (t === 0) return a;
+  if (t === 1) return b;
+  const alpha = a.alpha * (1 - t) + b.alpha * t;
+  const ar = a.tint.match(/[\d.]+/g)!.map(Number), br = b.tint.match(/[\d.]+/g)!.map(Number);
+  const rgb = ar.map((v, i) => alpha > 0 ? Math.round((v * a.alpha * (1 - t) + br[i]! * b.alpha * t) / alpha) : 0);
+  return { tint: `rgb(${rgb.join(", ")})`, alpha, night: a.night * (1 - t) + b.night * t, lantern: a.lantern * (1 - t) + b.lantern * t };
+}
+
+type BiomeBlend = { biome: Biome; next: Biome; blend: number };
+
+/** The outgoing cached background stays opaque while the incoming one fades over it. */
+export function biomeLayers(state?: BiomeBlend): { biome: Biome; alpha: number }[] {
+  if (!state) return [{ biome: "reef", alpha: 1 }];
+  const blend = Math.min(1, Math.max(0, state.blend));
+  if (blend >= 1) return [{ biome: state.next, alpha: 1 }];
+  const layers = [{ biome: state.biome, alpha: 1 }];
+  if (blend > 0) layers.push({ biome: state.next, alpha: blend });
+  return layers;
+}
+
+/** The boat and active net both clear fog; an absent net never creates a phantom pool. */
+export function fogSilhouetteAlpha(fish: Point, boat: Point, pointer: Point | null, stats: Stats): number {
+  const distance = Math.min(Math.hypot(fish.x - boat.x, fish.y - boat.y), pointer ? Math.hypot(fish.x - pointer.x, fish.y - pointer.y) : Infinity);
+  return fogAlpha(distance, fogClearRadius(stats));
 }
 
 /** Normalized combo arc, shortened as the simulation's combo window drains. */
@@ -159,6 +230,9 @@ export interface Scene {
   finger?: Point | null;
   /** Endless sea phase: golden hour 0, dusk .25, night .5, dawn .75. */
   timeOfDay?: number;
+  /** Presentation overrides for deterministic renderer reviews. */
+  sea?: SeaState;
+  biome?: BiomeBlend;
   /** HUD counter centre in CSS screen pixels. */
   coinTarget?: Point | null;
 }
@@ -172,7 +246,11 @@ export class Renderer {
   private viewScale = 1;
   private offsetX = 0;
   private offsetY = 0;
-  private background: HTMLCanvasElement | null = null;
+  private backgrounds = new Map<Biome, HTMLCanvasElement>();
+  private weatherPatterns = new Map<SeaState, CanvasPattern[]>();
+  private fogOutlines = new Map<FishKind, HTMLCanvasElement>();
+  private lanternLevel = 0;
+  private rainTravel = [0, 0];
   private readonly sprites = new Map<FishKind, FishSprites>();
   /** Palette the cached sprites were drawn in. */
   private palette: PaletteName = getPalette();
@@ -231,7 +309,8 @@ export class Renderer {
     this.canvas.height = Math.round(height * dpr);
     this.canvas.style.width = `${width}px`;
     this.canvas.style.height = `${height}px`;
-    this.background = this.paintBackground();
+    this.backgrounds.clear();
+    this.backgrounds.set("reef", this.paintBackground("reef"));
     this.caustics = this.paintCaustics();
     this.lantern = this.paintLantern();
     // A viewport change cannot invalidate a pending HUD bump.
@@ -242,6 +321,7 @@ export class Renderer {
     for (const ripple of this.ripples) ripple.age = 1;
     // Sprites are rendered at device resolution, which may have changed.
     this.sprites.clear();
+    this.fogOutlines.clear();
     this.chestSprites = null;
     if (this.chumCloud) {
       this.chumCloud.x = this.width / 2;
@@ -421,7 +501,7 @@ export class Renderer {
     }, fishColors(event.kind));
   }
 
-  draw({ world, pointer, stats, finger, timeOfDay, coinTarget }: Scene, dt: number): void {
+  draw({ world, pointer, stats, finger, timeOfDay, coinTarget, sea: seaOverride, biome: biomeOverride }: Scene, dt: number): void {
     dt = Math.max(0, dt);
     if (!this.reducedMotion?.matches) this.time += dt;
     this.advanceEffects(dt);
@@ -445,20 +525,46 @@ export class Renderer {
     if (this.palette !== getPalette()) {
       this.palette = getPalette();
       this.sprites.clear();
+      this.fogOutlines.clear();
     }
     if (this.backgroundDirty && this.width > 0) {
-      this.background = this.paintBackground();
+      this.backgrounds.clear();
       this.backgroundDirty = false;
     }
     const ctx = this.ctx;
+    const sea = seaOverride ?? world?.sea ?? "clear";
+    const biome = biomeOverride ?? world?.biome;
+    const phase = timeOfDay ?? world?.timeOfDay;
+    if (sea === "storm" && !this.reducedMotion?.matches) {
+      const wind = world?.sea === "storm" ? world.wind : { x: 25, y: 32 };
+      for (let i = 0; i < 2; i++) this.rainTravel[i] = (this.rainTravel[i]! + dt * (150 + Math.hypot(wind.x, wind.y) * 3) * (i ? 0.72 : 1)) % 512;
+    }
+    // Prime the incoming biome before its eight-second fade begins; retain at most two canvases.
+    if (biome && this.width > 0) {
+      for (const key of this.backgrounds.keys()) if (key !== biome.biome && key !== biome.next) this.backgrounds.delete(key);
+      for (const key of [biome.biome, biome.next]) if (!this.backgrounds.has(key)) this.backgrounds.set(key, this.paintBackground(key));
+    }
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    if (this.background) ctx.drawImage(this.background, 0, 0);
-    const tint = seaTint(timeOfDay ?? world?.timeOfDay);
-    this.night = tint.night;
-    if (tint.alpha > 0) {
+    for (const layer of biomeLayers(biome)) {
+      let background = this.backgrounds.get(layer.biome);
+      if (!background && this.width > 0) {
+        background = this.paintBackground(layer.biome);
+        this.backgrounds.set(layer.biome, background);
+      }
+      if (background) {
+        ctx.globalAlpha = layer.alpha;
+        ctx.drawImage(background, 0, 0);
+      }
+    }
+    ctx.globalAlpha = 1;
+    const currentLight = seaLight({ biome: biome?.biome ?? "reef", timeOfDay: phase, sea });
+    const light = biome && biome.blend > 0 ? blendSeaLight(currentLight, seaLight({ biome: biome.next, timeOfDay: phase, sea }), biome.blend) : currentLight;
+    this.night = light.night;
+    this.lanternLevel = light.lantern;
+    if (light.alpha > 0) {
       ctx.globalCompositeOperation = "multiply";
-      ctx.globalAlpha = tint.alpha;
-      ctx.fillStyle = tint.color;
+      ctx.globalAlpha = light.alpha;
+      ctx.fillStyle = light.tint;
       ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
       ctx.globalCompositeOperation = "source-over";
       ctx.globalAlpha = 1;
@@ -477,9 +583,14 @@ export class Renderer {
       this.drawChum(world);
       this.drawRiggingWater(world);
     }
+    this.drawWeather(sea, world, pointer, stats);
     this.drawBoat(stats.boat.lanternRadius);
     if (world) {
-      for (const fish of world.fish) this.drawFish(fish, "silhouette");
+      const boat = { x: world.width / 2, y: world.height / 2 };
+      for (const fish of world.fish) {
+        const alpha = sea === "fog" ? fogSilhouetteAlpha(fish, boat, !world.over ? pointer : null, stats) : 1;
+        this.drawFish(fish, "silhouette", alpha, sea === "fog");
+      }
       this.resetTransform();
     }
     if (world) {
@@ -515,7 +626,7 @@ export class Renderer {
   }
 
   /** Leaves the transform set to the fish. Call resetTransform() after a batch. */
-  private drawFish(fish: Fish, variant: "full" | "silhouette" | "flash" | "golden"): void {
+  private drawFish(fish: Fish, variant: "full" | "silhouette" | "flash" | "golden", opacity = 1, outline = false): void {
     const ctx = this.ctx;
     const sprites = this.sprite(fish.kind);
     const cos = Math.cos(fish.heading);
@@ -525,9 +636,101 @@ export class Renderer {
     const d = this.dpr * this.viewScale;
     ctx.setTransform(d * cos, d * sin, -d * sin * flip, d * cos * flip,
       d * fish.x + (this.offsetX + this.shakeX) * this.dpr, d * fish.y + (this.offsetY + this.shakeY) * this.dpr);
-    ctx.globalAlpha = Math.min(1, fish.age / FADE_IN_SECONDS);
+    const fade = Math.min(1, fish.age / FADE_IN_SECONDS);
+    if (outline) {
+      ctx.globalAlpha = fade * 0.55;
+      ctx.drawImage(this.fogOutline(fish.kind, sprites), -sprites.width / 2 - 1, -sprites.height / 2 - 1, sprites.width + 2, sprites.height + 2);
+    }
+    ctx.globalAlpha = fade * opacity;
     ctx.drawImage(sprites[variant], -sprites.width / 2, -sprites.height / 2, sprites.width, sprites.height);
     ctx.globalAlpha = 1;
+  }
+
+  /** A subpixel rim derived once from the actual silhouette, including every fin and tail. */
+  private fogOutline(kind: FishKind, sprites: FishSprites): HTMLCanvasElement {
+    const cached = this.fogOutlines.get(kind);
+    if (cached) return cached;
+    const canvas = document.createElement("canvas");
+    const d = this.dpr * this.viewScale;
+    const pad = d;
+    canvas.width = Math.ceil((sprites.width + 2) * d);
+    canvas.height = Math.ceil((sprites.height + 2) * d);
+    const ctx = canvas.getContext("2d")!;
+    for (let i = 0; i < 8; i++) ctx.drawImage(sprites.silhouette, pad + Math.cos(i * TAU / 8) * d * 0.65, pad + Math.sin(i * TAU / 8) * d * 0.65);
+    ctx.globalCompositeOperation = "source-in";
+    ctx.fillStyle = "#bdd6d1"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.drawImage(sprites.silhouette, pad, pad);
+    this.fogOutlines.set(kind, canvas);
+    return canvas;
+  }
+
+  /** Weather is below fish, the lens and surprises; only the silhouette pass loses visibility. */
+  private drawWeather(sea: SeaState, world: World | null, pointer: Point | null, stats: Stats): void {
+    if (sea === "clear" || this.width <= 0) return;
+    const ctx = this.ctx;
+    let patterns = this.weatherPatterns.get(sea);
+    if (!patterns) {
+      patterns = weatherLayers(sea).flatMap(layer => { const pattern = ctx.createPattern(layer, "repeat"); return pattern ? [pattern] : []; });
+      this.weatherPatterns.set(sea, patterns);
+    }
+    const reduced = !!this.reducedMotion?.matches;
+    const time = reduced ? 0 : this.time;
+    const wind = world?.sea === "storm" ? world.wind : { x: 25, y: 32 };
+    const w = this.canvas.width / this.dpr, h = this.canvas.height / this.dpr;
+    const reach = Math.hypot(w, h) + 1024;
+    ctx.save();
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    if (sea === "fog") {
+      const clear = fogClearRadius(stats) * this.viewScale;
+      const pools = [{ x: this.width / 2, y: this.height / 2 }];
+      if (pointer && !world?.over) pools.push(pointer);
+      // Intersect the complements of both circles: their overlap also stays clear.
+      for (const pool of pools) {
+        ctx.beginPath(); ctx.rect(0, 0, w, h);
+        const x = pool.x * this.viewScale + this.offsetX, y = pool.y * this.viewScale + this.offsetY;
+        ctx.moveTo(x + clear, y); ctx.arc(x, y, clear, 0, TAU);
+        ctx.clip("evenodd");
+      }
+    }
+    for (const [i, pattern] of patterns.entries()) {
+      ctx.save();
+      ctx.translate(w / 2, h / 2);
+      if (sea === "storm") {
+        ctx.rotate(Math.atan2(wind.y, wind.x) - Math.PI / 2);
+        ctx.translate(i * 73, reduced ? 0 : this.rainTravel[i]!);
+      } else ctx.translate((time * (i ? -3 : 5)) % 512, (time * (sea === "fog" ? 2 : 4) * (i ? -1 : 1)) % 512);
+      ctx.fillStyle = pattern;
+      ctx.globalAlpha = sea === "fog" ? 0.14 : sea === "bloom" ? 0.23 : reduced ? 0.035 : 0.09;
+      ctx.fillRect(-reach, -reach, reach * 2, reach * 2);
+      ctx.restore();
+    }
+    if (sea === "storm" && !reduced) {
+      ctx.strokeStyle = "rgba(185, 219, 231, 0.14)"; ctx.lineWidth = 0.8;
+      const angle = Math.atan2(wind.y, wind.x);
+      ctx.beginPath();
+      for (let i = 0; i < 28; i++) {
+        const x = ((i * 0.618034 * w + wind.x * time * 0.4) % w + w) % w;
+        const y = ((i * 0.4137 * h + wind.y * time * 0.4) % h + h) % h;
+        ctx.moveTo(x + Math.cos(angle) * 7, y + Math.sin(angle) * 7);
+        ctx.ellipse(x, y, 7, 1.6, angle, 0, Math.PI);
+      }
+      ctx.stroke();
+      const flash = weatherLightning(world?.elapsed ?? this.time);
+      if (flash > 0) { ctx.fillStyle = "#b6cee5"; ctx.globalAlpha = flash; ctx.fillRect(0, 0, w, h); }
+    }
+    if (sea === "bloom") {
+      ctx.strokeStyle = "#c6dfac"; ctx.lineWidth = 0.8; ctx.globalAlpha = 0.23;
+      ctx.beginPath();
+      for (let i = 0; i < 18; i++) {
+        const x = ((i * 0.618034 + 0.2) % 1) * w;
+        const y = ((i * 0.4137 * h - time * (3 + i % 4)) % h + h) % h;
+        ctx.moveTo(x + 1.5 + i % 3, y); ctx.arc(x, y, 1.5 + i % 3, 0, TAU);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+    this.resetTransform();
   }
 
   private drawChum(world: World): void {
@@ -991,9 +1194,9 @@ export class Renderer {
     const ctx = this.ctx;
     ctx.save();
     ctx.translate(this.width / 2, this.height / 2);
-    const radius = lanternLightRadius(lureRadius, this.night);
+    const radius = lanternLightRadius(lureRadius, this.lanternLevel);
     if (this.lantern && radius > 0) {
-      ctx.globalAlpha = lureRadius > 0 ? 0.35 + this.night * 0.5 : this.night * 0.75;
+      ctx.globalAlpha = lureRadius > 0 ? 0.35 + this.lanternLevel * 0.5 : this.lanternLevel * 0.75;
       ctx.drawImage(this.lantern, -radius, -radius, radius * 2, radius * 2);
       ctx.globalAlpha = 1;
     }
@@ -1366,7 +1569,7 @@ export class Renderer {
     return canvas;
   }
 
-  private paintBackground(): HTMLCanvasElement {
+  private paintBackground(biome: Biome): HTMLCanvasElement {
     const canvas = document.createElement("canvas");
     canvas.width = this.canvas.width;
     canvas.height = this.canvas.height;
@@ -1377,15 +1580,17 @@ export class Renderer {
     const cx = w / 2;
     const cy = h / 2;
     const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.hypot(cx, cy));
-    gradient.addColorStop(0, COLORS.waterInner);
-    gradient.addColorStop(1, COLORS.waterOuter);
+    gradient.addColorStop(0, biome === "reef" ? COLORS.waterInner : biome === "trench" ? "#406694" : "#42837f");
+    gradient.addColorStop(1, biome === "reef" ? COLORS.waterOuter : biome === "trench" ? "#355b88" : "#376f70");
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, w, h);
-    if (this.art.sea) {
+    const texture = biome === "reef" ? this.art.sea : this.art[biome];
+    if (texture) {
       const tile = 640 * Math.max(0.65, this.viewScale) * this.dpr;
       for (let y = 0; y < h; y += tile) for (let x = 0; x < w; x += tile) {
-        ctx.drawImage(this.art.sea, x, y, tile + 0.5, tile + 0.5);
+        ctx.drawImage(texture, x, y, tile + 0.5, tile + 0.5);
       }
+      if (biome !== "reef") return canvas;
       const light = ctx.createLinearGradient(0, 0, w, h);
       light.addColorStop(0, "rgba(239, 171, 84, 0.5)");
       light.addColorStop(0.45, "rgba(244, 162, 89, 0.14)");
